@@ -13,7 +13,7 @@ This is your part of the MaxGuard v2.0 roadmap. Read [the roadmap overview](READ
 | [AMO-02](#amo-02-pci-dss-v401-rows-checked-in-the-official-document) | W3 | PCI DSS v4.0.1 rows, checked in the official document | [AMO-01](#amo-01-nist-sp-800-53-mapping-file-and-the-mapping-checks) | process |
 | [AMO-03](#amo-03-report-export-json-csv-and-html) | W4 | Report export: JSON, CSV, and HTML | [JAI-05](jaiden.md#jai-05-the-pipeline-one-function-from-input-to-report) | code, tested |
 | [AMO-04](#amo-04-cisa-cpg-20-and-cjis-v61-rows) | W5 | CISA CPG 2.0 and CJIS v6.1 rows | [AMO-02](#amo-02-pci-dss-v401-rows-checked-in-the-official-document) | process |
-| [AMO-05](#amo-05-chain-of-custody-log) | S4 | Chain-of-custody log | [JAI-08](jaiden.md#jai-08-ed25519-signing-library) | design |
+| [AMO-05](#amo-05-chain-of-custody-log) | S4 | Chain-of-custody log | [JAI-08](jaiden.md#jai-08-ed25519-signing-library) | code, tested |
 
 **Kind:** *code, tested* — the complete code below was run with its tests during planning; copy it exactly, then improve it in a later pull request if you like. *code, written* — written in planning, but part of it needs a machine planning did not have. *design* — you write the code from the steps. *process* — no code: setup, review, testing or release work.
 
@@ -823,7 +823,7 @@ Expected output:
 
 ```text
 ..............................                                                               [100%]
-30 passed in 0.19s
+30 passed in 0.21s
 ```
 
 **Step 7.** Count the NIST rows per rule:
@@ -1470,7 +1470,7 @@ Expected output:
 
 ```text
 ................                                                                             [100%]
-16 passed in 0.11s
+16 passed in 0.10s
 ```
 
 **Step 5.** Make the three files for the Telnet fixture and look at the CSV:
@@ -1584,11 +1584,9 @@ CPG gives small organizations a short, practical list, and CJIS matters to anyon
 
 ### AMO-05: Chain-of-custody log
 
-**Due:** Spring S1-S4 (due Fri Feb 12, 2027) · **Milestone:** `S1-S4 Live sensor` · **Needs first:** [JAI-08](jaiden.md#jai-08-ed25519-signing-library) · **Kind:** design
+**Due:** Spring S1-S4 (due Fri Feb 12, 2027) · **Milestone:** `S1-S4 Live sensor` · **Needs first:** [JAI-08](jaiden.md#jai-08-ed25519-signing-library) · **Kind:** code, tested
 
 **Issue labels:** `type:task` `phase:spring` `owner:amory` `area:mapping` `area:release`
-
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
 
 #### Goal
 
@@ -1611,13 +1609,404 @@ git checkout -b amory/custody-log
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** Write `append(log_path, *, action, artifact_path, actor, at, private_key_path) -> dict`. The entry is one JSON line: `seq`, `at` (passed in, never read from the clock), `action`, the artifact's file name, `sha256` and size, `actor`, `prev_hash` (the previous entry's `entry_hash`, or 64 zeros for the first), `entry_hash` (SHA-256 of the entry as canonical JSON without `entry_hash` and `signature`), and `signature` (Ed25519 over `entry_hash`, base64, from `maxguard.custody.signing.sign`).
+**Step 2.** Create `maxguard/custody/log.py`:
 
-**Step 3.** Write `verify(log_path, public_key_path) -> tuple[bool, int | None, str]`: walk the lines in order and return `(True, None, "ok")` or `(False, first_bad_seq, reason)`.
+```python
+"""Chain-of-custody log (Amory, AMO-05).
 
-**Step 4.** Add a small command line in the same module: `python -m maxguard.custody.log verify <log> <public key>`.
+An append-only JSON Lines file that records what happened to evidence, for
+example "capture_received", "report_generated" or "report_exported". Each line
+is one entry:
 
-**Step 5.** Write `tests/unit/test_custody.py`: a good chain verifies; changing any field, deleting a line, swapping two lines, or using the wrong public key fails at the right `seq`.
+    seq         1, 2, 3, ... in the order the entries were written
+    at          when it happened, in Unix seconds (passed in: never read from the clock)
+    action      what happened
+    artifact    the file's name (not its path, which differs between machines)
+    sha256      the file's SHA-256 at that moment
+    size        the file's size in bytes
+    actor       who did it
+    prev_hash   the entry_hash of the entry before (64 zeros for the first entry)
+    entry_hash  SHA-256 of this entry as canonical JSON, without entry_hash and signature
+    signature   Ed25519 signature of entry_hash (base64), made with the custody key
+
+Why both a hash chain and a signature:
+- The chain shows that no entry was edited, removed or moved: each entry pins
+  the hash of the one before it.
+- The signature shows that this MaxGuard installation wrote the entries. Without
+  it, someone who changed a line could simply recompute every hash after it.
+
+What the chain cannot show: that entries were cut off at the END. A shorter log
+is still a valid chain. So `verify` prints the last entry's hash ("head"): write
+it into the report or the case notes, and compare it later.
+
+Verify a log from the command line:
+    python -m maxguard.custody.log verify custody.jsonl custody_ed25519_public.pem
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import binascii
+import hashlib
+import json
+import os
+import sys
+import threading
+from pathlib import Path
+
+from maxguard.custody.signing import sign
+from maxguard.custody.signing import verify as signature_ok
+from maxguard.ids import canonical_json
+
+GENESIS_HASH = "0" * 64  # the "entry before" the first entry
+HASHED_FIELDS = ("seq", "at", "action", "artifact", "sha256", "size", "actor", "prev_hash")
+ALL_FIELDS = (*HASHED_FIELDS, "entry_hash", "signature")
+
+# Two threads appending at once could both take the same seq. The API runs
+# analyses in worker threads, so appends inside one process take turns.
+# Only one program (the console) should write to a log.
+_append_lock = threading.Lock()
+
+
+def append(log_path: Path, *, action: str, artifact_path: Path, actor: str, at: float,
+           private_key_path: Path) -> dict:
+    """Add one signed entry for artifact_path to the log and return it."""
+    log_path = Path(log_path)
+    with _append_lock:
+        last = last_entry(log_path)
+        entry = {
+            "seq": last["seq"] + 1 if last else 1,
+            "at": at,
+            "action": action,
+            "artifact": Path(artifact_path).name,
+            "sha256": file_sha256(artifact_path),
+            "size": Path(artifact_path).stat().st_size,
+            "actor": actor,
+            "prev_hash": last["entry_hash"] if last else GENESIS_HASH,
+        }
+        entry["entry_hash"] = entry_hash(entry)
+        signature = sign(entry["entry_hash"].encode("ascii"), private_key_path)
+        entry["signature"] = base64.b64encode(signature).decode("ascii")
+        write_line(log_path, entry)
+    return entry
+
+
+def entry_hash(entry: dict) -> str:
+    """SHA-256 of the hashed fields in one fixed text form (sorted keys, no spaces)."""
+    hashed = {field: entry[field] for field in HASHED_FIELDS}
+    return hashlib.sha256(canonical_json(hashed).encode("utf-8")).hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def last_entry(log_path: Path) -> dict | None:
+    if not log_path.exists():
+        return None
+    lines = log_path.read_text(encoding="utf-8").splitlines()
+    return json.loads(lines[-1]) if lines else None
+
+
+def write_line(log_path: Path, entry: dict) -> None:
+    """Append one line and make sure it is on the disk before returning."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, sort_keys=True) + "\n")
+        f.flush()
+        os.fsync(f.fileno())  # a power cut right after append() must not lose the entry
+
+
+def verify(log_path: Path, public_key_path: Path) -> tuple[bool, int | None, str]:
+    """Check every entry in order.
+
+    Returns (True, None, "ok"), or (False, first_bad_seq, reason) where
+    first_bad_seq is the position (1, 2, 3, ...) of the first entry that fails."""
+    previous = GENESIS_HASH
+    lines = Path(log_path).read_text(encoding="utf-8").splitlines()
+    for position, line in enumerate(lines, start=1):
+        problem = check_entry(line, position, previous, public_key_path)
+        if problem:
+            return False, position, problem
+        previous = json.loads(line)["entry_hash"]
+    return True, None, "ok"
+
+
+def check_entry(line: str, position: int, previous: str, public_key_path: Path) -> str | None:
+    """Why this line is not a good entry, or None if it is."""
+    try:
+        entry = json.loads(line)
+    except json.JSONDecodeError:
+        return "not valid JSON"
+    if not isinstance(entry, dict) or set(entry) != set(ALL_FIELDS):
+        return "missing or unexpected fields"
+    if entry["seq"] != position:
+        return f"seq is {entry['seq']!r}, expected {position}: an entry was removed or moved"
+    if entry["prev_hash"] != previous:
+        return "prev_hash does not match the entry before: an entry was removed, moved or changed"
+    if entry_hash(entry) != entry["entry_hash"]:
+        return "entry_hash does not match the entry: the entry was changed after it was written"
+    try:
+        signature = base64.b64decode(entry["signature"], validate=True)
+    except (binascii.Error, TypeError):
+        return "signature is not valid base64"
+    if not signature_ok(entry["entry_hash"].encode("ascii"), signature, public_key_path):
+        return "bad signature: the entry was forged, or this is the wrong public key"
+    return None
+
+
+def head(log_path: Path) -> tuple[int, str]:
+    """(seq, entry_hash) of the last entry: record it elsewhere to detect a cut-off log."""
+    last = last_entry(Path(log_path))
+    return (last["seq"], last["entry_hash"]) if last else (0, GENESIS_HASH)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="python -m maxguard.custody.log",
+                                     description="Check a MaxGuard chain-of-custody log.")
+    commands = parser.add_subparsers(dest="command", required=True)
+    check = commands.add_parser("verify", help="check every entry's hash chain and signature")
+    check.add_argument("log", type=Path, help="the custody log (JSON Lines)")
+    check.add_argument("public_key", type=Path, help="the custody public key (PEM)")
+    args = parser.parse_args(argv)
+
+    ok, bad_seq, reason = verify(args.log, args.public_key)
+    if not ok:
+        print(f"FAILED at seq {bad_seq}: {reason}")
+        return 1
+    seq, last_hash = head(args.log)
+    noun = "entry" if seq == 1 else "entries"
+    print(f"ok: {seq} {noun}, head {last_hash}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+Three details: `at` comes from the caller, never from the clock (the same rule as the stores), so the same inputs give a byte-identical log, because Ed25519 signatures are deterministic; `os.fsync` puts each entry on the disk before `append()` returns; and a hash chain cannot show that entries were cut off at the end, so `verify` prints the last entry's hash (the head) for you to record somewhere else, such as the case notes or the exported report.
+
+**Step 3.** Create the tests `tests/unit/test_custody.py`:
+
+```python
+"""Tests for the chain-of-custody log (Amory, AMO-05)."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+
+import pytest
+
+from maxguard.custody import log as custody
+from maxguard.custody.signing import generate_keypair
+
+AT = 1791250000.0  # a fixed time: the log never reads the clock
+
+
+@pytest.fixture
+def keys(tmp_path) -> tuple[Path, Path]:
+    return generate_keypair(tmp_path / "keys")
+
+
+@pytest.fixture
+def artifacts(tmp_path) -> list[Path]:
+    """Three small evidence files (stand-ins for a capture and two reports)."""
+    files = []
+    for name, data in (("telnet.pcap", b"capture bytes"), ("report.json", b"{}"),
+                       ("report.html", b"<html></html>")):
+        path = tmp_path / "evidence" / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(data)
+        files.append(path)
+    return files
+
+
+def write_log(log_path: Path, artifacts: list[Path], private_key: Path) -> list[dict]:
+    actions = ("capture_received", "report_generated", "report_exported")
+    return [custody.append(log_path, action=action, artifact_path=artifact, actor="amory",
+                           at=AT + i, private_key_path=private_key)
+            for i, (action, artifact) in enumerate(zip(actions, artifacts, strict=True))]
+
+
+@pytest.fixture
+def log_path(tmp_path, artifacts, keys) -> Path:
+    path = tmp_path / "custody.jsonl"
+    write_log(path, artifacts, keys[0])
+    return path
+
+
+def read_lines(path: Path) -> list[str]:
+    return path.read_text().splitlines()
+
+
+def write_lines(path: Path, lines: list[str]) -> None:
+    path.write_text("\n".join(lines) + "\n")
+
+
+def change_entry(path: Path, position: int, field: str, value) -> None:
+    lines = read_lines(path)
+    entry = json.loads(lines[position - 1])
+    entry[field] = value
+    lines[position - 1] = json.dumps(entry, sort_keys=True)
+    write_lines(path, lines)
+
+
+# ---------- a good log ----------
+
+def test_a_good_chain_verifies(log_path, keys):
+    assert custody.verify(log_path, keys[1]) == (True, None, "ok")
+
+
+def test_entries_link_to_each_other(log_path, artifacts):
+    entries = [json.loads(line) for line in read_lines(log_path)]
+    assert [e["seq"] for e in entries] == [1, 2, 3]
+    assert entries[0]["prev_hash"] == "0" * 64
+    assert entries[1]["prev_hash"] == entries[0]["entry_hash"]
+    assert entries[2]["prev_hash"] == entries[1]["entry_hash"]
+
+    first = entries[0]
+    assert set(first) == set(custody.ALL_FIELDS)
+    assert first["artifact"] == "telnet.pcap"  # the name, never the path
+    assert first["sha256"] == hashlib.sha256(b"capture bytes").hexdigest()
+    assert first["size"] == len(b"capture bytes")
+    assert first["at"] == AT
+    assert first["action"] == "capture_received"
+
+
+def test_append_never_reads_the_clock(tmp_path, artifacts, keys, monkeypatch):
+    def no_clock():
+        raise AssertionError("the custody log must not read the clock")
+
+    monkeypatch.setattr("time.time", no_clock)
+    entry = custody.append(tmp_path / "c.jsonl", action="capture_received",
+                           artifact_path=artifacts[0], actor="amory", at=AT,
+                           private_key_path=keys[0])
+    assert entry["at"] == AT
+
+
+def test_same_inputs_give_the_same_log(tmp_path, artifacts, keys):
+    # Ed25519 signatures are deterministic, so the whole file is.
+    write_log(tmp_path / "a.jsonl", artifacts, keys[0])
+    write_log(tmp_path / "b.jsonl", artifacts, keys[0])
+    assert (tmp_path / "a.jsonl").read_bytes() == (tmp_path / "b.jsonl").read_bytes()
+
+
+# ---------- tampering ----------
+
+@pytest.mark.parametrize("field, value", [
+    ("seq", 7),
+    ("at", AT + 3600),
+    ("action", "report_deleted"),
+    ("artifact", "other.pcap"),
+    ("sha256", "0" * 64),
+    ("size", 1),
+    ("actor", "mallory"),
+    ("prev_hash", "f" * 64),
+    ("entry_hash", "e" * 64),
+    ("signature", "AAAA"),
+])
+def test_changing_any_field_fails_at_that_entry(log_path, keys, field, value):
+    change_entry(log_path, 2, field, value)
+    ok, bad_seq, reason = custody.verify(log_path, keys[1])
+    assert (ok, bad_seq) == (False, 2)
+    assert reason
+
+
+def test_a_rewritten_entry_with_a_fresh_hash_fails_on_the_signature(log_path, keys):
+    entry = json.loads(read_lines(log_path)[1])
+    entry["actor"] = "mallory"
+    change_entry(log_path, 2, "actor", "mallory")
+    change_entry(log_path, 2, "entry_hash", custody.entry_hash(entry))
+    ok, bad_seq, reason = custody.verify(log_path, keys[1])
+    assert (ok, bad_seq) == (False, 2)
+    assert "signature" in reason
+
+
+def test_deleting_a_line_fails(log_path, keys):
+    lines = read_lines(log_path)
+    write_lines(log_path, [lines[0], lines[2]])
+    ok, bad_seq, reason = custody.verify(log_path, keys[1])
+    assert (ok, bad_seq) == (False, 2)
+    assert "removed or moved" in reason
+
+
+def test_swapping_two_lines_fails(log_path, keys):
+    lines = read_lines(log_path)
+    write_lines(log_path, [lines[0], lines[2], lines[1]])
+    assert custody.verify(log_path, keys[1])[:2] == (False, 2)
+
+
+def test_a_line_that_is_not_json_fails(log_path, keys):
+    lines = read_lines(log_path)
+    write_lines(log_path, [lines[0], "not json", *lines[1:]])
+    assert custody.verify(log_path, keys[1]) == (False, 2, "not valid JSON")
+
+
+def test_the_wrong_public_key_fails_at_the_first_entry(log_path, tmp_path):
+    _, other_public = generate_keypair(tmp_path / "other-keys")
+    ok, bad_seq, reason = custody.verify(log_path, other_public)
+    assert (ok, bad_seq) == (False, 1)
+    assert "wrong public key" in reason
+
+
+def test_cutting_off_the_end_needs_the_recorded_head(log_path, keys):
+    # A shorter log is still a valid chain: this is why the head is recorded elsewhere.
+    recorded = custody.head(log_path)
+    write_lines(log_path, read_lines(log_path)[:2])
+    assert custody.verify(log_path, keys[1]) == (True, None, "ok")
+    assert custody.head(log_path) != recorded
+    assert recorded[0] == 3
+
+
+# ---------- command line ----------
+
+def test_command_line_verify(log_path, keys, capsys):
+    assert custody.main(["verify", str(log_path), str(keys[1])]) == 0
+    seq, last_hash = custody.head(log_path)
+    assert capsys.readouterr().out == f"ok: 3 entries, head {last_hash}\n"
+
+    change_entry(log_path, 3, "actor", "mallory")
+    assert custody.main(["verify", str(log_path), str(keys[1])]) == 1
+    assert capsys.readouterr().out.startswith("FAILED at seq 3: entry_hash does not match")
+```
+
+**Step 4.** Run them:
+
+```bash
+pytest tests/unit/test_custody.py -q
+```
+
+Expected output:
+
+```text
+.....................                                                                        [100%]
+21 passed in 0.23s
+```
+
+**Step 5.** Try the command line: make a key pair, log one capture, verify the log, change one word in it, and verify again:
+
+```bash
+python -c "from pathlib import Path; from maxguard.custody.signing import generate_keypair; from maxguard.custody.log import append; private, public = generate_keypair(Path('data/keys')); append(Path('data/custody.jsonl'), action='capture_received', artifact_path=Path('tests/pcaps/telnet.pcap'), actor='amory', at=1791250000.0, private_key_path=private)"
+python -m maxguard.custody.log verify data/custody.jsonl data/keys/custody_ed25519_public.pem
+sed -i.bak 's/"actor": "amory"/"actor": "mallory"/' data/custody.jsonl
+python -m maxguard.custody.log verify data/custody.jsonl data/keys/custody_ed25519_public.pem
+```
+
+Expected output:
+
+```text
+ok: 1 entry, head ef422ca1d6ea20c4beb60151895e2830b0bc0913272bc0aee61a94c270c43ec0
+FAILED at seq 1: entry_hash does not match the entry: the entry was changed after it was written
+```
+
+*Your head hash is the same as this one: it covers the entry (file hash, time, actor), not the signature, and the inputs here are fixed. The last command exits with 1.*
 
 **Step 6.** Commit, push, and open the pull request:
 

@@ -13,7 +13,7 @@ This is your part of the MaxGuard v2.0 roadmap. Read [the roadmap overview](READ
 | [ALI-02](#ali-02-evaluation-set-the-same-13-questions-for-every-model) | W2 | Evaluation set: the same 13 questions for every model | [FIO-02](fiona.md#fio-02-tls-and-certificate-rules), [JAK-03](jakub.md#jak-03-cleartext-and-rdp-rules-the-rule-set-is-complete), [AMO-01](amory.md#amo-01-nist-sp-800-53-mapping-file-and-the-mapping-checks), [JAI-03](jaiden.md#jai-03-common-event-schema-the-normalizer-and-record-lookup) | code, tested |
 | [ALI-03](#ali-03-benchmark-script-speed-citations-and-unsupported-details) | W3 | Benchmark script: speed, citations, and unsupported details | [ALI-02](#ali-02-evaluation-set-the-same-13-questions-for-every-model), [JON-02](jonattan.md#jon-02-ollama-client-one-evidence-citing-explanation-per-finding) | code, tested |
 | [ALI-04](#ali-04-run-the-benchmark-on-both-tiers-and-propose-the-default-models) | W4 | Run the benchmark on both tiers and propose the default models | [ALI-01](#ali-01-model-shortlist-and-license-check), [ALI-03](#ali-03-benchmark-script-speed-citations-and-unsupported-details) | process |
-| [ALI-05](#ali-05-re-evaluate-the-models-against-prompt-injection-and-the-spring-rules) | S8 | Re-evaluate the models against prompt injection and the spring rules | [ALI-04](#ali-04-run-the-benchmark-on-both-tiers-and-propose-the-default-models), [JON-06](jonattan.md#jon-06-prompt-injection-tests-for-the-ai-layer) | design |
+| [ALI-05](#ali-05-re-evaluate-the-models-against-prompt-injection-and-the-spring-rules) | S8 | Re-evaluate the models against prompt injection and the spring rules | [ALI-04](#ali-04-run-the-benchmark-on-both-tiers-and-propose-the-default-models), [JON-06](jonattan.md#jon-06-prompt-injection-tests-for-the-ai-layer) | process |
 
 **Kind:** *code, tested* — the complete code below was run with its tests during planning; copy it exactly, then improve it in a later pull request if you like. *code, written* — written in planning, but part of it needs a machine planning did not have. *design* — you write the code from the steps. *process* — no code: setup, review, testing or release work.
 
@@ -1687,7 +1687,7 @@ Expected output:
 
 ```text
 ................................                                                             [100%]
-32 passed in 0.26s
+32 passed in 0.25s
 ```
 
 **Step 5.** Check the error path without Ollama running (the address points at a closed port):
@@ -1807,17 +1807,15 @@ The model is the one part of MaxGuard that can be confidently wrong. Measuring d
 
 ### ALI-05: Re-evaluate the models against prompt injection and the spring rules
 
-**Due:** Spring S5-S8 (due Fri Mar 12, 2027) · **Milestone:** `S5-S8 Respond` · **Needs first:** [ALI-04](#ali-04-run-the-benchmark-on-both-tiers-and-propose-the-default-models), [JON-06](jonattan.md#jon-06-prompt-injection-tests-for-the-ai-layer) · **Kind:** design
+**Due:** Spring S5-S8 (due Fri Mar 12, 2027) · **Milestone:** `S5-S8 Respond` · **Needs first:** [ALI-04](#ali-04-run-the-benchmark-on-both-tiers-and-propose-the-default-models), [JON-06](jonattan.md#jon-06-prompt-injection-tests-for-the-ai-layer) · **Kind:** process
 
 **Issue labels:** `type:task` `phase:spring` `owner:ali` `area:ai` `needs-hardware`
-
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
 
 > **Needs hardware.** Steps that use the Raspberry Pi, the switch or other devices were not run during planning; they are marked *not run — verify on hardware*.
 
 #### Goal
 
-Extend the evaluation with Jonattan's prompt-injection cases and the spring rules (JA4 watchlist, decoys, baselines), run it again on both tiers, and confirm or change the default models before the v2.0 feature freeze.
+Run the evaluation again on both tiers with Jonattan's prompt-injection set and the spring rules (JA4 watchlist, decoys, baselines), and confirm or change the default models before the v2.0 feature freeze.
 
 #### Prerequisites
 
@@ -1836,11 +1834,21 @@ git checkout -b ali/eval-spring
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** Add the new items to the evaluation set (regenerate it with `python -m scripts.make_eval_set` after the spring fixtures exist) and add an `injection` column to the results: the share of injection items where a sentence obeyed the hostile text (it is dropped by the citation check, but the rate tells you how often the model tried).
+**Step 2.** Regenerate the evaluation set once the spring rules and their fixtures are merged (`python -m scripts.make_eval_set`), so it has one item per rule, and commit it (`tests/unit/test_benchmark.py` checks it is up to date).
 
-**Step 3.** Re-run both tiers and add a section 10 to `docs/model-eval/README.md`.
+**Step 3.** On each tier, run the benchmark on both sets, then count how often each model obeyed the hostile text:
 
-**Step 4.** Commit, push, and open the pull request:
+```bash
+python -m scripts.benchmark_models --tier pi qwen3:4b llama3.2:3b
+python -m scripts.benchmark_models --tier pi --eval-set tests/fixtures/ai_eval/injection/injection_set.json qwen3:4b llama3.2:3b
+python -m scripts.injection_report docs/model-eval/raw_results.csv
+```
+
+"Obeyed" means the canary word reached a sentence MaxGuard kept. The citation check cannot catch those sentences when they cite the hostile record itself (JON-06 explains why), so this rate is a real difference between models. *Not run in planning (no model could be downloaded); verify on hardware.*
+
+**Step 4.** Add a section 10 to `docs/model-eval/README.md`: the new results per tier, the injection rate per model, and whether the default models stay. A change of default model needs Ahmad's approval, as in ALI-04.
+
+**Step 5.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -1857,7 +1865,7 @@ The new results cover every spring rule and the injection set on both tiers.
 
 #### What you just did and why
 
-New rules mean new kinds of evidence (fingerprints, decoy contacts, baselines) that the model has never been tested on, and newer model versions appear every few months. A second evaluation before the feature freeze keeps the default choice honest.
+New rules mean new kinds of evidence (fingerprints, decoy contacts, baselines) that the model has never been tested on, and newer model versions appear every few months. A model that often obeys text from the network is a bad default even if its other numbers are good. A second evaluation before the feature freeze keeps the choice honest.
 
 #### Pull request checklist
 
@@ -1867,3 +1875,4 @@ New rules mean new kinds of evidence (fingerprints, decoy contacts, baselines) t
 - [ ] No secrets, passwords, email addresses, personal data, or captures from a real network (CLAUDE.md rule 6)
 - [ ] Any new dependency has a row in `docs/DEPENDENCIES.md` with its license
 - [ ] CI is green and your reviewer approved
+- [ ] Ahmad approved any change of default model

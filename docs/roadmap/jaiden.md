@@ -15,11 +15,11 @@ This is your part of the MaxGuard v2.0 roadmap. Read [the roadmap overview](READ
 | [JAI-04](#jai-04-the-engine-image-and-the-compose-files) | W1 | The engine image and the Compose files | [JAI-01](#jai-01-restructure-the-repository-add-packaging-and-ci), [AMO-01](amory.md#amo-01-nist-sp-800-53-mapping-file-and-the-mapping-checks) | code, written |
 | [JAI-05](#jai-05-the-pipeline-one-function-from-input-to-report) | W2 | The pipeline: one function from input to report | [FIO-01](fiona.md#fio-01-zeek-runner-and-the-two-input-adapters), [FIO-02](fiona.md#fio-02-tls-and-certificate-rules), [JAK-03](jakub.md#jak-03-cleartext-and-rdp-rules-the-rule-set-is-complete), [JAI-03](#jai-03-common-event-schema-the-normalizer-and-record-lookup), [JAK-04](jakub.md#jak-04-asset-inventory), [AMO-01](amory.md#amo-01-nist-sp-800-53-mapping-file-and-the-mapping-checks) | code, tested |
 | [JAI-06](#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files) | W3 | Storage: alerts in SQLite, events in hourly Parquet files | [JAI-03](#jai-03-common-event-schema-the-normalizer-and-record-lookup) | code, tested |
-| [JAI-07](#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | W3 | The API: uploads, alerts, events, live updates, sensor ingest | [JAI-05](#jai-05-the-pipeline-one-function-from-input-to-report), [JAI-06](#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files) | design |
+| [JAI-07](#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | W3 | The API: uploads, alerts, events, live updates, sensor ingest | [JAI-05](#jai-05-the-pipeline-one-function-from-input-to-report), [JAI-06](#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files), [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly) | code, tested |
 | [JAI-08](#jai-08-ed25519-signing-library) | W5 | Ed25519 signing library | [JAI-01](#jai-01-restructure-the-repository-add-packaging-and-ci) | code, tested |
 | [JAI-09](#jai-09-release-workflow-and-v20-alpha-rc1) | W6 | Release workflow and v2.0-alpha-rc1 | [JAI-04](#jai-04-the-engine-image-and-the-compose-files), [KAR-04](karthik.md#kar-04-ci-runs-the-integration-tests-plus-a-determinism-test), [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) | design |
 | [JAI-10](#jai-10-release-v20-alpha) | W8 | Release v2.0-alpha | [JAI-09](#jai-09-release-workflow-and-v20-alpha-rc1), [KAR-05](karthik.md#kar-05-release-candidate-test-with-an-outside-tester) | process |
-| [JAI-11](#jai-11-signed-offline-intel-bundles) | S8 | Signed offline intel bundles | [JAI-08](#jai-08-ed25519-signing-library), [JAK-09](jakub.md#jak-09-ja4-watchlist-rule) | design |
+| [JAI-11](#jai-11-signed-offline-intel-bundles) | S8 | Signed offline intel bundles | [JAI-08](#jai-08-ed25519-signing-library), [JAK-09](jakub.md#jak-09-ja4-watchlist-rule) | code, tested |
 | [JAI-12](#jai-12-release-v20-rc1-and-v20) | S13 | Release v2.0-rc1 and v2.0 | [JAI-11](#jai-11-signed-offline-intel-bundles), [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console), [AHM-08](ahmad.md#ahm-08-response-approvals-audit-revert-and-the-opnsense-connector) | process |
 
 **Kind:** *code, tested* — the complete code below was run with its tests during planning; copy it exactly, then improve it in a later pull request if you like. *code, written* — written in planning, but part of it needs a machine planning did not have. *design* — you write the code from the steps. *process* — no code: setup, review, testing or release work.
@@ -1767,7 +1767,7 @@ Expected output:
 
 ```text
 ................................................                                             [100%]
-48 passed in 0.16s
+48 passed in 0.17s
 ```
 
 **Step 6.** Commit, push, and open the pull request:
@@ -2301,7 +2301,7 @@ Expected output:
 
 ```text
 ......                                                                                       [100%]
-6 passed in 0.17s
+6 passed in 0.18s
 ```
 
 **Step 5.** Try it yourself on a fixture folder (Zeek-log input needs no Zeek):
@@ -3216,7 +3216,7 @@ Expected output:
 
 ```text
 ..............................                                                               [100%]
-30 passed in 1.15s
+30 passed in 1.17s
 ```
 
 **Step 7.** Look inside the event store with DuckDB's own Python API (handy for debugging):
@@ -3262,11 +3262,9 @@ SQLite is good at many small updates ("set this alert to investigating") and WAL
 
 ### JAI-07: The API: uploads, alerts, events, live updates, sensor ingest
 
-**Due:** Week 3 (due Fri Oct 30) · **Milestone:** `W3 API and alert queue` · **Needs first:** [JAI-05](#jai-05-the-pipeline-one-function-from-input-to-report), [JAI-06](#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files) · **Kind:** design
+**Due:** Week 3 (due Fri Oct 30) · **Milestone:** `W3 API and alert queue` · **Needs first:** [JAI-05](#jai-05-the-pipeline-one-function-from-input-to-report), [JAI-06](#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files), [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly) · **Kind:** code, tested
 
 **Issue labels:** `type:task` `phase:alpha` `owner:jaiden` `area:api` `critical-path`
-
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
 
 #### Goal
 
@@ -3274,7 +3272,7 @@ Write `maxguard/api/app.py` with `create_app(data_dir=None, *, explain=True)`: t
 
 #### Prerequisites
 
-JAI-05 (pipeline) and JAI-06 (storage) are merged.
+JAI-05 (pipeline), JAI-06 (storage) and JON-03 (the offline guard, which `create_app()` switches on when `MAXGUARD_OFFLINE=1`) are merged.
 
 #### Steps
 
@@ -3289,21 +3287,917 @@ git checkout -b jaiden/api
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** `create_app(data_dir=None, *, explain=True) -> FastAPI`: `data_dir` defaults to `MAXGUARD_DATA_DIR`, then `data`; create `state.db` and `events/` inside it; put the stores on `app.state.state_store` and `app.state.event_store`, and the folder on `app.state.data_dir`; include `maxguard.web.routes.router` and `maxguard.response.routes.router` when those modules can be imported; mount `/static` from `maxguard/web/static` when it exists. (`uvicorn --factory` calls it with no arguments.)
+**Step 2.** Let the pipeline name where data came from. In `maxguard/pipeline.py`, give `analyze()` one more optional argument and use it for the events (the default keeps `pcap` and `import`, so nothing else changes):
 
-**Step 3.** `POST /api/analyses` (one multipart file): refuse files over `MAXGUARD_MAX_UPLOAD_MB` (default 1024) with 413; save it under `data/uploads/` with a name you generate (never the client's file name: it could contain `../`); run `analyze()` in a temporary folder; `state_store.save_analysis(report, received_at=time.time())`; `event_store.write(report["events"])`; increase a change counter; delete the upload unless `MAXGUARD_KEEP_UPLOADS=1`; return `{"analysis_id", "findings"}`. `UnsupportedInput` becomes 400.
+```python
+def analyze(path, workdir, frameworks=None, explain=True, mapping_dir=None,
+            sensor_id=None) -> dict:
+    ...
+    if sensor_id is None:
+        sensor_id = "pcap" if adapter.name == "pcap" else "import"
+    events = normalize(log_dir, sensor_id=sensor_id)
+```
 
-**Step 4.** The read endpoints from section 10: alerts (with `status`, `severity`, `limit`), one alert, `PATCH` an alert (`KeyError` → 404, `ValueError` → 400, `at=time.time()`), events, assets, audit, analyses.
+Add a sentence to its docstring: the API passes the sensor's name for data that a sensor or host agent sent to `POST /api/ingest`.
 
-**Step 5.** `GET /api/stream`: a `StreamingResponse` with media type `text/event-stream` that sends `event: alerts-changed` whenever the change counter moves, and a comment line (`: keep-alive`) every 15 seconds. Accept `?max_events=N` so a test can stop it.
+**Step 3.** Create an empty `maxguard/api/__init__.py` and `maxguard/api/app.py`:
 
-**Step 6.** `POST /api/ingest`: 404 unless `MAXGUARD_INGEST_TOKEN` is set; then require `Authorization: Bearer <token>` compared with `hmac.compare_digest` (401 otherwise); otherwise the same as an upload, with the sensor's name as `sensor_id`. Say in the module docstring that exposing this port on the LAN is an explicit, optional choice (CLAUDE.md rule 1).
+```python
+"""MaxGuard's JSON API (Jaiden, JAI-07).
 
-**Step 7.** Unit tests `tests/unit/test_api.py` with `TestClient(create_app(tmp_path, explain=False))`. A zip of the fixture folder `tests/fixtures/zeek/telnet` goes through `ZeekLogAdapter`, so uploads can be tested without Zeek: upload it, list the alert, patch its status and see the audit row, upload the same zip again and check the count did not grow, read events and assets, ingest with no token (404), a wrong token (401) and the right one, and read two events from the stream.
+The dashboard, the live sensor and the host agent all talk to MaxGuard through
+this app. docs/ARCHITECTURE.md section 10 lists the endpoints.
 
-**Step 8.** Integration test `tests/integration/test_api_upload.py` (marked `integration`): upload `tests/pcaps/telnet.pcap` for real inside the test image.
+- The API is the only part of MaxGuard that reads the clock and writes to the
+  stores. The engine (maxguard.pipeline) never does either, so the same input
+  always gives the same report.
+- Uploads are saved under a name we generate, never the client's file name
+  (which could contain "../"), and the file type is decided by its first bytes.
+- One analysis runs at a time: Zeek and Suricata already use every CPU core,
+  so two at once on a Raspberry Pi only makes both slower.
+- POST /api/ingest is how sensors and host agents on the LAN send data. It is
+  OFF unless MAXGUARD_INGEST_TOKEN is set, and every request must carry that
+  token. The console is published on 127.0.0.1 only; publishing its port on the
+  LAN so sensors can reach it is an explicit, optional choice of the user
+  (CLAUDE.md rule 1: nothing leaves or enters the machine by default).
+- Browsers refuse to let other websites read this API, but they do let another
+  website *send* a form to it. Requests that change something are therefore
+  refused when the browser says they come from another site (cross-site
+  request forgery, OWASP CSRF Prevention Cheat Sheet).
 
-**Step 9.** Commit, push, and open the pull request:
+Start it with:  uvicorn maxguard.api.app:create_app --factory --port 8000
+"""
+
+from __future__ import annotations
+
+import asyncio
+import hmac
+import importlib
+import importlib.util
+import ipaddress
+import os
+import re
+import secrets
+import tarfile
+import tempfile
+import threading
+import time
+import zipfile
+from collections.abc import AsyncIterator
+from pathlib import Path
+from typing import BinaryIO
+from urllib.parse import urlparse
+
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+from starlette.datastructures import FormData, UploadFile
+
+from maxguard import __version__, offline
+from maxguard.adapters.pcap import PCAP_MAGIC
+from maxguard.adapters.zeeklogs import ArchiveTooLarge
+from maxguard.pipeline import UnsupportedInput, analyze
+from maxguard.storage.events import EventStore
+from maxguard.storage.state import StateStore
+from maxguard.zeek.runner import ZeekError
+
+STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "static"
+OPTIONAL_ROUTERS = ("maxguard.web.routes", "maxguard.response.routes")
+
+DEFAULT_MAX_UPLOAD_MB = 1024
+MIB = 1024 * 1024
+CHUNK_BYTES = MIB              # copy uploads in 1 MiB blocks: never the whole file in memory
+FORM_OVERHEAD_BYTES = 64 * 1024  # room for the multipart headers around the file
+MIN_TOKEN_LENGTH = 32          # secrets.token_urlsafe(32) gives 43 characters
+
+DEFAULT_SENSOR_ID = "sensor"
+MAX_FORM_FIELDS = 5             # one file plus a few text fields; Starlette allows 1000
+SENSOR_ID_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,64}")
+ZIP_MAGIC = b"PK\x03\x04"
+GZIP_MAGIC = b"\x1f\x8b"
+
+KEEPALIVE_SECONDS = 15.0   # a comment line now and then stops proxies closing the stream
+POLL_SECONDS = 0.5         # how often the stream checks the change counter
+CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+# The file field, written out for the OpenAPI page (/docs): the upload endpoints
+# read the form themselves (see check_ingest_token), so FastAPI cannot see it.
+FILE_FIELD = {"type": "string", "format": "binary",
+              "description": "a .pcap/.pcapng capture, or a .zip/.tar.gz of Zeek logs"}
+UPLOAD_FORM = {"requestBody": {"required": True, "content": {"multipart/form-data": {
+    "schema": {"type": "object", "required": ["file"], "properties": {"file": FILE_FIELD}}}}}}
+INGEST_FORM = {"requestBody": {"required": True, "content": {"multipart/form-data": {
+    "schema": {"type": "object", "required": ["file"], "properties": {
+        "file": FILE_FIELD,
+        "sensor_id": {"type": "string", "default": DEFAULT_SENSOR_ID,
+                      "description": "1-64 characters: letters, digits, '.', '_', '-'"},
+    }}}}}}
+
+router = APIRouter()
+
+
+# ---------- the app ----------
+
+def create_app(data_dir: str | Path | None = None, *, explain: bool = True) -> FastAPI:
+    """Build the app. uvicorn --factory calls it with no arguments.
+
+    data_dir defaults to $MAXGUARD_DATA_DIR, then "data". explain=False skips the AI
+    (tests, and machines without Ollama)."""
+    offline.enable_from_env()  # MAXGUARD_OFFLINE=1 (set in docker/compose.yaml)
+
+    folder = Path(data_dir or os.environ.get("MAXGUARD_DATA_DIR", "data"))
+    folder.mkdir(parents=True, exist_ok=True)
+
+    app = FastAPI(title="MaxGuard", version=__version__,
+                  description="Offline network security checks. See docs/ARCHITECTURE.md.")
+    app.state.data_dir = folder
+    app.state.state_store = StateStore(folder / "state.db")
+    app.state.event_store = EventStore(folder / "events")
+    app.state.explain = explain
+    app.state.max_upload_bytes = max_upload_bytes()
+    app.state.keep_uploads = os.environ.get("MAXGUARD_KEEP_UPLOADS") == "1"
+    app.state.ingest_token = ingest_token()
+    app.state.analysis_lock = threading.Lock()
+    app.state.changes = 0      # goes up by one whenever alerts change (see notify_change)
+    app.state.keepalive_seconds = KEEPALIVE_SECONDS
+
+    app.middleware("http")(refuse_cross_site_changes)
+    app.include_router(router)
+    for module_name in OPTIONAL_ROUTERS:
+        module = optional_module(module_name)
+        if module is not None:
+            app.include_router(module.router)
+    if STATIC_DIR.is_dir():
+        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    return app
+
+
+def max_upload_bytes() -> int:
+    """MAXGUARD_MAX_UPLOAD_MB (default 1024) in bytes; 1 MB here means 1 MiB."""
+    text = os.environ.get("MAXGUARD_MAX_UPLOAD_MB", str(DEFAULT_MAX_UPLOAD_MB))
+    if not text.isdigit() or int(text) < 1:
+        raise ValueError(
+            f"MAXGUARD_MAX_UPLOAD_MB must be a whole number of megabytes, got {text!r}")
+    return int(text) * MIB
+
+
+def ingest_token() -> str | None:
+    """The sensor token, or None when ingest is off. A short token is refused at start-up."""
+    token = os.environ.get("MAXGUARD_INGEST_TOKEN", "")
+    if not token:
+        return None
+    if len(token) < MIN_TOKEN_LENGTH:
+        raise ValueError(
+            f"MAXGUARD_INGEST_TOKEN must be at least {MIN_TOKEN_LENGTH} characters; make one with: "
+            'python -c "import secrets; print(secrets.token_urlsafe(32))"')
+    return token
+
+
+def optional_module(name: str):
+    """Import a module that may not exist yet (the dashboard and the response
+    module arrive in later tasks). A module that exists but fails to import still
+    raises, so a real bug in it is never hidden."""
+    try:
+        spec = importlib.util.find_spec(name)
+    except ModuleNotFoundError:  # its parent package does not exist either
+        return None
+    return importlib.import_module(name) if spec else None
+
+
+def notify_change(app: FastAPI) -> None:
+    """Tell open dashboards that alerts changed: /api/stream sends alerts-changed.
+    Two threads doing += at the same moment can lose one increment; that is fine,
+    because the number still changes, and a change is all the stream looks for."""
+    app.state.changes += 1
+
+
+# ---------- cross-site request check ----------
+
+def is_cross_site(request: Request) -> bool:
+    """True when the browser says another website (another origin) started this request.
+
+    Sec-Fetch-Site is set by every browser since 2023 and cannot be set by a page's
+    scripts. "same-site" is refused too: another program on 127.0.0.1 with a different
+    port counts as the same site. Older browsers send only Origin; "null" never matches."""
+    if request.headers.get("sec-fetch-site") in ("cross-site", "same-site"):
+        return True
+    origin = request.headers.get("origin")
+    if origin is None:
+        return False  # curl, sensors, agents and tests send no Origin header
+    return urlparse(origin).netloc != request.headers.get("host", "")
+
+
+async def refuse_cross_site_changes(request: Request, call_next):
+    if request.method in CHANGING_METHODS and is_cross_site(request):
+        return JSONResponse({"detail": "cross-site request refused"}, status_code=403)
+    return await call_next(request)
+
+
+# ---------- uploads and ingest ----------
+
+@router.post("/api/analyses", openapi_extra=UPLOAD_FORM)
+async def upload_analysis(request: Request) -> dict:
+    """Analyze one uploaded capture or zipped log folder (the dashboard's upload page)."""
+    check_content_length(request)
+    async with request.form(max_files=1, max_fields=MAX_FORM_FIELDS) as form:
+        upload = form_file(form)
+        return await run_in_threadpool(receive, request.app, upload, sensor_id=None)
+
+
+@router.post("/api/ingest", openapi_extra=INGEST_FORM)
+async def ingest(request: Request) -> dict:
+    """The same as an upload, for sensors and host agents on the LAN."""
+    # Both checks come before the body is read, so a stranger without the token
+    # cannot make the console store anything.
+    check_ingest_token(request)
+    check_content_length(request)
+    async with request.form(max_files=1, max_fields=MAX_FORM_FIELDS) as form:
+        upload = form_file(form)
+        sensor_id = check_sensor_id(form.get("sensor_id", DEFAULT_SENSOR_ID))
+        return await run_in_threadpool(receive, request.app, upload, sensor_id=sensor_id)
+
+
+def check_ingest_token(request: Request) -> None:
+    token = request.app.state.ingest_token
+    if token is None:
+        raise HTTPException(404, "Not Found")  # ingest is off: look like any missing page
+    scheme, _, given = request.headers.get("authorization", "").partition(" ")
+    # compare_digest takes the same time however many characters match, so the
+    # answer time does not help anyone guess the token one character at a time.
+    if scheme.lower() != "bearer" or not hmac.compare_digest(given.encode(), token.encode()):
+        raise HTTPException(401, "missing or wrong token", headers={"WWW-Authenticate": "Bearer"})
+
+
+def check_content_length(request: Request) -> None:
+    """Refuse an upload that announces itself as too large before reading it."""
+    length = request.headers.get("content-length", "")
+    if length.isdigit() and int(length) > request.app.state.max_upload_bytes + FORM_OVERHEAD_BYTES:
+        raise HTTPException(413, too_large_message(request.app))
+
+
+def too_large_message(app: FastAPI) -> str:
+    return f"file larger than {app.state.max_upload_bytes // MIB} MB (MAXGUARD_MAX_UPLOAD_MB)"
+
+
+def form_file(form: FormData) -> UploadFile:
+    upload = form.get("file")
+    if not isinstance(upload, UploadFile):
+        raise HTTPException(400, "send the file in a multipart form field named 'file'")
+    return upload
+
+
+def check_sensor_id(value) -> str:
+    if not isinstance(value, str) or not SENSOR_ID_PATTERN.fullmatch(value):
+        raise HTTPException(400, "sensor_id: 1-64 characters, letters, digits, '.', '_' or '-'")
+    return value
+
+
+def receive(app: FastAPI, upload: UploadFile, *, sensor_id: str | None) -> dict:
+    """Save the upload, analyze it, store the results, tell the dashboards.
+    Runs in a worker thread: analyze() takes seconds and must not block the server."""
+    uploads = app.state.data_dir / "uploads"
+    uploads.mkdir(exist_ok=True)
+    path = save_upload(upload.file, uploads, app)
+    try:
+        with app.state.analysis_lock:
+            report = run_pipeline(app, path, sensor_id)
+    finally:
+        if not app.state.keep_uploads:
+            path.unlink(missing_ok=True)
+    # The generated name is in the report; show the person the name they know.
+    # It is only ever displayed, never used as a path.
+    report["input"]["name"] = display_name(upload.filename)
+    analysis_id = app.state.state_store.save_analysis(report, received_at=time.time())
+    app.state.event_store.write(report["events"])
+    notify_change(app)
+    return {"analysis_id": analysis_id, "findings": len(report["findings"])}
+
+
+def save_upload(source: BinaryIO, folder: Path, app: FastAPI) -> Path:
+    """Copy the upload to folder/<random name><suffix>, in blocks, up to the size limit.
+
+    The suffix comes from the file's first bytes (its "magic number"), because the
+    adapters recognise archives by suffix, and the client's file name cannot be trusted."""
+    first = source.read(CHUNK_BYTES)
+    path = folder / (secrets.token_hex(16) + suffix_for(first))
+    size = 0
+    with path.open("wb") as out:
+        block = first
+        while block:
+            size += len(block)
+            if size > app.state.max_upload_bytes:
+                out.close()
+                path.unlink()
+                raise HTTPException(413, too_large_message(app))
+            out.write(block)
+            block = source.read(CHUNK_BYTES)
+    return path
+
+
+def suffix_for(head: bytes) -> str:
+    if head[:4] in PCAP_MAGIC:
+        return ".pcap"
+    if head.startswith(ZIP_MAGIC):
+        return ".zip"
+    if head.startswith(GZIP_MAGIC):
+        return ".tar.gz"  # a gzip file that is not a tar archive fails later with 400
+    return ""  # unknown: the pipeline refuses it (400)
+
+
+def display_name(filename: str | None) -> str:
+    """'C:\\captures\\..\\shop.pcap' -> 'shop.pcap': last part only, safe characters only."""
+    last = (filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+    cleaned = re.sub(r"[^A-Za-z0-9._ -]", "_", last).strip(" .")
+    return cleaned[:100] or "upload"
+
+
+def run_pipeline(app: FastAPI, path: Path, sensor_id: str | None) -> dict:
+    """analyze() in a temporary work folder inside the data folder, errors -> HTTP codes."""
+    work = app.state.data_dir / "work"
+    work.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=work) as workdir:
+        try:
+            return analyze(path, workdir, explain=app.state.explain, sensor_id=sensor_id)
+        except UnsupportedInput:
+            raise HTTPException(
+                400, "not a .pcap/.pcapng capture or a .zip/.tar.gz of Zeek logs") from None
+        except ArchiveTooLarge as err:
+            raise HTTPException(413, str(err)) from None
+        except (zipfile.BadZipFile, tarfile.TarError, EOFError) as err:
+            raise HTTPException(400, f"not a valid archive: {err}") from None
+        except ZeekError as err:
+            raise HTTPException(422, str(err)) from None
+
+
+# ---------- reading ----------
+
+@router.get("/api/analyses")
+def list_analyses(request: Request, limit: int = Query(50, ge=1, le=1000)) -> list[dict]:
+    return request.app.state.state_store.list_analyses(limit=limit)
+
+
+@router.get("/api/analyses/{analysis_id}")
+def get_analysis(request: Request, analysis_id: str) -> dict:
+    report = request.app.state.state_store.get_analysis(analysis_id)
+    if report is None:
+        raise HTTPException(404, f"no analysis {analysis_id}")
+    return report
+
+
+@router.get("/api/alerts")
+def list_alerts(request: Request, status: str | None = None, severity: str | None = None,
+                limit: int = Query(200, ge=1, le=1000)) -> list[dict]:
+    """The alert queue, most severe first."""
+    try:
+        return request.app.state.state_store.list_alerts(status=status, severity=severity,
+                                                         limit=limit)
+    except ValueError as err:  # unknown status or severity
+        raise HTTPException(400, str(err)) from None
+
+
+@router.get("/api/alerts/{finding_id}")
+def get_alert(request: Request, finding_id: str) -> dict:
+    alert = request.app.state.state_store.get_alert(finding_id)
+    if alert is None:
+        raise HTTPException(404, f"no alert {finding_id}")
+    return alert
+
+
+class AlertUpdate(BaseModel):
+    actor: str = Field(min_length=1, max_length=100)  # who made the change (audit trail)
+    status: str | None = None
+    assignee: str | None = Field(default=None, max_length=100)
+
+
+@router.patch("/api/alerts/{finding_id}")
+def update_alert(request: Request, finding_id: str, change: AlertUpdate) -> dict:
+    """Change an alert's status and/or assignee; StateStore writes the audit row."""
+    try:
+        alert = request.app.state.state_store.update_alert(
+            finding_id, actor=change.actor, at=time.time(),
+            status=change.status, assignee=change.assignee)
+    except KeyError:
+        raise HTTPException(404, f"no alert {finding_id}") from None
+    except ValueError as err:  # unknown status
+        raise HTTPException(400, str(err)) from None
+    notify_change(request.app)
+    return alert
+
+
+@router.get("/api/events")
+def list_events(request: Request, ip: str | None = None, since: float | None = None,
+                until: float | None = None,
+                limit: int = Query(1000, ge=1, le=10000)) -> list[dict]:
+    """Timeline events in time order; ip matches the source or the destination."""
+    if ip is not None:
+        try:
+            ip = str(ipaddress.ip_address(ip))  # also writes IPv6 the way Zeek does
+        except ValueError:
+            raise HTTPException(400, f"not an IP address: {ip!r}") from None
+    return request.app.state.event_store.query(ip=ip, since=since, until=until, limit=limit)
+
+
+@router.get("/api/assets")
+def list_assets(request: Request) -> list[dict]:
+    """The asset inventory of the newest analysis."""
+    store = request.app.state.state_store
+    newest = store.list_analyses(limit=1)
+    if not newest:
+        return []
+    return store.get_analysis(newest[0]["analysis_id"])["assets"]
+
+
+@router.get("/api/audit")
+def list_audit(request: Request, limit: int = Query(200, ge=1, le=1000)) -> list[dict]:
+    return request.app.state.state_store.list_audit(limit=limit)
+
+
+# ---------- live updates ----------
+
+@router.get("/api/stream")
+async def stream(request: Request, max_events: int | None = Query(None, ge=1)):
+    """Server-sent events: alerts-changed when alerts change, a comment line in between.
+
+    The first event is sent at once: a dashboard that reconnects may have missed a
+    change, so it refreshes once to catch up. max_events ends the stream after that
+    many events (tests use it; browsers never send it)."""
+    return StreamingResponse(alert_events(request.app, max_events),
+                             media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache",
+                                      "X-Accel-Buffering": "no"})  # nginx: do not buffer
+
+
+async def alert_events(app: FastAPI, max_events: int | None) -> AsyncIterator[str]:
+    sent = 0
+    last = None
+    quiet = 0.0
+    while max_events is None or sent < max_events:
+        if app.state.changes != last:
+            last = app.state.changes
+            sent += 1
+            quiet = 0.0
+            yield f"event: alerts-changed\ndata: {last}\n\n"
+            continue
+        await asyncio.sleep(POLL_SECONDS)
+        quiet += POLL_SECONDS
+        if quiet >= app.state.keepalive_seconds:
+            quiet = 0.0
+            yield ": keep-alive\n\n"
+```
+
+What to notice, top to bottom:
+
+- `create_app()` keeps the stores on `app.state`, so the dashboard (AHM-02) and the response module (AHM-08) reach them through `request.app.state`. Their routers are included only when their modules exist (`optional_module`); a module that exists but has a bug still fails loudly.
+- An upload is saved under a random name, and its suffix comes from the file's first bytes, never from the client's file name. The client's name is cleaned and only shown, never used as a path.
+- The size limit is checked twice: from the `Content-Length` header before the body is read, and while copying (a client can leave the header out).
+- `POST /api/ingest` checks the token **before** it reads the body, so a stranger cannot make the console store anything; `hmac.compare_digest` takes the same time however many characters match. A token shorter than 32 characters stops the app at start-up.
+- Browsers let any website *send* a form to `127.0.0.1`. `refuse_cross_site_changes` refuses changing requests that a browser marks as coming from another site (cross-site request forgery). curl, sensors and tests send no `Origin` header and are not affected.
+- `GET /api/stream` sends one `alerts-changed` at once (a dashboard that reconnects may have missed a change), then one per change, with a `: keep-alive` comment every 15 seconds.
+
+**Step 4.** Create the unit tests `tests/unit/test_api.py`:
+
+```python
+"""Tests for the API (Jaiden, JAI-07).
+
+Uploads use a zip of the Zeek log fixture tests/fixtures/zeek/telnet: it goes
+through ZeekLogAdapter, so these tests need no Zeek. The integration test
+tests/integration/test_api_upload.py uploads a real capture.
+"""
+
+from __future__ import annotations
+
+import io
+import re
+import threading
+import zipfile
+from pathlib import Path
+
+import pytest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+
+from maxguard.api import app as api_app
+from maxguard.api.app import (
+    create_app,
+    display_name,
+    notify_change,
+    optional_module,
+    save_upload,
+    suffix_for,
+)
+
+FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "zeek"
+TOKEN = "t" * 43  # a test value with the length of secrets.token_urlsafe(32)
+
+
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    """Every test starts with the settings off, whatever the shell has set."""
+    for name in ("MAXGUARD_INGEST_TOKEN", "MAXGUARD_MAX_UPLOAD_MB", "MAXGUARD_KEEP_UPLOADS",
+                 "MAXGUARD_OFFLINE", "MAXGUARD_DATA_DIR"):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture
+def data_dir(tmp_path) -> Path:
+    return tmp_path / "data"
+
+
+@pytest.fixture
+def client(data_dir) -> TestClient:
+    return TestClient(create_app(data_dir, explain=False))
+
+
+def zipped_fixture(name: str = "telnet") -> bytes:
+    """The fixture folder as a .zip in memory, with the logs at the top level."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for log in sorted((FIXTURES / name).iterdir()):
+            archive.write(log, arcname=log.name)
+    return buffer.getvalue()
+
+
+def upload(client: TestClient, data: bytes, filename: str = "telnet.zip", **kwargs):
+    return client.post("/api/analyses", files={"file": (filename, data)}, **kwargs)
+
+
+def uploaded_files(data_dir: Path) -> list[Path]:
+    return sorted((data_dir / "uploads").iterdir())
+
+
+# ---------- uploads ----------
+
+def test_upload_creates_the_telnet_alert(client):
+    response = upload(client, zipped_fixture())
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"analysis_id", "findings"}
+    assert body["findings"] == 1
+
+    [alert] = client.get("/api/alerts").json()
+    assert alert["rule_id"] == "cleartext.telnet"
+    assert alert["status"] == "new"
+    assert alert["count"] == 1
+    assert alert["analysis_id"] == body["analysis_id"]
+
+    [analysis] = client.get("/api/analyses").json()
+    assert analysis["input_name"] == "telnet.zip"  # the name the person knows
+    report = client.get(f"/api/analyses/{body['analysis_id']}").json()
+    assert report["schema"] == "maxguard.report/2"
+    assert "events" not in report  # events live in the event store
+
+
+def test_the_same_file_twice_is_not_counted_twice(client):
+    data = zipped_fixture()
+    upload(client, data)
+    upload(client, data)
+    [alert] = client.get("/api/alerts").json()
+    assert alert["count"] == 1
+    assert len(client.get("/api/analyses").json()) == 2  # both uploads are on record
+
+
+def test_upload_is_stored_under_a_generated_name_and_deleted(client, data_dir):
+    response = upload(client, zipped_fixture(), filename="../../evil.zip")
+    assert response.status_code == 200
+    assert uploaded_files(data_dir) == []  # deleted after the analysis
+    assert not (data_dir.parent / "evil.zip").exists()
+    assert client.get("/api/analyses").json()[0]["input_name"] == "evil.zip"
+
+
+def test_keep_uploads_keeps_the_file_under_our_name(monkeypatch, data_dir):
+    monkeypatch.setenv("MAXGUARD_KEEP_UPLOADS", "1")
+    client = TestClient(create_app(data_dir, explain=False))
+    upload(client, zipped_fixture(), filename="../../evil.zip")
+    [kept] = uploaded_files(data_dir)
+    assert re.fullmatch(r"[0-9a-f]{32}\.zip", kept.name)
+
+
+def test_unsupported_file_is_refused(client, data_dir):
+    response = upload(client, b"just some text", filename="notes.txt")
+    assert response.status_code == 400
+    assert "not a .pcap/.pcapng capture" in response.json()["detail"]
+    assert uploaded_files(data_dir) == []
+
+
+def test_broken_archive_is_refused(client, data_dir):
+    response = upload(client, b"PK\x03\x04 this is not really a zip", filename="logs.zip")
+    assert response.status_code == 400
+    assert uploaded_files(data_dir) == []
+
+
+def test_upload_without_a_file_field_is_refused(client):
+    response = client.post("/api/analyses", files={"wrong_name": ("a.zip", b"PK")})
+    assert response.status_code == 400
+
+
+def test_too_large_upload_is_refused(monkeypatch, data_dir):
+    monkeypatch.setenv("MAXGUARD_MAX_UPLOAD_MB", "1")
+    client = TestClient(create_app(data_dir, explain=False))
+    response = upload(client, b"\0" * (2 * 1024 * 1024), filename="big.pcap")
+    assert response.status_code == 413
+    assert "MAXGUARD_MAX_UPLOAD_MB" in response.json()["detail"]
+    assert not (data_dir / "uploads").exists() or uploaded_files(data_dir) == []
+
+
+def test_save_upload_stops_at_the_limit_and_removes_the_partial_file(data_dir):
+    # A client can leave out Content-Length; then only the copy loop sees the size.
+    app = create_app(data_dir, explain=False)
+    app.state.max_upload_bytes = 10
+    folder = data_dir / "uploads"
+    folder.mkdir()
+    with pytest.raises(HTTPException) as caught:
+        save_upload(io.BytesIO(b"x" * 11), folder, app)
+    assert caught.value.status_code == 413
+    assert list(folder.iterdir()) == []
+
+
+def test_bad_upload_size_setting_fails_at_start(monkeypatch, data_dir):
+    monkeypatch.setenv("MAXGUARD_MAX_UPLOAD_MB", "lots")
+    with pytest.raises(ValueError, match="MAXGUARD_MAX_UPLOAD_MB"):
+        create_app(data_dir, explain=False)
+
+
+# ---------- alerts, audit, events, assets ----------
+
+def test_patch_changes_status_and_writes_the_audit_trail(client):
+    upload(client, zipped_fixture())
+    [alert] = client.get("/api/alerts").json()
+    url = f"/api/alerts/{alert['finding_id']}"
+
+    response = client.patch(url, json={"actor": "ahmad", "status": "investigating",
+                                       "assignee": "fiona"})
+    assert response.status_code == 200
+    assert response.json()["status"] == "investigating"
+    assert client.get(url).json()["assignee"] == "fiona"
+
+    [entry] = client.get("/api/audit").json()
+    assert entry["actor"] == "ahmad"
+    assert entry["action"] == "alert.update"
+    assert entry["target"] == alert["finding_id"]
+    assert entry["details"]["status"] == {"from": "new", "to": "investigating"}
+
+
+def test_patch_errors(client):
+    upload(client, zipped_fixture())
+    [alert] = client.get("/api/alerts").json()
+    url = f"/api/alerts/{alert['finding_id']}"
+    assert client.patch("/api/alerts/0000000000000000",
+                        json={"actor": "ahmad", "status": "resolved"}).status_code == 404
+    assert client.patch(url, json={"actor": "ahmad", "status": "fixed"}).status_code == 400
+    assert client.patch(url, json={"status": "resolved"}).status_code == 422  # no actor
+
+
+def test_alert_filters(client):
+    upload(client, zipped_fixture())
+    assert len(client.get("/api/alerts", params={"severity": "high"}).json()) == 1
+    assert client.get("/api/alerts", params={"severity": "low"}).json() == []
+    assert client.get("/api/alerts", params={"status": "new"}).json()[0]["status"] == "new"
+    assert client.get("/api/alerts", params={"status": "bogus"}).status_code == 400
+    assert client.get("/api/alerts", params={"limit": 0}).status_code == 422
+
+
+def test_unknown_ids_are_404(client):
+    assert client.get("/api/alerts/0000000000000000").status_code == 404
+    assert client.get("/api/analyses/0000000000000000").status_code == 404
+
+
+def test_events_and_assets(client):
+    assert client.get("/api/events").json() == []
+    assert client.get("/api/assets").json() == []
+    upload(client, zipped_fixture())
+
+    events = client.get("/api/events").json()
+    assert len(events) == 1
+    assert events[0]["dst_port"] == 23
+    assert events[0]["sensor_id"] == "import"  # uploaded Zeek logs
+    assert client.get("/api/events", params={"ip": "172.18.0.3"}).json() == events
+    assert client.get("/api/events", params={"ip": "192.0.2.99"}).json() == []
+    assert client.get("/api/events", params={"ip": "not-an-ip"}).status_code == 400
+
+    ips = [asset["ip"] for asset in client.get("/api/assets").json()]
+    assert ips == ["172.18.0.2", "172.18.0.3"]
+
+
+# ---------- ingest ----------
+
+def test_ingest_is_off_without_a_token(client):
+    response = client.post("/api/ingest", files={"file": ("x.zip", zipped_fixture())})
+    assert response.status_code == 404
+
+
+def test_ingest_needs_the_right_token(monkeypatch, data_dir):
+    monkeypatch.setenv("MAXGUARD_INGEST_TOKEN", TOKEN)
+    client = TestClient(create_app(data_dir, explain=False))
+    files = {"file": ("2026-10-06-1400.tar.gz", zipped_fixture())}
+
+    missing = client.post("/api/ingest", files=files)
+    assert missing.status_code == 401
+    assert missing.headers["www-authenticate"] == "Bearer"
+    wrong = client.post("/api/ingest", files=files, headers={"Authorization": "Bearer nope"})
+    assert wrong.status_code == 401
+    assert client.get("/api/alerts").json() == []  # nothing was stored
+
+    right = client.post("/api/ingest", files=files, data={"sensor_id": "lab-sensor"},
+                        headers={"Authorization": f"Bearer {TOKEN}"})
+    assert right.status_code == 200
+    assert right.json()["findings"] == 1
+    assert {e["sensor_id"] for e in client.get("/api/events").json()} == {"lab-sensor"}
+
+
+def test_ingest_refuses_a_bad_sensor_name(monkeypatch, data_dir):
+    monkeypatch.setenv("MAXGUARD_INGEST_TOKEN", TOKEN)
+    client = TestClient(create_app(data_dir, explain=False))
+    response = client.post("/api/ingest", files={"file": ("x.zip", zipped_fixture())},
+                           data={"sensor_id": "../etc"},
+                           headers={"Authorization": f"Bearer {TOKEN}"})
+    assert response.status_code == 400
+
+
+def test_short_ingest_token_is_refused_at_start(monkeypatch, data_dir):
+    monkeypatch.setenv("MAXGUARD_INGEST_TOKEN", "secret")
+    with pytest.raises(ValueError, match="at least 32 characters"):
+        create_app(data_dir, explain=False)
+
+
+# ---------- cross-site requests ----------
+
+def test_another_website_cannot_upload(client):
+    data = zipped_fixture()
+    other = upload(client, data, headers={"Origin": "http://evil.example"})
+    assert other.status_code == 403
+    fetch_metadata = upload(client, data, headers={"Sec-Fetch-Site": "cross-site"})
+    assert fetch_metadata.status_code == 403
+    other_port = upload(client, data, headers={"Sec-Fetch-Site": "same-site"})
+    assert other_port.status_code == 403
+    sandboxed = upload(client, data, headers={"Origin": "null"})
+    assert sandboxed.status_code == 403
+    same_site = upload(client, data, headers={"Origin": "http://testserver"})
+    assert same_site.status_code == 200
+
+
+# ---------- live updates ----------
+
+def test_stream_sends_alerts_changed(client):
+    app = client.app
+    app.state.keepalive_seconds = 0.5  # instead of 15 s, so the test sees one
+    timer = threading.Timer(1.2, notify_change, args=[app])
+    timer.start()
+    with client.stream("GET", "/api/stream", params={"max_events": 2}) as response:
+        assert response.headers["content-type"].startswith("text/event-stream")
+        text = "".join(response.iter_text())
+    timer.join()
+    assert text.startswith("event: alerts-changed\ndata: 0\n\n")  # sent at once
+    assert ": keep-alive\n\n" in text
+    assert text.endswith("event: alerts-changed\ndata: 1\n\n")    # after the change
+
+
+# ---------- small helpers and the app itself ----------
+
+def test_display_name_keeps_only_a_safe_last_part():
+    assert display_name("C:\\captures\\..\\shop.pcap") == "shop.pcap"
+    assert display_name("../../etc/passwd") == "passwd"
+    assert display_name("<script>.pcap") == "_script_.pcap"
+    assert display_name(None) == "upload"
+    assert display_name("..") == "upload"
+
+
+def test_suffix_comes_from_the_first_bytes():
+    assert suffix_for(b"\xd4\xc3\xb2\xa1rest") == ".pcap"
+    assert suffix_for(b"\x0a\x0d\x0d\x0arest") == ".pcap"  # pcapng
+    assert suffix_for(b"PK\x03\x04rest") == ".zip"
+    assert suffix_for(b"\x1f\x8brest") == ".tar.gz"
+    assert suffix_for(b"hello") == ""
+
+
+def test_optional_modules_that_do_not_exist_are_skipped():
+    assert optional_module("maxguard.no_such_module") is None
+    assert optional_module("maxguard.no_such_package.routes") is None
+
+
+def test_static_files_are_served(monkeypatch, data_dir, tmp_path):
+    # The dashboard's files (AHM-02) live in maxguard/web/static; a stand-in folder
+    # shows the mount works before they exist.
+    static = tmp_path / "static"
+    static.mkdir()
+    (static / "hello.txt").write_text("hello")
+    monkeypatch.setattr(api_app, "STATIC_DIR", static)
+    client = TestClient(create_app(data_dir, explain=False))
+    assert client.get("/static/hello.txt").text == "hello"
+    assert client.get("/static/missing.txt").status_code == 404
+
+
+def test_openapi_page_shows_the_upload_field(client):
+    schema = client.get("/openapi.json").json()
+    body = schema["paths"]["/api/analyses"]["post"]["requestBody"]
+    assert "file" in body["content"]["multipart/form-data"]["schema"]["properties"]
+    assert "sensor_id" in str(schema["paths"]["/api/ingest"]["post"]["requestBody"])
+
+
+def test_data_dir_defaults_to_the_environment(monkeypatch, tmp_path):
+    monkeypatch.setenv("MAXGUARD_DATA_DIR", str(tmp_path / "from-env"))
+    app = create_app(explain=False)
+    assert app.state.data_dir == tmp_path / "from-env"
+    assert (tmp_path / "from-env" / "state.db").exists()
+```
+
+**Step 5.** Run them:
+
+```bash
+pytest tests/unit/test_api.py -q
+```
+
+Expected output:
+
+```text
+...........................                                                                  [100%]
+27 passed in 3.65s
+```
+
+**Step 6.** Create the integration test `tests/integration/test_api_upload.py`, which uploads a real capture, so Zeek runs:
+
+```python
+"""Integration test for the API (Jaiden, JAI-07): a real capture through Zeek.
+
+Runs inside the engine test image (pytest -m integration), where Zeek is installed.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from maxguard.api.app import create_app
+
+PCAPS = Path(__file__).resolve().parent.parent / "pcaps"
+
+pytestmark = pytest.mark.integration
+
+
+def test_uploading_a_real_capture_creates_the_alert(tmp_path):
+    client = TestClient(create_app(tmp_path / "data", explain=False))
+    with (PCAPS / "telnet.pcap").open("rb") as capture:
+        response = client.post("/api/analyses", files={"file": ("telnet.pcap", capture)})
+    assert response.status_code == 200, response.text
+
+    [alert] = client.get("/api/alerts").json()
+    assert alert["rule_id"] == "cleartext.telnet"
+    assert alert["dst_port"] == 23
+
+    report = client.get(f"/api/analyses/{response.json()['analysis_id']}").json()
+    assert report["tools"]["zeek"] is True
+    assert report["input"]["name"] == "telnet.pcap"
+
+    events = client.get("/api/events").json()
+    assert events
+    assert {event["sensor_id"] for event in events} == {"pcap"}
+    assert list((tmp_path / "data" / "uploads").iterdir()) == []  # deleted afterwards
+```
+
+Run it in the test image from JAI-04 (rebuild the image first: it copies the tests folder):
+
+```bash
+docker build -f docker/Dockerfile --target test -t maxguard:test .
+docker run --rm --network none maxguard:test pytest -m integration tests/integration/test_api_upload.py -q
+```
+
+Expected output:
+
+```text
+.                                                                        [100%]
+1 passed in 1.57s
+```
+
+*Run in planning inside `zeek/zeek:9.0.0` with MaxGuard's Python packages added, because the engine image build needs Debian's package servers (see JAI-04). The test output is the same.*
+
+**Step 7.** Start the API and try it with curl. Start the server in one terminal, then run the rest in a second terminal from the repository root (on Windows use Git Bash):
+
+```bash
+# terminal 1:
+uvicorn maxguard.api.app:create_app --factory --host 127.0.0.1 --port 8000
+# terminal 2:
+python -c "import shutil; shutil.make_archive('data/telnet', 'zip', 'tests/fixtures/zeek/telnet')"
+curl -s -F file=@data/telnet.zip http://127.0.0.1:8000/api/analyses; echo
+curl -s http://127.0.0.1:8000/api/alerts | python -c "import json, sys; [print(a['rule_id'], a['severity'], a['src_ip'], '->', a['dst_ip'], a['dst_port'], a['status']) for a in json.load(sys.stdin)]"
+curl -s -o /dev/null -w '%{http_code}\n' -F file=@data/telnet.zip http://127.0.0.1:8000/api/ingest
+```
+
+Expected output:
+
+```text
+{"analysis_id":"4abce1d74c62179f","findings":1}
+cleartext.telnet high 172.18.0.3 -> 172.18.0.2 23 new
+404
+```
+
+*The analysis ID depends on the moment of the upload, so yours differs. The last line is `404`: ingest is off because `MAXGUARD_INGEST_TOKEN` is not set.*
+
+Open http://127.0.0.1:8000/docs: FastAPI's OpenAPI page lists every endpoint, and it is the API contract for the dashboard. Stop the server with Ctrl+C.
+
+**Step 8.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -3316,11 +4210,11 @@ git push -u origin HEAD
 
 #### How to test
 
-The unit tests pass, and the manual run shows the Telnet alert from the uploaded zip in `/api/alerts`. Open http://127.0.0.1:8000/docs to see the OpenAPI page FastAPI generates: that page is the API contract for the dashboard.
+The unit tests and the integration test pass, and the manual run shows the Telnet alert from the uploaded zip in `/api/alerts`.
 
 #### What you just did and why
 
-The engine never reads the clock and never writes to storage; the API does both, in one place, which keeps the engine deterministic and easy to test. Generated file names, the upload limit, and the constant-time token check close the obvious ways a hostile client could attack the console (`docs/ARCHITECTURE.md` section 14).
+The engine never reads the clock and never writes to storage; the API does both, in one place, which keeps the engine deterministic and easy to test. Generated file names, the upload limit, the token check before the body is read, and the cross-site check close the obvious ways a hostile client could attack the console (`docs/ARCHITECTURE.md` section 14).
 
 #### Pull request checklist
 
@@ -3603,7 +4497,7 @@ Expected output:
 
 ```text
 ..............                                                                               [100%]
-14 passed in 0.13s
+14 passed in 0.16s
 ```
 
 **Step 5.** Commit, push, and open the pull request:
@@ -3736,11 +4630,9 @@ A tagged release is a promise the team can be held to: the same files for everyo
 
 ### JAI-11: Signed offline intel bundles
 
-**Due:** Spring S5-S8 (due Fri Mar 12, 2027) · **Milestone:** `S5-S8 Respond` · **Needs first:** [JAI-08](#jai-08-ed25519-signing-library), [JAK-09](jakub.md#jak-09-ja4-watchlist-rule) · **Kind:** design
+**Due:** Spring S5-S8 (due Fri Mar 12, 2027) · **Milestone:** `S5-S8 Respond` · **Needs first:** [JAI-08](#jai-08-ed25519-signing-library), [JAK-09](jakub.md#jak-09-ja4-watchlist-rule) · **Kind:** code, tested
 
 **Issue labels:** `type:task` `phase:spring` `owner:jaiden` `area:release`
-
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
 
 #### Goal
 
@@ -3763,13 +4655,638 @@ git checkout -b jaiden/intel-bundles
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** `maxguard/intel/bundle.py`: `build_bundle(src_dir, out_path, private_key_path, *, version)` writes a `.tar.gz` with `manifest.json` (version, every file with its SHA-256 and size) and `manifest.sig` (Ed25519 over the manifest's bytes).
+**Step 2.** Create `maxguard/intel/bundle.py`:
 
-**Step 3.** `verify_bundle(path, public_key_path)`: check the signature **before** extracting anything, then every file's hash; refuse absolute paths, `..`, links, devices, and any file not in the manifest (extract with `tarfile`'s `filter="data"`).
+```python
+"""Signed offline intel bundles (Jaiden, JAI-11).
 
-**Step 4.** `install_bundle(path, public_key_path, dest_dir)`: install into a temporary folder, then rename it into place in one step, and keep the previous version for rollback. Only `*.rules`, the JA4 watchlist and mapping YAML files are allowed.
+Rule and intel updates (Suricata rules, the JA4 watchlist, mapping files) reach
+an offline MaxGuard on a USB stick, as one .tar.gz "bundle":
 
-**Step 5.** Tests `tests/unit/test_intel_bundle.py`: a good bundle installs; a changed file, a changed manifest, the wrong key, a `../` entry, and an extra file are all refused.
+    manifest.json                 version, created_by, and every file with its SHA-256 and size
+    manifest.sig                  Ed25519 signature (64 bytes) over manifest.json's exact bytes
+    rules/<name>.rules            Suricata rules
+    intel/ja4_watchlist.yaml      the JA4 watchlist
+    mappings/<name>.yaml          mapping files
+
+An update channel is a favorite attack path: whoever can change the rules can
+blind the sensor. So a bundle is checked in this order, and nothing is written
+to disk until every check has passed:
+1. the archive's member list: only regular files, no duplicates, sane sizes;
+2. the signature over manifest.json, with the public key the user installed;
+3. the member list against the manifest: same files, only allowed paths
+   (this also refuses absolute paths, "..", links and devices);
+4. every file's size and SHA-256 against the manifest.
+Installing then extracts into a new folder, checks the hashes again on disk,
+and switches the "current" link to it in one step (os.replace), keeping the
+previous version for rollback. An older version is refused, so a stolen old
+bundle cannot roll the rules back (a "rollback attack").
+
+Command line:
+    python -m maxguard.intel.bundle build SRC_DIR OUT.tar.gz PRIVATE_KEY --version 2027.03.01
+    python -m maxguard.intel.bundle verify BUNDLE PUBLIC_KEY
+    python -m maxguard.intel.bundle install BUNDLE PUBLIC_KEY DEST_DIR
+    python -m maxguard.intel.bundle rollback DEST_DIR
+"""
+
+from __future__ import annotations
+
+import argparse
+import gzip
+import hashlib
+import io
+import json
+import os
+import re
+import shutil
+import sys
+import tarfile
+import tempfile
+from pathlib import Path
+
+from maxguard import __version__
+from maxguard.custody.signing import sign, verify
+
+MANIFEST = "manifest.json"
+SIGNATURE = "manifest.sig"
+SIGNATURE_BYTES = 64          # an Ed25519 signature is always 64 bytes
+MAX_MANIFEST_BYTES = 1 << 20  # 1 MiB
+MAX_MEMBERS = 1000
+MAX_TOTAL_BYTES = 1 << 30     # 1 GiB unpacked: refuse "archive bombs"
+
+NAME = r"[A-Za-z0-9][A-Za-z0-9._-]*"
+ALLOWED_PATHS = (
+    re.compile(rf"rules/{NAME}\.rules"),
+    re.compile(r"intel/ja4_watchlist\.yaml"),
+    re.compile(rf"mappings/{NAME}\.yaml"),
+)
+VERSION_PATTERN = re.compile(r"\d{1,6}(\.\d{1,6}){0,3}")  # 2027.03.01 or 2027.03.01.2
+SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+
+VERSIONS_DIR = "versions"
+CURRENT = "current"
+PREVIOUS = "previous"
+
+
+class BundleError(ValueError):
+    """The bundle is not safe to install. Nothing was written."""
+
+
+# ---------- building (on the maintainer's machine, which has the private key) ----------
+
+def build_bundle(src_dir: Path, out_path: Path, private_key_path: Path, *, version: str) -> dict:
+    """Write a signed bundle of every file under src_dir and return its manifest.
+
+    The same files and version always give the same bundle bytes (fixed times and
+    owners, sorted names), so anyone can rebuild it and compare."""
+    check_version(version)
+    files = collect_files(Path(src_dir))
+    manifest = {
+        "version": version,
+        "created_by": f"maxguard {__version__}",
+        "files": [{"path": path, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+                  for path, data in files],
+    }
+    manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    signature = sign(manifest_bytes, private_key_path)
+    members = [(MANIFEST, manifest_bytes), (SIGNATURE, signature), *files]
+    write_tar_gz(Path(out_path), members)
+    return manifest
+
+
+def collect_files(src_dir: Path) -> list[tuple[str, bytes]]:
+    """(path inside the bundle, content) for every file, sorted; refuses anything not allowed."""
+    files = []
+    for path in sorted(src_dir.rglob("*")):
+        relative = path.relative_to(src_dir).as_posix()
+        if path.is_symlink():
+            raise BundleError(f"{relative}: links are not allowed in a bundle")
+        if path.is_dir():
+            continue
+        if not is_allowed(relative):
+            raise BundleError(f"{relative}: not an allowed bundle file "
+                              "(rules/*.rules, intel/ja4_watchlist.yaml, mappings/*.yaml)")
+        files.append((relative, path.read_bytes()))
+    if not files:
+        raise BundleError(f"{src_dir}: no files to bundle")
+    return files
+
+
+def write_tar_gz(out_path: Path, members: list[tuple[str, bytes]]) -> None:
+    """A .tar.gz with fixed times and owners, so the same input gives the same bytes."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("wb") as raw, \
+            gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=0) as packed, \
+            tarfile.open(fileobj=packed, mode="w", format=tarfile.USTAR_FORMAT) as tar:
+        for name, data in members:
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            info.mode = 0o644
+            info.mtime = 0
+            tar.addfile(info, io.BytesIO(data))
+
+
+# ---------- checking (on the user's machine, which has only the public key) ----------
+
+def verify_bundle(path: Path, public_key_path: Path) -> dict:
+    """Run every check without writing anything; return the verified manifest."""
+    with tarfile.open(path, mode="r:gz") as tar:
+        members = list_members(tar)
+        manifest_bytes = read_member(tar, members, MANIFEST, MAX_MANIFEST_BYTES)
+        signature = read_member(tar, members, SIGNATURE, SIGNATURE_BYTES)
+        if not verify(manifest_bytes, signature, public_key_path):
+            raise BundleError("bad signature: the manifest was changed, or this is the wrong key")
+        manifest = parse_manifest(manifest_bytes)
+        check_member_list(members, manifest)
+        for entry in manifest["files"]:
+            check_content(tar.extractfile(members[entry["path"]]), entry)
+    return manifest
+
+
+def list_members(tar: tarfile.TarFile) -> dict[str, tarfile.TarInfo]:
+    """Name -> member. Reads only the headers, and stops early on an archive bomb."""
+    members: dict[str, tarfile.TarInfo] = {}
+    total = 0
+    for member in tar:
+        if member.name in members:
+            raise BundleError(f"{member.name}: appears twice in the archive")
+        if not member.isreg():
+            raise BundleError(f"{member.name}: only regular files are allowed "
+                              "(no folders, links or devices)")
+        total += member.size
+        if len(members) >= MAX_MEMBERS or total > MAX_TOTAL_BYTES:
+            raise BundleError("archive too large")
+        members[member.name] = member
+    return members
+
+
+def read_member(tar: tarfile.TarFile, members: dict, name: str, max_bytes: int) -> bytes:
+    member = members.get(name)
+    if member is None:
+        raise BundleError(f"{name} is missing")
+    if member.size > max_bytes:
+        raise BundleError(f"{name} is too large")
+    return tar.extractfile(member).read()  # into memory: nothing touches the disk
+
+
+def parse_manifest(data: bytes) -> dict:
+    try:
+        manifest = json.loads(data)
+        version, files = manifest["version"], manifest["files"]
+        well_formed = all(isinstance(entry["path"], str) and isinstance(entry["size"], int)
+                          and isinstance(entry["sha256"], str)
+                          and SHA256_PATTERN.fullmatch(entry["sha256"]) for entry in files)
+    except (ValueError, KeyError, TypeError) as err:
+        raise BundleError(f"manifest.json is malformed: {err!r}") from None
+    if not well_formed:
+        raise BundleError("manifest.json: every file needs a path, a size and a sha256")
+    check_version(version)
+    paths = [entry["path"] for entry in files]
+    if len(set(paths)) != len(paths):
+        raise BundleError("manifest.json lists a file twice")
+    return manifest
+
+
+def check_member_list(members: dict[str, tarfile.TarInfo], manifest: dict) -> None:
+    listed = {entry["path"] for entry in manifest["files"]}
+    present = set(members) - {MANIFEST, SIGNATURE}
+    for name in sorted(present | listed):
+        if not is_allowed(name):
+            raise BundleError(f"{name}: not an allowed bundle path")
+    if present - listed:
+        raise BundleError(f"files not in the manifest: {sorted(present - listed)}")
+    if listed - present:
+        raise BundleError(f"files missing from the archive: {sorted(listed - present)}")
+
+
+def check_content(stream, entry: dict) -> None:
+    """Size and SHA-256 of one file's content against its manifest entry."""
+    digest = hashlib.sha256()
+    size = 0
+    for block in iter(lambda: stream.read(1 << 20), b""):
+        digest.update(block)
+        size += len(block)
+    if size != entry["size"] or digest.hexdigest() != entry["sha256"]:
+        raise BundleError(f"{entry['path']}: content does not match the manifest")
+
+
+def is_allowed(path: str) -> bool:
+    return any(pattern.fullmatch(path) for pattern in ALLOWED_PATHS)
+
+
+def check_version(version) -> None:
+    if not isinstance(version, str) or not VERSION_PATTERN.fullmatch(version):
+        raise BundleError(f"version must look like 2027.03.01, got {version!r}")
+
+
+def version_key(version: str) -> tuple[int, ...]:
+    """'2027.03.01' -> (2027, 3, 1), so versions compare as numbers, not text."""
+    return tuple(int(part) for part in version.split("."))
+
+
+# ---------- installing ----------
+
+def install_bundle(path: Path, public_key_path: Path, dest_dir: Path) -> dict:
+    """Verify, then install as dest_dir/versions/<version> and point dest_dir/current at it.
+
+    dest_dir/previous keeps the version before, for rollback(). Returns the manifest."""
+    manifest = verify_bundle(path, public_key_path)
+    dest_dir = Path(dest_dir)
+    current = installed_version(dest_dir)
+    if current is not None and version_key(manifest["version"]) <= version_key(current):
+        raise BundleError(f"version {manifest['version']} is not newer than the installed "
+                          f"{current}; use rollback to go back")
+    versions = dest_dir / VERSIONS_DIR
+    versions.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".incoming-", dir=versions))
+    try:
+        extract_checked(path, manifest, staging)
+        target = versions / manifest["version"]
+        if target.exists():  # left from before a rollback: replace it with the checked copy
+            shutil.rmtree(target)
+        os.replace(staging, target)  # one step: the folder appears complete or not at all
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    if current is not None:
+        point_link(dest_dir / PREVIOUS, Path(VERSIONS_DIR) / current)
+    point_link(dest_dir / CURRENT, Path(VERSIONS_DIR) / manifest["version"])
+    remove_unused_versions(dest_dir)
+    return manifest
+
+
+def extract_checked(path: Path, manifest: dict, staging: Path) -> None:
+    """Extract the listed files, then check their hashes again on disk: the bundle
+    file could have been swapped between verify_bundle() and this read."""
+    names = {entry["path"] for entry in manifest["files"]} | {MANIFEST}
+    with tarfile.open(path, mode="r:gz") as tar:
+        members = [member for member in tar.getmembers() if member.name in names]
+        # "data" refuses absolute paths, "..", links and devices a second time.
+        tar.extractall(staging, members=members, filter="data")
+    for entry in manifest["files"]:
+        with (staging / entry["path"]).open("rb") as f:
+            check_content(f, entry)
+    on_disk = parse_manifest((staging / MANIFEST).read_bytes())
+    if on_disk != manifest:
+        raise BundleError("manifest.json changed while installing")
+
+
+def point_link(link: Path, target: Path) -> None:
+    """Make link point at target (relative), replacing any old link in one step."""
+    temporary = link.with_name(f".{link.name}.new")
+    temporary.unlink(missing_ok=True)
+    temporary.symlink_to(target, target_is_directory=True)
+    os.replace(temporary, link)  # atomic on POSIX: readers see the old or the new link
+
+
+def installed_version(dest_dir: Path, link: str = CURRENT) -> str | None:
+    path = Path(dest_dir) / link
+    return os.readlink(path).rsplit("/", 1)[-1] if path.is_symlink() else None
+
+
+def remove_unused_versions(dest_dir: Path) -> None:
+    keep = {installed_version(dest_dir, CURRENT), installed_version(dest_dir, PREVIOUS)}
+    for folder in (Path(dest_dir) / VERSIONS_DIR).iterdir():
+        if folder.name not in keep and not folder.name.startswith(".incoming-"):
+            shutil.rmtree(folder)
+
+
+def rollback(dest_dir: Path) -> str:
+    """Switch current and previous. Returns the version that is now current."""
+    current = installed_version(dest_dir, CURRENT)
+    previous = installed_version(dest_dir, PREVIOUS)
+    if current is None or previous is None:
+        raise BundleError("nothing to roll back to")
+    point_link(Path(dest_dir) / CURRENT, Path(VERSIONS_DIR) / previous)
+    point_link(Path(dest_dir) / PREVIOUS, Path(VERSIONS_DIR) / current)
+    return previous
+
+
+# ---------- command line ----------
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="python -m maxguard.intel.bundle",
+                                     description="Build, check and install signed intel bundles.")
+    commands = parser.add_subparsers(dest="command", required=True)
+    build = commands.add_parser("build", help="sign a folder into a bundle")
+    build.add_argument("src_dir", type=Path)
+    build.add_argument("out", type=Path)
+    build.add_argument("private_key", type=Path)
+    build.add_argument("--version", required=True)
+    check = commands.add_parser("verify", help="check a bundle without installing it")
+    check.add_argument("bundle", type=Path)
+    check.add_argument("public_key", type=Path)
+    install = commands.add_parser("install", help="check and install a bundle")
+    install.add_argument("bundle", type=Path)
+    install.add_argument("public_key", type=Path)
+    install.add_argument("dest_dir", type=Path)
+    back = commands.add_parser("rollback", help="go back to the previous version")
+    back.add_argument("dest_dir", type=Path)
+    args = parser.parse_args(argv)
+
+    try:
+        if args.command == "build":
+            manifest = build_bundle(args.src_dir, args.out, args.private_key, version=args.version)
+            print(f"built {args.out}: version {manifest['version']}, "
+                  f"{len(manifest['files'])} files")
+        elif args.command == "verify":
+            manifest = verify_bundle(args.bundle, args.public_key)
+            print(f"ok: version {manifest['version']}, {len(manifest['files'])} files")
+        elif args.command == "install":
+            manifest = install_bundle(args.bundle, args.public_key, args.dest_dir)
+            print(f"installed version {manifest['version']}")
+        else:
+            print(f"current version is now {rollback(args.dest_dir)}")
+    except (BundleError, tarfile.TarError, OSError) as err:
+        print(f"refused: {err}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+The order of the checks in `verify_bundle()` is the point of this task: the member list is read from the headers only, the signature is checked before anything in the manifest is trusted, and every file is hashed from memory. Nothing touches the disk until all of that passed. `install_bundle()` then extracts into a new folder, checks the hashes again on disk (the USB stick could change between the two reads), and switches the `current` link in one step. A version that is not newer is refused, so an old signed bundle cannot be replayed to roll the rules back; `rollback` is the deliberate way back.
+
+**Step 3.** Create the tests `tests/unit/test_intel_bundle.py`. Some bad bundles are signed with the **right** key: the path and member checks must hold even if the machine that builds bundles is compromised:
+
+```python
+"""Tests for signed offline intel bundles (Jaiden, JAI-11).
+
+Every bad bundle must be refused before anything is written to the install folder.
+Some bad bundles below are signed with the RIGHT key: the path and member checks
+must hold even if the machine that builds bundles is compromised.
+"""
+
+from __future__ import annotations
+
+import gzip
+import hashlib
+import io
+import json
+import tarfile
+from pathlib import Path
+
+import pytest
+
+from maxguard.custody.signing import generate_keypair, sign
+from maxguard.intel import bundle
+
+RULES = b'alert tcp any any -> any 23 (msg:"MaxGuard test"; sid:9000001; rev:1;)\n'
+WATCHLIST = b"[]\n"
+MAPPING = b"framework: NIST SP 800-53\n"
+
+
+@pytest.fixture
+def keys(tmp_path) -> tuple[Path, Path]:
+    return generate_keypair(tmp_path / "keys")
+
+
+@pytest.fixture
+def src(tmp_path) -> Path:
+    """A folder laid out like a bundle: rules/, intel/, mappings/."""
+    folder = tmp_path / "src"
+    for relative, data in (("rules/maxguard-extra.rules", RULES),
+                           ("intel/ja4_watchlist.yaml", WATCHLIST),
+                           ("mappings/nist_800_53_r5.yaml", MAPPING)):
+        (folder / relative).parent.mkdir(parents=True, exist_ok=True)
+        (folder / relative).write_bytes(data)
+    return folder
+
+
+@pytest.fixture
+def good(tmp_path, src, keys) -> Path:
+    path = tmp_path / "intel-2027.03.01.tar.gz"
+    bundle.build_bundle(src, path, keys[0], version="2027.03.01")
+    return path
+
+
+def craft(path: Path, members: list[tuple[str, bytes]], private_key: Path | None,
+          manifest_files: list[tuple[str, bytes]] | None = None, version="2027.03.01",
+          extra: list[tarfile.TarInfo] = ()) -> Path:
+    """Write a bundle by hand, the way an attacker could, signed with private_key."""
+    listed = members if manifest_files is None else manifest_files
+    manifest = {"version": version, "created_by": "test", "files": [
+        {"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+        for name, data in listed]}
+    manifest_bytes = json.dumps(manifest).encode()
+    signature = sign(manifest_bytes, private_key) if private_key else b"\0" * 64
+    with tarfile.open(path, "w:gz") as tar:
+        for name, data in [("manifest.json", manifest_bytes), ("manifest.sig", signature),
+                           *members]:
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+        for info in extra:
+            tar.addfile(info)
+    return path
+
+
+def rewrite_member(source: Path, target: Path, name: str, new_data: bytes) -> Path:
+    """Copy a bundle, replacing one member's content (the header size follows)."""
+    with tarfile.open(source, "r:gz") as old, tarfile.open(target, "w:gz") as new:
+        for member in old:
+            data = old.extractfile(member).read()
+            if member.name == name:
+                data = new_data
+                member.size = len(data)
+            new.addfile(member, io.BytesIO(data))
+    return target
+
+
+def assert_refused(path: Path, keys, dest: Path, match: str) -> None:
+    with pytest.raises(bundle.BundleError, match=match):
+        bundle.install_bundle(path, keys[1], dest)
+    assert not dest.exists() or list(dest.iterdir()) == []  # nothing was written
+
+
+# ---------- good bundles ----------
+
+def test_a_good_bundle_verifies(good, keys):
+    manifest = bundle.verify_bundle(good, keys[1])
+    assert manifest["version"] == "2027.03.01"
+    assert [entry["path"] for entry in manifest["files"]] == [
+        "intel/ja4_watchlist.yaml", "mappings/nist_800_53_r5.yaml",
+        "rules/maxguard-extra.rules"]
+
+
+def test_a_good_bundle_installs(good, keys, tmp_path):
+    dest = tmp_path / "intel"
+    bundle.install_bundle(good, keys[1], dest)
+    current = dest / "current"
+    assert current.is_symlink()
+    assert (current / "rules" / "maxguard-extra.rules").read_bytes() == RULES
+    assert (current / "intel" / "ja4_watchlist.yaml").read_bytes() == WATCHLIST
+    assert json.loads((current / "manifest.json").read_text())["version"] == "2027.03.01"
+    assert bundle.installed_version(dest) == "2027.03.01"
+
+
+def test_the_same_files_give_the_same_bundle_bytes(src, keys, tmp_path):
+    a = tmp_path / "a.tar.gz"
+    b = tmp_path / "b.tar.gz"
+    bundle.build_bundle(src, a, keys[0], version="2027.03.01")
+    bundle.build_bundle(src, b, keys[0], version="2027.03.01")
+    assert a.read_bytes() == b.read_bytes()
+
+
+def test_a_newer_version_keeps_the_previous_one_for_rollback(good, src, keys, tmp_path):
+    dest = tmp_path / "intel"
+    bundle.install_bundle(good, keys[1], dest)
+    (src / "rules" / "maxguard-extra.rules").write_bytes(RULES + b"# v2\n")
+    newer = tmp_path / "intel-2027.04.01.tar.gz"
+    bundle.build_bundle(src, newer, keys[0], version="2027.04.01")
+    bundle.install_bundle(newer, keys[1], dest)
+    assert bundle.installed_version(dest) == "2027.04.01"
+    assert bundle.installed_version(dest, "previous") == "2027.03.01"
+
+    assert bundle.rollback(dest) == "2027.03.01"
+    assert (dest / "current" / "rules" / "maxguard-extra.rules").read_bytes() == RULES
+
+
+def test_an_older_or_equal_version_is_refused(good, src, keys, tmp_path):
+    dest = tmp_path / "intel"
+    bundle.install_bundle(good, keys[1], dest)
+    with pytest.raises(bundle.BundleError, match="not newer"):
+        bundle.install_bundle(good, keys[1], dest)
+    older = tmp_path / "old.tar.gz"
+    bundle.build_bundle(src, older, keys[0], version="2027.02.28")
+    with pytest.raises(bundle.BundleError, match="not newer"):
+        bundle.install_bundle(older, keys[1], dest)
+    assert bundle.installed_version(dest) == "2027.03.01"
+
+
+def test_versions_compare_as_numbers():
+    assert bundle.version_key("2027.10.01") > bundle.version_key("2027.9.30")
+
+
+# ---------- refused bundles ----------
+
+def test_a_changed_file_is_refused(good, keys, tmp_path):
+    changed = rewrite_member(good, tmp_path / "changed.tar.gz", "rules/maxguard-extra.rules",
+                             RULES.replace(b"23", b"24"))
+    assert_refused(changed, keys, tmp_path / "intel", "does not match the manifest")
+
+
+def test_a_changed_manifest_is_refused(good, keys, tmp_path):
+    with tarfile.open(good, "r:gz") as tar:
+        manifest = json.loads(tar.extractfile("manifest.json").read())
+    manifest["version"] = "2099.01.01"
+    changed = rewrite_member(good, tmp_path / "changed.tar.gz", "manifest.json",
+                             json.dumps(manifest).encode())
+    assert_refused(changed, keys, tmp_path / "intel", "bad signature")
+
+
+def test_the_wrong_key_is_refused(good, tmp_path):
+    other = generate_keypair(tmp_path / "other-keys")
+    assert_refused(good, other, tmp_path / "intel", "bad signature")
+
+
+@pytest.mark.parametrize("name", ["../evil.rules", "/etc/evil.rules", "rules/../../evil.rules",
+                                  "scripts/run.sh", "rules/sub/deeper.rules"])
+def test_a_bad_path_is_refused_even_when_signed(name, keys, tmp_path):
+    path = craft(tmp_path / "bad.tar.gz", [(name, RULES)], keys[0])
+    assert_refused(path, keys, tmp_path / "intel", "not an allowed bundle path")
+
+
+def test_an_extra_file_is_refused(keys, tmp_path):
+    path = craft(tmp_path / "extra.tar.gz",
+                 [("rules/a.rules", RULES), ("rules/b.rules", RULES)], keys[0],
+                 manifest_files=[("rules/a.rules", RULES)])
+    assert_refused(path, keys, tmp_path / "intel", "not in the manifest")
+
+
+def test_a_link_is_refused(keys, tmp_path):
+    link = tarfile.TarInfo("rules/link.rules")
+    link.type = tarfile.SYMTYPE
+    link.linkname = "/etc/passwd"
+    path = craft(tmp_path / "link.tar.gz", [("rules/a.rules", RULES)], keys[0], extra=[link])
+    assert_refused(path, keys, tmp_path / "intel", "only regular files")
+
+
+def test_a_duplicate_member_is_refused(keys, tmp_path):
+    path = craft(tmp_path / "dup.tar.gz", [("rules/a.rules", RULES), ("rules/a.rules", b"x")],
+                 keys[0], manifest_files=[("rules/a.rules", RULES)])
+    assert_refused(path, keys, tmp_path / "intel", "appears twice")
+
+
+def test_an_unsigned_bundle_is_refused(keys, tmp_path):
+    path = craft(tmp_path / "unsigned.tar.gz", [("rules/a.rules", RULES)], private_key=None)
+    assert_refused(path, keys, tmp_path / "intel", "bad signature")
+
+
+def test_a_bad_version_is_refused(keys, tmp_path):
+    path = craft(tmp_path / "v.tar.gz", [("rules/a.rules", RULES)], keys[0], version="../x")
+    assert_refused(path, keys, tmp_path / "intel", "version must look like")
+
+
+def test_build_refuses_files_that_are_not_allowed(src, keys, tmp_path):
+    (src / "notes.txt").write_text("not intel")
+    with pytest.raises(bundle.BundleError, match="not an allowed bundle file"):
+        bundle.build_bundle(src, tmp_path / "x.tar.gz", keys[0], version="2027.03.01")
+
+
+def test_not_a_gzip_file_is_refused(keys, tmp_path):
+    path = tmp_path / "junk.tar.gz"
+    path.write_bytes(gzip.compress(b"not a tar archive"))
+    with pytest.raises(tarfile.TarError):
+        bundle.verify_bundle(path, keys[1])
+
+
+# ---------- command line ----------
+
+def test_command_line(src, keys, tmp_path, capsys):
+    out = tmp_path / "cli.tar.gz"
+    dest = tmp_path / "intel"
+    assert bundle.main(["build", str(src), str(out), str(keys[0]),
+                        "--version", "2027.03.01"]) == 0
+    assert bundle.main(["verify", str(out), str(keys[1])]) == 0
+    assert bundle.main(["install", str(out), str(keys[1]), str(dest)]) == 0
+    assert bundle.main(["install", str(out), str(keys[1]), str(dest)]) == 1
+    printed = capsys.readouterr()
+    assert "ok: version 2027.03.01, 3 files" in printed.out
+    assert "installed version 2027.03.01" in printed.out
+    assert "refused: version 2027.03.01 is not newer" in printed.err
+```
+
+**Step 4.** Run them:
+
+```bash
+pytest tests/unit/test_intel_bundle.py -q
+```
+
+Expected output:
+
+```text
+......................                                                                       [100%]
+22 passed in 0.24s
+```
+
+**Step 5.** Try it end to end with a throwaway key pair (JAI-08's helper names the files `custody_ed25519_*.pem`; the real bundle key stays on the maintainer's machine, and only its public key ships with MaxGuard):
+
+```bash
+mkdir -p data/bundle-src/rules data/bundle-src/intel
+cp maxguard/suricata/rules/maxguard.rules data/bundle-src/rules/
+cp maxguard/intel/ja4_watchlist.yaml data/bundle-src/intel/
+python -c "from pathlib import Path; from maxguard.custody.signing import generate_keypair; generate_keypair(Path('data/bundle-keys'))"
+python -m maxguard.intel.bundle build data/bundle-src data/intel-2027.03.01.tar.gz data/bundle-keys/custody_ed25519_private.pem --version 2027.03.01
+python -m maxguard.intel.bundle verify data/intel-2027.03.01.tar.gz data/bundle-keys/custody_ed25519_public.pem
+python -m maxguard.intel.bundle install data/intel-2027.03.01.tar.gz data/bundle-keys/custody_ed25519_public.pem data/intel
+python -c "import os; print('current ->', os.readlink('data/intel/current'))"
+python -m maxguard.intel.bundle install data/intel-2027.03.01.tar.gz data/bundle-keys/custody_ed25519_public.pem data/intel
+```
+
+Expected output:
+
+```text
+built data/intel-2027.03.01.tar.gz: version 2027.03.01, 2 files
+ok: version 2027.03.01, 2 files
+installed version 2027.03.01
+current -> versions/2027.03.01
+refused: version 2027.03.01 is not newer than the installed 2027.03.01; use rollback to go back
+```
+
+*The last command exits with 1: the same version is never installed twice. `install` uses symbolic links: on Windows run it in WSL, or turn on Developer Mode, which lets normal users create them.*
 
 **Step 6.** Commit, push, and open the pull request:
 

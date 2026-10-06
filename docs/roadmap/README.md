@@ -139,8 +139,8 @@ flowchart TB
   end
   subgraph W3["W3 API and alert queue"]
     JAI06["JAI-06<br/>Storage"]
-    JAI07["JAI-07<br/>The API"]
     JON03["JON-03<br/>Offline guard"]
+    JAI07["JAI-07<br/>The API"]
     AMO02["AMO-02<br/>PCI DSS v4.0.1 rows, checked in…"]
     ALI03["ALI-03<br/>Benchmark script"]
     KAR04["KAR-04<br/>CI runs the integration tests, p…"]
@@ -182,15 +182,16 @@ flowchart TB
   JAI05 --> KAR03
   JAI04 --> KAR03
   JAI03 --> JAI06
+  JON02 --> JON03
   JAI05 --> JAI07
   JAI06 --> JAI07
-  JON02 --> JON03
+  JON03 --> JAI07
   AMO01 --> AMO02
   ALI02 --> ALI03
   JON02 --> ALI03
   KAR03 --> KAR04
   JAI07 --> AHM02
-  JAI05 --> JAK05
+  JAI07 --> JAK05
   JAI05 --> AMO03
   FIO04 --> FIO05
   AMO03 --> FIO05
@@ -198,7 +199,6 @@ flowchart TB
   JON01 --> JON04
   JAK03 --> JON04
   AHM02 --> AHM03
-  JON02 --> AHM03
   JON04 --> AHM03
   ALI01 --> ALI04
   ALI03 --> ALI04
@@ -246,8 +246,8 @@ How the team avoids waiting:
 | W2 | [ALI-02](ali.md#ali-02-evaluation-set-the-same-13-questions-for-every-model) | Ali | Evaluation set: the same 13 questions for every model | code, tested |
 | W2 | [KAR-03](karthik.md#kar-03-integration-tests-the-real-pipeline-on-every-capture) | Karthik | Integration tests: the real pipeline on every capture | design |
 | W3 | [JAI-06](jaiden.md#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files) | Jaiden | Storage: alerts in SQLite, events in hourly Parquet files | code, tested |
-| W3 | [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | Jaiden | The API: uploads, alerts, events, live updates, sensor ingest | design |
 | W3 | [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly) | Jonattan | Offline guard: make accidental network access fail loudly | code, tested |
+| W3 | [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | Jaiden | The API: uploads, alerts, events, live updates, sensor ingest | code, tested |
 | W3 | [AMO-02](amory.md#amo-02-pci-dss-v401-rows-checked-in-the-official-document) | Amory | PCI DSS v4.0.1 rows, checked in the official document | process |
 | W3 | [ALI-03](ali.md#ali-03-benchmark-script-speed-citations-and-unsupported-details) | Ali | Benchmark script: speed, citations, and unsupported details | code, tested |
 | W3 | [KAR-04](karthik.md#kar-04-ci-runs-the-integration-tests-plus-a-determinism-test) | Karthik | CI runs the integration tests, plus a determinism test | code, written |
@@ -269,15 +269,15 @@ How the team avoids waiting:
 | W8 | [AHM-05](ahmad.md#ahm-05-alpha-acceptance-test-and-presentation) | Ahmad | Alpha acceptance test and presentation | process |
 | S4 | [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) | Jakub | Live sensor: capture, rotation, and shipping to the console | design |
 | S4 | [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address) | Jakub | Device attribution: which device is behind each IP address | code, tested |
-| S4 | [AMO-05](amory.md#amo-05-chain-of-custody-log) | Amory | Chain-of-custody log | design |
+| S4 | [AMO-05](amory.md#amo-05-chain-of-custody-log) | Amory | Chain-of-custody log | code, tested |
 | S4 | [AHM-06](ahmad.md#ahm-06-ip-timeline-and-device-inventory-pages) | Ahmad | IP timeline and device inventory pages | design |
 | S4 | [KAR-06](karthik.md#kar-06-end-to-end-test-of-the-live-sensor-on-the-lab) | Karthik | End-to-end test of the live sensor on the lab | design |
 | S8 | [JAK-09](jakub.md#jak-09-ja4-watchlist-rule) | Jakub | JA4 watchlist rule | code, tested |
-| S8 | [JAI-11](jaiden.md#jai-11-signed-offline-intel-bundles) | Jaiden | Signed offline intel bundles | design |
+| S8 | [JAI-11](jaiden.md#jai-11-signed-offline-intel-bundles) | Jaiden | Signed offline intel bundles | code, tested |
 | S8 | [AHM-07](ahmad.md#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block) | Ahmad | Response: block proposals, generated rules, and preview before you block | design |
 | S8 | [AHM-08](ahmad.md#ahm-08-response-approvals-audit-revert-and-the-opnsense-connector) | Ahmad | Response: approvals, audit, revert, and the OPNsense connector | design |
-| S8 | [JON-06](jonattan.md#jon-06-prompt-injection-tests-for-the-ai-layer) | Jonattan | Prompt-injection tests for the AI layer | design |
-| S8 | [ALI-05](ali.md#ali-05-re-evaluate-the-models-against-prompt-injection-and-the-spring-rules) | Ali | Re-evaluate the models against prompt injection and the spring rules | design |
+| S8 | [JON-06](jonattan.md#jon-06-prompt-injection-tests-for-the-ai-layer) | Jonattan | Prompt-injection tests for the AI layer | code, tested |
+| S8 | [ALI-05](ali.md#ali-05-re-evaluate-the-models-against-prompt-injection-and-the-spring-rules) | Ali | Re-evaluate the models against prompt injection and the spring rules | process |
 | S11 | [FIO-06](fiona.md#fio-06-decoys-fake-services-on-their-own-ip-address) | Fiona | Decoys: fake services on their own IP address | design |
 | S11 | [FIO-07](fiona.md#fio-07-per-device-baselines) | Fiona | Per-device baselines | design |
 | S11 | [JAK-10](jakub.md#jak-10-netflow-and-ipfix-input) | Jakub | NetFlow and IPFIX input | design |

@@ -129,10 +129,11 @@ built yet.
 | Pipeline (one entry point) | `maxguard/pipeline.py` | Jaiden | alpha | tested |
 | Event normalizer and record lookup | `maxguard/events/` | Jaiden | alpha | tested |
 | Storage (SQLite state, Parquet events) | `maxguard/storage/` | Jaiden | alpha | tested |
-| API | `maxguard/api/app.py` | Jaiden | alpha | design |
+| API | `maxguard/api/app.py` | Jaiden | alpha | tested (unit tests; a real capture through Zeek; curl against uvicorn) |
 | Dashboard pages | `maxguard/web/` | Ahmad | alpha | design (htmx 2.0.11 vendored) |
 | AI client and citation validator | `maxguard/ai/` | Jonattan | alpha | tested against a fake Ollama server; no real model run |
 | Home-mode plain-language text | `maxguard/ai/home_text.yaml` | Jonattan | alpha | tested |
+| Prompt-injection tests and injection set | `tests/unit/test_prompt_injection.py`, `scripts/make_injection_set.py`, `scripts/injection_report.py` | Jonattan | spring | tested (with a fake model that obeys) |
 | Offline guard | `maxguard/offline.py` | Jonattan | alpha | tested |
 | Asset inventory | `maxguard/inventory.py` | Jakub | alpha | tested |
 | Report export (JSON, CSV, HTML) | `maxguard/report.py` | Amory | alpha | tested |
@@ -142,17 +143,17 @@ built yet.
 | Traffic lab and test captures | `lab/`, `tests/pcaps/` | Karthik | alpha | tested |
 | Test fixtures (Zeek and Suricata output) | `tests/fixtures/` | Karthik | alpha | tested |
 | Expected results and integration tests | `tests/expected/`, `tests/integration/` | Karthik | alpha | design |
-| Model evaluation | `scripts/benchmark_models.py`, `scripts/make_eval_set.py` | Ali | alpha | design (started in planning, not finished) |
+| Model evaluation | `scripts/benchmark_models.py`, `scripts/make_eval_set.py` | Ali | alpha | tested with a fake model; the real runs need the models (ALI-04) |
 | Offline bundle | `scripts/build-offline-bundle.sh`, `scripts/install.sh` | Jonattan | alpha | design |
 | Ed25519 signing | `maxguard/custody/signing.py` | Jaiden | alpha | tested |
-| Chain-of-custody log | `maxguard/custody/log.py` | Amory | spring | design |
+| Chain-of-custody log | `maxguard/custody/log.py` | Amory | spring | tested |
 | Response module | `maxguard/response/` | Ahmad | spring | design |
 | Live sensor adapter, shipper, sensor Compose file | `maxguard/adapters/live.py`, `maxguard/sensor/shipper.py`, `docker/sensor-compose.yaml` | Jakub | spring | design |
 | JA4 watchlist rule | `maxguard/rules/ja4.py` | Jakub | spring | tested |
 | Device attribution | `maxguard/sensor/attribution.py` | Jakub | spring | tested |
 | NetFlow adapter and host agent | `maxguard/adapters/netflow.py`, `maxguard/sensor/agent.py` | Jakub | spring | design |
 | Decoys and device baselines | `maxguard/decoy/`, `maxguard/rules/decoy.py`, `baseline.py` | Fiona | spring | design |
-| Signed intel bundles | `maxguard/intel/bundle.py` | Jaiden | spring | design |
+| Signed intel bundles | `maxguard/intel/bundle.py` | Jaiden | spring | tested |
 
 ## 3. Data flow: analyzing an uploaded capture
 
@@ -654,32 +655,77 @@ data/events/date=2026-10-06/hour=01/part-<sha>.parquet
 
 ## 10. The API
 
-**Design (not yet built; JAI-07).** FastAPI, JSON under `/api`, created by
-`create_app(data_dir=None, *, explain=True)` in `maxguard/api/app.py`.
-`data_dir` defaults to `MAXGUARD_DATA_DIR`, then `data/`. The app keeps its
-stores on `app.state.state_store`, `app.state.event_store`, and
-`app.state.data_dir`, so other routers reach them through `request.app.state`.
+**Built and tested (JAI-07).** FastAPI, JSON under `/api`, created by
+`create_app(data_dir=None, *, explain=True)` in `maxguard/api/app.py` and started
+with `uvicorn maxguard.api.app:create_app --factory`. `data_dir` defaults to
+`MAXGUARD_DATA_DIR`, then `data/`. The app keeps its stores on
+`app.state.state_store`, `app.state.event_store`, and `app.state.data_dir`, so
+other routers reach them through `request.app.state`. FastAPI's OpenAPI page at
+`/docs` lists every endpoint and is the API contract for the dashboard.
 
 | Method and path | What it does | Errors |
 |---|---|---|
-| `POST /api/analyses` | Multipart upload of one capture or zipped log folder. Saves it under `data/uploads/` with a generated name (the client's file name is never used as a path), runs `analyze()`, saves the report and events, deletes the upload (unless `MAXGUARD_KEEP_UPLOADS=1`), and notifies the dashboard. Returns `{"analysis_id", "findings"}`. | 400 unsupported file; 413 larger than `MAXGUARD_MAX_UPLOAD_MB` (default 1024) |
-| `GET /api/analyses`, `GET /api/analyses/{id}` | Past analyses; one stored report | 404 |
-| `GET /api/alerts?status=&severity=&limit=` | The alert queue, most severe first | 400 unknown status or severity |
-| `GET /api/alerts/{finding_id}` | One alert with its finding, controls, techniques, and AI sentences | 404 |
-| `PATCH /api/alerts/{finding_id}` | `{"status"?, "assignee"?, "actor"}`: change status or assignee; audited | 400, 404 |
-| `GET /api/events?ip=&since=&until=&limit=` | Timeline events from the event store | |
-| `GET /api/assets` | Asset inventory of the latest analysis | |
-| `GET /api/audit?limit=` | Audit trail, newest first | |
-| `GET /api/stream` | Server-sent events: `alerts-changed` whenever alerts change, plus a heartbeat comment every 15 seconds | |
-| `POST /api/ingest` | Same as `POST /api/analyses`, for sensors and host agents on the LAN. Returns 404 unless `MAXGUARD_INGEST_TOKEN` is set; then requires `Authorization: Bearer <token>`, compared in constant time | 401, 404 |
-| `/api/response/...` | Spring: block proposals, preview, approval, revert (section 13) | |
+| `POST /api/analyses` | Multipart form with one field, `file`: a capture or a `.zip`/`.tar.gz` of Zeek logs. Saves it, runs `analyze()`, saves the report and events, deletes the upload (unless `MAXGUARD_KEEP_UPLOADS=1`), and notifies the dashboard. Returns `{"analysis_id", "findings"}`. | 400 not a capture or log archive, or a broken archive; 403 cross-site request; 413 larger than `MAXGUARD_MAX_UPLOAD_MB` (default 1024), or an archive that unpacks to more than 4 GiB; 422 Zeek or Suricata failed on the file |
+| `GET /api/analyses?limit=`, `GET /api/analyses/{id}` | Past analyses, newest first; one stored report (without its events) | 404 |
+| `GET /api/alerts?status=&severity=&limit=` | The alert queue, most severe first, then most recently seen | 400 unknown status or severity |
+| `GET /api/alerts/{finding_id}` | One alert: its finding, controls, techniques, AI sentences, status, assignee, count, and first and last seen | 404 |
+| `PATCH /api/alerts/{finding_id}` | JSON `{"actor", "status"?, "assignee"?}`: change status or assignee; the change and the actor go into the audit trail | 400 unknown status; 404; 422 no `actor` |
+| `GET /api/events?ip=&since=&until=&limit=` | Timeline events in time order; `ip` matches the source or the destination | 400 not an IP address |
+| `GET /api/assets` | The asset inventory of the newest analysis | |
+| `GET /api/audit?limit=` | The audit trail, newest first | |
+| `GET /api/stream` | Server-sent events: `alerts-changed` once at connection (a dashboard that reconnects may have missed a change) and then after every change, with a `: keep-alive` comment every 15 seconds. `?max_events=N` ends the stream (for tests). | |
+| `POST /api/ingest` | The same as `POST /api/analyses`, for sensors and host agents on the LAN, plus an optional form field `sensor_id` (1 to 64 letters, digits, `.`, `_` or `-`; default `sensor`) that becomes the `sensor_id` of every event. Answers 404 unless `MAXGUARD_INGEST_TOKEN` is set; then every request needs `Authorization: Bearer <token>`, compared in constant time **before the body is read** | 400, 401 missing or wrong token, 404 ingest is off, 413, 422 |
+| `/api/response/...` | Block proposals, preview, approval, revert (section 13) | |
+
+How an upload is handled, and why:
+
+- **The client's file name is never used as a path.** The file is saved under
+  `data/uploads/` with a random name; its suffix comes from the file's first
+  bytes (the pcap, pcapng, zip, or gzip magic number), because the adapters
+  recognise archives by suffix. The client's name is cleaned (last part only,
+  safe characters only) and shown in the report, never used to open a file.
+- **The size limit is checked twice:** from the `Content-Length` header before
+  the body is read, and again while the file is copied, because a client can
+  leave the header out.
+- **One analysis at a time.** Zeek and Suricata already use every CPU core;
+  two analyses at once on a Raspberry Pi only make both slower. Reading the
+  queue is never blocked.
+- **The API reads the clock, the engine does not.** `received_at` for the
+  analysis and `at` for every audit row come from the API; the pipeline and the
+  stores never read the clock (section 7).
+- **The upload request waits for the whole analysis, AI included.** With the
+  AI on, a Raspberry Pi can take minutes for a capture with many findings.
+  Running the AI as a background job after the findings are saved is a
+  candidate improvement for v2.0, not built.
+
+`create_app()` switches the offline guard on when `MAXGUARD_OFFLINE=1`
+(section 12), and it refuses to start when `MAXGUARD_INGEST_TOKEN` is shorter
+than 32 characters (`python -c "import secrets; print(secrets.token_urlsafe(32))"`
+makes a good one) or `MAXGUARD_MAX_UPLOAD_MB` is not a whole number.
+
+**Cross-site requests.** Browsers stop other websites from *reading* the API,
+but they let any website *send* a form to `127.0.0.1`. So a request that
+changes something (`POST`, `PUT`, `PATCH`, `DELETE`) is refused with 403 when
+the browser marks it as coming from another origin: `Sec-Fetch-Site` is
+`cross-site` or `same-site` (another program on `127.0.0.1` with a different
+port is the "same site"), or the `Origin` header does not match the `Host`
+header (`Origin: null` never matches). These are the "Fetch Metadata headers"
+and "Using Standard Headers to Verify Origin" defenses of the OWASP CSRF
+Prevention Cheat Sheet. A request with neither header is allowed, because curl,
+the sensor, the host agent and the tests send neither; every major browser has
+sent `Sec-Fetch-Site` since March 2023. Behind a reverse proxy, the proxy must
+pass the original `Host` header. This does not stop DNS rebinding (a hostile
+page that makes its own domain name point at `127.0.0.1`); checking the `Host`
+header against an allow-list would, and is an open item for review.
 
 When the modules exist, the app includes `maxguard.web.routes.router` (the HTML
 pages: alert queue `/`, alert detail `/alerts/{finding_id}`, `/upload`,
 `/timeline?ip=`, `/assets`) and `maxguard.response.routes.router`, and serves
-`/static` from `maxguard/web/static/`. The pages are rendered on the server with
-Jinja2 (autoescaping on) and updated with htmx; the only JavaScript is the
-vendored htmx file and a few lines that turn `alerts-changed` into a refresh.
+`/static` from `maxguard/web/static/`. A router module that exists but fails to
+import stops the app, so a bug in it is never hidden. The pages are rendered on
+the server with Jinja2 (autoescaping on) and updated with htmx; the only
+JavaScript is the vendored htmx file and a few lines that turn `alerts-changed`
+into a refresh.
 
 The alpha is a single-user app on `127.0.0.1` with no login. The dashboard asks
 for a display name once and records it as the `actor` in the audit trail; that
@@ -717,6 +763,21 @@ For each finding, most severe first, up to 20 per report:
 What the AI can and cannot change: it writes text into two fields of findings
 that already exist. It cannot add, remove, or re-rate a finding, and the
 dashboard always shows the rule's severity, not the model's opinion.
+
+**Prompt injection (tested, JON-06).** Captures are attacker controlled, so
+`tests/unit/test_prompt_injection.py` plants hostile instructions in four
+fields an attacker writes (an HTTP URL, a `User-Agent`, a TLS server name, an
+FTP user name), runs the real pipeline with a fake model that obeys them, and
+compares the report with the same analysis without AI. Sentences that cite a
+made-up record, another finding's record, or no record are dropped, and the
+findings, severities and evidence stay exactly as the rules made them, even when
+the answer adds `severity` or `status` fields. The tests also pin down the limit
+of the citation check: a sentence that repeats the attacker's lie but cites the
+hostile record itself has a valid citation and is kept. That is why the
+dashboard shows the rule's title and severity next to every AI sentence, and why
+the model evaluation measures how often each model obeys: the injection set
+(`tests/fixtures/ai_eval/injection/`) asks for a canary word, and
+`scripts/injection_report.py` counts the answers in which it reached the reader.
 
 When Ollama is unreachable or the model is missing, the report is still
 produced: `ai.status` is `unavailable`, `ai.reason` says why, and the dashboard
@@ -795,15 +856,16 @@ controlled. The main threats and the defenses:
 | Threat | Defense | Where |
 |---|---|---|
 | A malicious archive fills the disk (zip bomb) or writes outside its folder | Sizes are checked before extracting (4 GiB limit); zip members lose absolute paths and `..` parts; tar files are extracted with Python's `data` filter, which refuses absolute paths, `..`, links, and device files | `adapters/zeeklogs.py` |
-| A huge or fake upload | Upload size limit; the file type is decided by its magic number; stored under a generated name | API |
+| A huge or fake upload, or a stranger on the LAN | Upload size limit, checked before and while reading; the file type is decided by its magic number; stored under a generated name; ingest is off by default and checks its token before reading the body | API |
 | Text in traffic attacks the dashboard (XSS) | Jinja2 autoescaping everywhere; AI text and anything from traffic is never marked `\|safe`; the HTML export escapes every value and carries a Content-Security-Policy that allows no scripts | web, `report.py` |
 | Text in traffic attacks a spreadsheet (CSV formula injection) | A CSV cell that starts with `=`, `+`, `-`, `@`, a tab, or a line break gets a leading `'`, as OWASP recommends | `report.py` |
-| Text in traffic attacks the AI (prompt injection) | Evidence is passed as JSON data and the prompt says never to follow it; the model can only fill two text fields; every sentence must cite this finding's records; the rule's severity is always shown | `ai/` |
+| Text in traffic attacks the AI (prompt injection) | Evidence is passed as JSON data and the prompt says never to follow it; the model can only fill two text fields; every sentence must cite this finding's records; the rule's severity is always shown; tested with four hostile fields and a model that obeys (section 11) | `ai/`, `tests/unit/test_prompt_injection.py` |
 | The dashboard is reached from the network | Published on `127.0.0.1` only; ingest is off by default and token-protected | `docker/compose.yaml`, API |
 | A sensor leaks or injects traffic | The capture interface has no IP address; Zeek and Suricata only listen; decoys run on their own IP, never on the capture interface | `docs/HARDWARE.md`, CLAUDE.md rule 5 |
 | A block is abused or goes wrong | Typed confirmation, preview, audit log, undo, address validation, only the user's own firewall | response module |
-| A tampered rule or intel update | Ed25519 signature checked before anything is extracted; every file hash checked; atomic install with rollback | `intel/bundle.py` (spring) |
-| Evidence is altered after the fact | Chain-of-custody log: a JSON Lines file where each entry holds the previous entry's hash and an Ed25519 signature; a verify command finds the first bad entry | `custody/` (spring) |
+| A tampered rule or intel update | The archive's member list is read from its headers (regular files only, no duplicates, size limits); the Ed25519 signature over the manifest is checked before the manifest is trusted; only allowed paths (`rules/*.rules`, `intel/ja4_watchlist.yaml`, `mappings/*.yaml`) and only files in the manifest; every hash checked in memory, then again on disk after extracting with the `data` filter; the `current` link is switched in one step; a version that is not newer is refused, so an old signed bundle cannot be replayed (rollback attack) | `intel/bundle.py` |
+| Evidence is altered after the fact | Chain-of-custody log: a JSON Lines file where each entry holds the previous entry's hash and an Ed25519 signature over its own hash; `python -m maxguard.custody.log verify` names the first bad entry. A cut-off end still forms a valid chain, so `verify` prints the head hash, to be recorded elsewhere | `custody/log.py` |
+| Another website makes the user's browser send requests to the console (CSRF) | Changing requests are refused when `Sec-Fetch-Site` is `cross-site` or `same-site`, or `Origin` does not match `Host` (OWASP CSRF Prevention Cheat Sheet); DNS rebinding remains an open item | API |
 | Secrets end up in the repository | Keys and API keys live in the data folder; `.gitignore` and `.dockerignore` exclude key files; CLAUDE.md rule 6 is part of every review | repository |
 | A dependency is compromised or changes license | Pinned minimum versions, one vendored front-end file checked by SHA-256, every license in `docs/DEPENDENCIES.md` | repository |
 | Privacy of the people on the network | Uploads deleted after analysis; events kept 7 days; nothing leaves the machine | storage, section 12 |
@@ -841,9 +903,9 @@ Settings (environment variables):
 | `MAXGUARD_MODEL` | temporary default `qwen3:4b` until Ali's evaluation | model name |
 | `MAXGUARD_OFFLINE` | `1` in Compose | turn the offline guard on |
 | `MAXGUARD_OFFLINE_ALLOW` | empty | extra user-owned hosts, comma-separated |
-| `MAXGUARD_INGEST_TOKEN` | unset (ingest off) | token for sensors and agents (spring) |
-| `MAXGUARD_MAX_UPLOAD_MB` | `1024` | upload limit |
-| `MAXGUARD_KEEP_UPLOADS` | unset | keep uploaded files after analysis (for debugging) |
+| `MAXGUARD_INGEST_TOKEN` | unset (ingest off) | token for sensors and agents; at least 32 characters, or the app refuses to start |
+| `MAXGUARD_MAX_UPLOAD_MB` | `1024` | upload limit in MiB (a whole number) |
+| `MAXGUARD_KEEP_UPLOADS` | unset | `1` keeps uploaded files (under their generated names) after analysis, for debugging |
 
 The offline bundle (JON-05) contains the saved images, the model volume, the
 Compose file, `install.sh`, and a SHA-256 checksum file, split into parts under

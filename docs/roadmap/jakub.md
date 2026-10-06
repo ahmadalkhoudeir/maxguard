@@ -13,7 +13,7 @@ This is your part of the MaxGuard v2.0 roadmap. Read [the roadmap overview](READ
 | [JAK-02](#jak-02-suricata-configuration-community-id-and-ja4) | W1 | Suricata configuration: Community ID and JA4 | [KAR-01](karthik.md#kar-01-traffic-lab-and-the-14-test-captures) | code, tested |
 | [JAK-03](#jak-03-cleartext-and-rdp-rules-the-rule-set-is-complete) | W1 | Cleartext and RDP rules (the rule set is complete) | [FIO-02](fiona.md#fio-02-tls-and-certificate-rules), [JAK-01](#jak-01-maxguards-zeek-scripts-cleartext-sessions-and-asset-tracking), [KAR-02](karthik.md#kar-02-test-fixtures-zeek-and-suricata-output-for-every-capture) | code, tested |
 | [JAK-04](#jak-04-asset-inventory) | W1 | Asset inventory | [JAK-03](#jak-03-cleartext-and-rdp-rules-the-rule-set-is-complete), [KAR-02](karthik.md#kar-02-test-fixtures-zeek-and-suricata-output-for-every-capture) | code, tested |
-| [JAK-05](#jak-05-suricata-in-the-pipeline) | W4 | Suricata in the pipeline | [JAK-02](#jak-02-suricata-configuration-community-id-and-ja4), [FIO-01](fiona.md#fio-01-zeek-runner-and-the-two-input-adapters), [JAI-05](jaiden.md#jai-05-the-pipeline-one-function-from-input-to-report) | code, tested |
+| [JAK-05](#jak-05-suricata-in-the-pipeline) | W4 | Suricata in the pipeline | [JAK-02](#jak-02-suricata-configuration-community-id-and-ja4), [FIO-01](fiona.md#fio-01-zeek-runner-and-the-two-input-adapters), [JAI-05](jaiden.md#jai-05-the-pipeline-one-function-from-input-to-report), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | code, tested |
 | [JAK-06](#jak-06-build-the-reference-lab-and-prove-the-mirror-works) | W8 | Build the reference lab and prove the mirror works | [JAK-02](#jak-02-suricata-configuration-community-id-and-ja4) | process |
 | [JAK-07](#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) | S4 | Live sensor: capture, rotation, and shipping to the console | [JAK-06](#jak-06-build-the-reference-lab-and-prove-the-mirror-works), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | design |
 | [JAK-08](#jak-08-device-attribution-which-device-is-behind-each-ip-address) | S4 | Device attribution: which device is behind each IP address | [JAK-04](#jak-04-asset-inventory), [KAR-02](karthik.md#kar-02-test-fixtures-zeek-and-suricata-output-for-every-capture) | code, tested |
@@ -931,7 +931,7 @@ Expected output:
 
 ```text
 ...............................................                                              [100%]
-47 passed in 0.20s
+47 passed in 0.55s
 ```
 
 **Step 6.** Run every rule on every lab fixture and count the findings:
@@ -1276,7 +1276,7 @@ Expected output:
 
 ```text
 ........................                                                                     [100%]
-24 passed in 0.08s
+24 passed in 0.11s
 ```
 
 **Step 5.** Build the inventory for the plain-HTTP fixture:
@@ -1322,7 +1322,7 @@ An alert says "172.18.0.2 offers Telnet"; the inventory answers "what is 172.18.
 
 ### JAK-05: Suricata in the pipeline
 
-**Due:** Week 4 (due Fri Nov 6) · **Milestone:** `W4 Full offline report` · **Needs first:** [JAK-02](#jak-02-suricata-configuration-community-id-and-ja4), [FIO-01](fiona.md#fio-01-zeek-runner-and-the-two-input-adapters), [JAI-05](jaiden.md#jai-05-the-pipeline-one-function-from-input-to-report) · **Kind:** code, tested
+**Due:** Week 4 (due Fri Nov 6) · **Milestone:** `W4 Full offline report` · **Needs first:** [JAK-02](#jak-02-suricata-configuration-community-id-and-ja4), [FIO-01](fiona.md#fio-01-zeek-runner-and-the-two-input-adapters), [JAI-05](jaiden.md#jai-05-the-pipeline-one-function-from-input-to-report), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) · **Kind:** code, tested
 
 **Issue labels:** `type:task` `phase:alpha` `owner:jakub` `area:engine`
 
@@ -1332,7 +1332,7 @@ When Suricata is installed (it is, in the engine image), run it next to Zeek on 
 
 #### Prerequisites
 
-JAK-02, FIO-01 and JAI-05 are merged.
+JAK-02, FIO-01, JAI-05 and JAI-07 (the API) are merged.
 
 #### Steps
 
@@ -1422,7 +1422,18 @@ class PcapAdapter:
         return log_dir
 ```
 
-**Step 4.** Create the tests `tests/unit/test_suricata_runner.py`. They put a tiny fake `suricata` program on the `PATH`, so they run without the real one:
+**Step 4.** A Suricata failure must reach the dashboard like a Zeek failure: as HTTP 422 with the error message. In `maxguard/api/app.py` (JAI-07), import the new error next to `ZeekError` and catch both in `run_pipeline()`:
+
+```python
+from maxguard.suricata.runner import SuricataError
+...
+        except (ZeekError, SuricataError) as err:
+            raise HTTPException(422, str(err)) from None
+```
+
+Ask Jaiden to review this part: the API is his module.
+
+**Step 5.** Create the tests `tests/unit/test_suricata_runner.py`. They put a tiny fake `suricata` program on the `PATH`, so they run without the real one:
 
 ```python
 """Suricata runner tests (Jakub, JAK-05). No real Suricata is needed.
@@ -1485,7 +1496,7 @@ def test_a_failing_suricata_raises(tmp_path, fake_suricata, monkeypatch):
         runner.run_suricata(Path("capture.pcap"), tmp_path / "logs")
 ```
 
-**Step 5.** Run them, then the whole unit suite:
+**Step 6.** Run them, then the whole unit suite:
 
 ```bash
 pytest tests/unit/test_suricata_runner.py -q
@@ -1495,7 +1506,7 @@ Expected output:
 
 ```text
 ...                                                                                          [100%]
-3 passed in 0.03s
+3 passed in 0.06s
 ```
 
 ```bash
@@ -1505,14 +1516,15 @@ pytest -m "not integration" -q
 Expected output:
 
 ```text
-............................................................................................ [ 25%]
-..................................................s......................................... [ 51%]
-............................................................................................ [ 77%]
-..................................................................................           [100%]
-357 passed, 1 skipped in 2.84s
+............................................................................................ [ 23%]
+.............................................................................s.............. [ 47%]
+............................................................................................ [ 71%]
+............................................................................................ [ 95%]
+.................                                                                            [100%]
+384 passed, 1 skipped, 1 deselected in 7.00s
 ```
 
-**Step 6.** The real check runs in the engine image, where Suricata is installed:
+**Step 7.** The real check runs in the engine image, where Suricata is installed:
 
 ```bash
 docker run --rm --network none -v "$PWD/tests/pcaps:/pcaps:ro" maxguard:dev python -c "import json, tempfile; from pathlib import Path; from maxguard.pipeline import analyze; r = analyze(Path('/pcaps/tls_weak_version.pcap'), Path(tempfile.mkdtemp()), explain=False); print(r['tools']); print(sorted({e['source'] for e in r['events']})); print([e['ja4'] for e in r['events'] if e['ja4']])"
@@ -1528,7 +1540,7 @@ Expected output (not run in planning):
 
 *Not run in planning: the engine image needs Debian's package servers to build. The expected output is what the same pipeline gives on this capture's fixture (its JA4 came from Suricata 7.0.10 with MaxGuard's settings).*
 
-**Step 7.** Commit, push, and open the pull request:
+**Step 8.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -1923,7 +1935,7 @@ Expected output:
 
 ```text
 ........                                                                                     [100%]
-8 passed in 0.04s
+8 passed in 0.05s
 ```
 
 **Step 5.** Build the device table for the hand-made DNS and DHCP fixture:
@@ -2263,7 +2275,7 @@ Expected output:
 
 ```text
 .................                                                                            [100%]
-17 passed in 0.08s
+17 passed in 0.10s
 ```
 
 ```bash
@@ -2273,12 +2285,13 @@ pytest -m "not integration" -q
 Expected output:
 
 ```text
-............................................................................................ [ 21%]
-............................................................................................ [ 42%]
-.s.......................................................................................... [ 64%]
-............................................................................................ [ 85%]
-...............................................................                              [100%]
-430 passed, 1 skipped in 3.17s
+............................................................................................ [ 19%]
+............................................................................................ [ 38%]
+.................................................s.......................................... [ 57%]
+............................................................................................ [ 76%]
+............................................................................................ [ 96%]
+...................                                                                          [100%]
+478 passed, 1 skipped, 1 deselected in 7.46s
 ```
 
 **Step 7.** Add the rule's Home text (Jonattan reviews it) and ask Amory and Fiona whether a mapping row or ATT&CK row fits; add them in the same pull request if so.

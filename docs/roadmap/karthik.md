@@ -1448,7 +1448,7 @@ Expected output:
 
 ```text
 ..............                                                                               [100%]
-14 passed in 0.07s
+14 passed in 0.08s
 ```
 
 **Step 7.** Commit, push, and open the pull request:

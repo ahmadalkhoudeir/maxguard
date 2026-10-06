@@ -731,7 +731,7 @@ Expected output:
 
 ```text
 .............                                                                                [100%]
-13 passed in 0.07s
+13 passed in 0.09s
 ```
 
 **Step 7.** See the TSV conversion work on a hand-made fixture:
@@ -1264,7 +1264,7 @@ Expected output:
 
 ```text
 ............................................................                                 [100%]
-60 passed in 0.38s
+60 passed in 0.70s
 ```
 
 **Step 8.** Run all registered rules on one fixture folder, the way the pipeline will:
@@ -1504,7 +1504,7 @@ Expected output:
 
 ```text
 ..........................s..........                                                        [100%]
-36 passed, 1 skipped in 0.27s
+36 passed, 1 skipped in 0.32s
 ```
 
 **Step 4.** See the techniques the loader adds to the Telnet finding:
@@ -1830,7 +1830,7 @@ Expected output:
 
 ```text
 .........                                                                                    [100%]
-9 passed in 0.30s
+9 passed in 0.34s
 ```
 
 **Step 5.** Analyze a fixture log folder (no Zeek needed) and look at the start of the report:
@@ -2239,7 +2239,7 @@ Expected output:
 
 ```text
 ............                                                                                 [100%]
-12 passed in 0.52s
+12 passed in 0.50s
 ```
 
 **Step 5.** Try the CSV format:
