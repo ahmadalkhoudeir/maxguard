@@ -1,0 +1,155 @@
+# NIST SP 800-53 mappings for MaxGuard rules (Contract 2; every field is
+# explained in mappings/schema.md).
+#
+# How the rows were checked (CLAUDE.md rule 8):
+#   Every control_id and title below was read on 2026-10-06 from NIST's own
+#   machine-readable copy of the catalog (OSCAL JSON, metadata.version "5.2.0"):
+#   https://raw.githubusercontent.com/usnistgov/oscal-content/main/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog.json
+#   The "verified" field names the OSCAL control id that was read, e.g. "sc-8.1".
+#   Enhancement titles are written the way SP 800-53 prints them:
+#   "<base control title> | <enhancement title>".
+#
+# Before every release, re-check the version against the publisher (source).
+
+framework: NIST SP 800-53
+version: "Rev. 5 (Release 5.2.0)"
+source: https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final
+
+mappings:
+  cleartext.ftp:
+    - control_id: SC-8
+      title: Transmission Confidentiality and Integrity
+      rationale: FTP sends commands, files and the login without encryption, so the data it carries is not protected.
+      verified: "OSCAL catalog 5.2.0, id sc-8 (title and statement)"
+    - control_id: SC-8(1)
+      title: Transmission Confidentiality and Integrity | Cryptographic Protection
+      rationale: No encryption protects the FTP session, so anyone on the network path can read or change it.
+      verified: "OSCAL catalog 5.2.0, id sc-8.1 (title and statement)"
+    - control_id: IA-5(1)
+      title: Authenticator Management | Password-based Authentication
+      rationale: The FTP login sent a password without encryption, but part (c) allows passwords only over cryptographically protected channels.
+      verified: "OSCAL catalog 5.2.0, id ia-5.1, statement item (c)"
+
+  cleartext.telnet:
+    - control_id: SC-8
+      title: Transmission Confidentiality and Integrity
+      rationale: Telnet sends every keystroke and every screen of output in readable form, so the data it carries is not protected.
+      verified: "OSCAL catalog 5.2.0, id sc-8 (title and statement)"
+    - control_id: SC-8(1)
+      title: Transmission Confidentiality and Integrity | Cryptographic Protection
+      rationale: Telnet has no encryption, so nothing stops someone on the network path from reading or changing the session.
+      verified: "OSCAL catalog 5.2.0, id sc-8.1 (title and statement)"
+    - control_id: AC-17(2)
+      title: Remote Access | Protection of Confidentiality and Integrity Using Encryption
+      rationale: Telnet is a remote login session, and this control requires remote access sessions to be protected with encryption.
+      verified: "OSCAL catalog 5.2.0, id ac-17.2 (title and statement)"
+    - control_id: IA-5(1)
+      title: Authenticator Management | Password-based Authentication
+      rationale: A Telnet login sends the password without encryption, but part (c) allows passwords only over cryptographically protected channels.
+      verified: "OSCAL catalog 5.2.0, id ia-5.1, statement item (c)"
+
+  cleartext.http:
+    - control_id: SC-8
+      title: Transmission Confidentiality and Integrity
+      rationale: Plain HTTP sends pages, form data and cookies in readable form, so the data it carries is not protected.
+      verified: "OSCAL catalog 5.2.0, id sc-8 (title and statement)"
+    - control_id: SC-8(1)
+      title: Transmission Confidentiality and Integrity | Cryptographic Protection
+      rationale: No TLS protects this HTTP traffic, so anyone on the network path can read or change it.
+      verified: "OSCAL catalog 5.2.0, id sc-8.1 (title and statement)"
+
+  cleartext.http_alt:
+    - control_id: SC-8
+      title: Transmission Confidentiality and Integrity
+      rationale: Plain HTTP on port 8080 sends pages, form data and cookies in readable form, so the data it carries is not protected.
+      verified: "OSCAL catalog 5.2.0, id sc-8 (title and statement)"
+    - control_id: SC-8(1)
+      title: Transmission Confidentiality and Integrity | Cryptographic Protection
+      rationale: No TLS protects this HTTP traffic on port 8080, so anyone on the network path can read or change it.
+      verified: "OSCAL catalog 5.2.0, id sc-8.1 (title and statement)"
+
+  cleartext.pop3:
+    - control_id: SC-8
+      title: Transmission Confidentiality and Integrity
+      rationale: POP3 without TLS sends email in readable form, so the data it carries is not protected.
+      verified: "OSCAL catalog 5.2.0, id sc-8 (title and statement)"
+    - control_id: SC-8(1)
+      title: Transmission Confidentiality and Integrity | Cryptographic Protection
+      rationale: No TLS protects the POP3 session, so anyone on the network path can read or change it.
+      verified: "OSCAL catalog 5.2.0, id sc-8.1 (title and statement)"
+    - control_id: IA-5(1)
+      title: Authenticator Management | Password-based Authentication
+      rationale: A POP3 login without TLS normally sends the mailbox password unencrypted, but part (c) allows passwords only over cryptographically protected channels.
+      verified: "OSCAL catalog 5.2.0, id ia-5.1, statement item (c)"
+
+  cleartext.imap:
+    - control_id: SC-8
+      title: Transmission Confidentiality and Integrity
+      rationale: IMAP without TLS sends email in readable form, so the data it carries is not protected.
+      verified: "OSCAL catalog 5.2.0, id sc-8 (title and statement)"
+    - control_id: SC-8(1)
+      title: Transmission Confidentiality and Integrity | Cryptographic Protection
+      rationale: No TLS protects the IMAP session, so anyone on the network path can read or change it.
+      verified: "OSCAL catalog 5.2.0, id sc-8.1 (title and statement)"
+    - control_id: IA-5(1)
+      title: Authenticator Management | Password-based Authentication
+      rationale: An IMAP login without TLS normally sends the mailbox password unencrypted, but part (c) allows passwords only over cryptographically protected channels.
+      verified: "OSCAL catalog 5.2.0, id ia-5.1, statement item (c)"
+
+  rdp.standard_security:
+    - control_id: AC-17(2)
+      title: Remote Access | Protection of Confidentiality and Integrity Using Encryption
+      rationale: The remote desktop session used legacy Standard RDP Security instead of TLS, so it lacks the encryption protection this control expects for remote access.
+      verified: "OSCAL catalog 5.2.0, id ac-17.2 (title and statement)"
+    - control_id: SC-23
+      title: Session Authenticity
+      rationale: Without TLS the client cannot check the server's identity, so the session is open to a man-in-the-middle.
+      verified: "OSCAL catalog 5.2.0, id sc-23 (title and statement)"
+
+  tls.weak_version:
+    - control_id: SC-8(1)
+      title: Transmission Confidentiality and Integrity | Cryptographic Protection
+      rationale: The connection used an outdated SSL or TLS version, so its protection in transit is weaker than it should be.
+      verified: "OSCAL catalog 5.2.0, id sc-8.1 (title and statement)"
+    - control_id: SC-13
+      title: Cryptographic Protection
+      rationale: An outdated SSL or TLS version is not the kind of cryptography an organization should require for data in transit.
+      verified: "OSCAL catalog 5.2.0, id sc-13 (title and statement)"
+
+  tls.weak_cipher:
+    - control_id: SC-8(1)
+      title: Transmission Confidentiality and Integrity | Cryptographic Protection
+      rationale: The connection used a weak or NULL cipher, so data in transit was weakly encrypted or not encrypted at all.
+      verified: "OSCAL catalog 5.2.0, id sc-8.1 (title and statement)"
+    - control_id: SC-13
+      title: Cryptographic Protection
+      rationale: A weak or NULL cipher is not the kind of cryptography an organization should require for data in transit.
+      verified: "OSCAL catalog 5.2.0, id sc-13 (title and statement)"
+
+  cert.expired:
+    - control_id: IA-5
+      title: Authenticator Management
+      rationale: A server certificate is the server's authenticator, and part (f) requires refreshing authenticators, but this one was used after it expired.
+      verified: "OSCAL catalog 5.2.0, id ia-5, statement item (f)"
+
+  cert.self_signed:
+    - control_id: SC-17
+      title: Public Key Infrastructure Certificates
+      rationale: A self-signed certificate was not issued under a certificate policy or by an approved provider, and it acts as its own trust anchor.
+      verified: "OSCAL catalog 5.2.0, id sc-17, statement items (a) and (b)"
+
+  cert.weak_key:
+    - control_id: SC-12
+      title: Cryptographic Key Establishment and Management
+      rationale: The certificate's RSA key is shorter than 2048 bits, too weak for the key management requirements this control asks the organization to set.
+      verified: "OSCAL catalog 5.2.0, id sc-12 (title and statement)"
+    - control_id: SC-13
+      title: Cryptographic Protection
+      rationale: A short RSA key is weaker cryptography than an organization should require for protecting connections.
+      verified: "OSCAL catalog 5.2.0, id sc-13 (title and statement)"
+
+  cert.sha1_signature:
+    - control_id: SC-13
+      title: Cryptographic Protection
+      rationale: The certificate is signed with SHA-1, an outdated hash algorithm, so the cryptography in use is weaker than an organization should require.
+      verified: "OSCAL catalog 5.2.0, id sc-13 (title and statement)"

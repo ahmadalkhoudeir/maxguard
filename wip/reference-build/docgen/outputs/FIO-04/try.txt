@@ -1,0 +1,12 @@
+{
+  "ai": {
+    "dropped_sentences": 0,
+    "explained": 0,
+    "model": null,
+    "reason": null,
+    "status": "disabled"
+  },
+  "assets": [
+    {
+      "finding_count": 1,
+      "first_seen": 1791250284.287571,

@@ -1,0 +1,21 @@
+# CISA Cross-Sector Cybersecurity Performance Goals (CPG) mappings for MaxGuard
+# rules (Contract 2; every field is explained in mappings/schema.md).
+#
+# EMPTY ON PURPOSE - this is not a mistake.
+# CLAUDE.md rule 8 says every row must cite a goal ID that someone checked in
+# the official CPG 2.0 document. During planning cisa.gov could not be opened
+# (network blocked), so no row could be verified, and guessing goal IDs is not
+# allowed. CPG 2.0 regrouped the goals, so never copy a goal ID from an older
+# CPG version without finding it in the 2.0 document.
+#
+# Amory fills this file in task AMO-04 (docs/roadmap/amory.md):
+#   1. Open the CPG 2.0 Report (December 2025) from the source page below
+#      (direct PDF: https://www.cisa.gov/sites/default/files/2025-12/CPG_Report_2.0_508c.pdf).
+#   2. Copy each goal ID and title exactly and put the page number in "verified".
+#   3. Run: pytest tests/unit/test_mappings.py
+
+framework: CISA CPG
+version: "2.0"
+source: https://www.cisa.gov/cybersecurity-performance-goals-2-0-cpg-2-0
+
+mappings: {}

@@ -1,0 +1,2 @@
+{"ts":1791250510.138296,"host":"172.18.0.3","software_type":"HTTP::BROWSER","name":"Python-urllib","version.major":3,"version.minor":11,"unparsed_version":"Python-urllib/3.11"}
+{"ts":1791250510.139726,"host":"172.18.0.2","host_p":8080,"software_type":"HTTP::SERVER","name":"SimpleHTTP","version.major":0,"version.minor":6,"version.addl":"Python/3","unparsed_version":"SimpleHTTP/0.6 Python/3.11.17"}

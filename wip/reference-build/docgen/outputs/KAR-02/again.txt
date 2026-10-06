@@ -1,0 +1,14 @@
+cert_expired: identical
+cert_self_signed: identical
+cert_sha1: identical
+cert_weak_key: identical
+clean_tls13: identical
+dns_lookup: identical
+ftp: identical
+imap: identical
+plain_http: identical
+plain_http_alt: identical
+pop3: identical
+telnet: identical
+tls_weak_cipher: identical
+tls_weak_version: identical

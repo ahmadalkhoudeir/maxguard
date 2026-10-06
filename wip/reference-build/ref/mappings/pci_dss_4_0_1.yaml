@@ -1,0 +1,21 @@
+# PCI DSS mappings for MaxGuard rules (Contract 2; every field is explained in
+# mappings/schema.md).
+#
+# EMPTY ON PURPOSE - this is not a mistake.
+# CLAUDE.md rule 8 says every row must cite a requirement number that someone
+# checked in the official PCI DSS v4.0.1 document. During planning the PCI SSC
+# document library could not be opened (network blocked), so no row could be
+# verified, and guessing requirement numbers is not allowed.
+#
+# Amory fills this file in task AMO-02 (docs/roadmap/amory.md):
+#   1. Download "PCI DSS v4.0.1" from the document library (source below).
+#   2. Start with cleartext.telnet (the demo finding), then the other rules.
+#   3. Copy each requirement number and title exactly from the PDF and put the
+#      page number in "verified", e.g. "PCI DSS v4.0.1 PDF, p. 112".
+#   4. Run: pytest tests/unit/test_mappings.py
+
+framework: PCI DSS
+version: "4.0.1"
+source: https://www.pcisecuritystandards.org/document_library/
+
+mappings: {}

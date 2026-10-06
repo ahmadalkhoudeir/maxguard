@@ -1,0 +1,2 @@
+A device used Telnet, which sends everything you type, even passwords, without encryption.
+Turn off Telnet on that device and use SSH instead, then change its password.

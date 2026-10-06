@@ -1,0 +1,65 @@
+%YAML 1.1
+---
+# MaxGuard's Suricata settings for reading capture files (pcap mode).
+# Only the parts MaxGuard needs: eve.json with flows, alerts, DNS, HTTP, TLS
+# (with JA4, BSD-3-Clause), and DHCP. Suricata fills in defaults for the rest.
+vars:
+  address-groups:
+    HOME_NET: "[10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7]"
+    EXTERNAL_NET: "!$HOME_NET"
+  port-groups:
+    HTTP_PORTS: "80"
+    SHELLCODE_PORTS: "!80"
+    ORACLE_PORTS: 1521
+    SSH_PORTS: 22
+    DNP3_PORTS: 20000
+    MODBUS_PORTS: 502
+    FILE_DATA_PORTS: "[$HTTP_PORTS,110,143]"
+    FTP_PORTS: 21
+    GENEVE_PORTS: 6081
+    VXLAN_PORTS: 4789
+    TEREDO_PORTS: 3544
+
+default-log-dir: /var/log/suricata/
+
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve.json
+      community-id: yes
+      community-id-seed: 0
+      types:
+        - alert
+        - dns
+        - http:
+            extended: yes
+        - tls:
+            extended: yes
+            ja4: on
+        - dhcp:
+            enabled: yes
+        - flow
+
+app-layer:
+  protocols:
+    tls:
+      enabled: yes
+      detection-ports:
+        dp: 443
+      ja4-fingerprints: yes
+    http:
+      enabled: yes
+    dns:
+      tcp:
+        enabled: yes
+      udp:
+        enabled: yes
+    dhcp:
+      enabled: yes
+
+logging:
+  default-log-level: notice
+  outputs:
+    - console:
+        enabled: yes

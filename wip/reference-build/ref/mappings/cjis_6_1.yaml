@@ -1,0 +1,21 @@
+# CJIS Security Policy mappings for MaxGuard rules (Contract 2; every field is
+# explained in mappings/schema.md).
+#
+# EMPTY ON PURPOSE - this is not a mistake.
+# CLAUDE.md rule 8 says every row must cite a control ID that someone checked
+# in the official CJIS Security Policy v6.1 document. During planning
+# le.fbi.gov could not be opened (network blocked), so no row could be
+# verified, and guessing control IDs is not allowed.
+#
+# Amory fills this file in task AMO-04 (docs/roadmap/amory.md):
+#   1. Download CJIS Security Policy v6.1 (June 25, 2026) from the resource
+#      center below.
+#   2. Copy each control ID and title exactly as v6.1 prints them and put the
+#      section and page number in "verified".
+#   3. Run: pytest tests/unit/test_mappings.py
+
+framework: CJIS
+version: "6.1"
+source: https://le.fbi.gov/cjis-division/cjis-security-policy-resource-center
+
+mappings: {}

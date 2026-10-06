@@ -1,0 +1,76 @@
+[build-system]
+# 77 is the first setuptools that reads the SPDX "license" string below (PEP 639).
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maxguard"
+version = "2.0.0a0"
+description = "Offline network security checks for small networks: Zeek and Suricata findings, compliance mapping, local AI explanations."
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+# Lower bounds are the versions MaxGuard v2.0 was tested with (October 2026).
+# There are no upper bounds: this is an application installed into its own
+# virtual environment, and CI catches a breaking release.
+dependencies = [
+    "pyyaml>=6.0.3",             # mapping files, AI text, intel watchlists
+    "requests>=2.34",            # talks to the local Ollama server only
+    "fastapi>=0.142",            # JSON API and web pages
+    "uvicorn>=0.54",             # web server inside the container
+    "jinja2>=3.1.6",             # HTML templates
+    "python-multipart>=0.0.32",  # file uploads (POST /api/analyses)
+    "duckdb>=1.5",               # event timeline: queries the Parquet files
+    "cryptography>=50",          # Ed25519 signatures (maxguard.custody.signing)
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1",
+    "ruff>=0.16",
+    "httpx2>=2.13",  # FastAPI's TestClient (Starlette 1.7 deprecates plain httpx for it)
+]
+
+[project.scripts]
+maxguard = "cli.main:main"
+
+[tool.setuptools.packages.find]
+# mappings/ is not a Python package: the Docker image copies the folder and sets
+# MAXGUARD_MAPPINGS_DIR, and a checkout finds it next to the maxguard folder.
+include = ["maxguard*", "cli*"]
+
+[tool.setuptools.package-data]
+# Non-Python files the engine reads at run time. Without these lines a normal
+# (non-editable) install, like the one in the Docker image, would leave them out.
+maxguard = [
+    "zeek/*.zeek",
+    "zeek/scripts/*.zeek",
+    "zeek/scripts/live/*.zeek",
+    "suricata/*.yaml",
+    "suricata/rules/*",
+    "ai/*.yaml",
+    "intel/*.yaml",
+    "web/templates/**/*",
+    "web/static/**/*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# The old v0.8 code waits in legacy/ until the feature freeze (JAI-01); it is not linted.
+extend-exclude = ["legacy"]
+
+[tool.ruff.lint]
+# E/F: real errors; I: sorted imports (ruff check --fix sorts them for you);
+# B: common bug patterns; UP: modern Python syntax for 3.11.
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Lets "pytest" import maxguard from this checkout without installing it first.
+pythonpath = ["."]
+# A misspelled marker is an error instead of a silently ignored test filter.
+addopts = "--strict-markers"
+markers = [
+    "integration: needs Zeek (and Suricata); runs inside the engine Docker image",
+]

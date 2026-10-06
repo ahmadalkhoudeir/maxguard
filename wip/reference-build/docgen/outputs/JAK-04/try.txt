@@ -1,0 +1,2 @@
+{"ip": "172.18.0.2", "first_seen": 1791250493.372808, "services": ["80/http"], "software": ["SimpleHTTP 0.6-Python/3"], "finding_count": 1}
+{"ip": "172.18.0.3", "first_seen": 1791250493.372808, "services": [], "software": ["Python-urllib 3.11"], "finding_count": 1}

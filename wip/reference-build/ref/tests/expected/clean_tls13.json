@@ -1,0 +1,5 @@
+{
+  "capture": "clean_tls13.pcap",
+  "expected": [],
+  "expect_no_findings": true
+}

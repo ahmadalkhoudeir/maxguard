@@ -1,0 +1,110 @@
+# MaxGuard live sensor (Jakub, JAK-07): Zeek and Suricata listen on the capture
+# port, and the shipper sends each finished interval folder to the console.
+#
+# Start:  docker compose -f docker/sensor-compose.yaml up -d
+# Check:  docker compose -f docker/sensor-compose.yaml ps
+# Stop:   docker compose -f docker/sensor-compose.yaml down   (the logs in /data stay)
+#
+# Before the first start (docs/HARDWARE.md sections 8-10): the capture port is up
+# with NO IP address, the SSD is mounted at /data, and /data/shipper.toml holds
+# the console's address and token (never put them in this repository).
+#
+# Settings: export them before "docker compose", or put them in docker/.env.
+#   MAXGUARD_CAPTURE_IFACE     the capture port (default eth0)
+#   MAXGUARD_INTERVAL_MINUTES  minutes per log folder (default 15; 1 for a quick test)
+#   MAXGUARD_SENSOR_DATA       the data folder on the SSD (default /data)
+#
+# Layout on the SSD:
+#   /data/zeek/<YYYY-MM-DD-HHMM>/   one finished folder per interval (UTC start time)
+#   /data/spool/zeek/               Zeek's logs of the interval in progress
+#   /data/spool/suricata/           Suricata's eve-<YYYY-MM-DD-HHMM>.json, one per minute
+#   /data/shipper.toml              where the shipper sends the folders
+#
+# The containers use host networking so they see the real capture port. They
+# only listen: the capture port has no IP address, and nothing here sends
+# packets on it (CLAUDE.md rule 5). The shipper's uploads leave through the
+# management port, the only port with an address.
+name: maxguard-sensor
+
+services:
+  zeek:
+    image: zeek/zeek:9.0.0
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add:
+      - NET_RAW     # read packets from the capture port
+      - NET_ADMIN   # switch the port to promiscuous mode
+    security_opt: [no-new-privileges:true]
+    environment:
+      TZ: UTC       # rotation times and folder names are in UTC
+    # Zeek writes the interval in progress here; rotate.zeek moves each finished
+    # interval to /data/zeek/<YYYY-MM-DD-HHMM>/. Same disk, so moving is a rename.
+    working_dir: /data/spool/zeek
+    volumes:
+      - ${MAXGUARD_SENSOR_DATA:-/data}:/data
+      - ../maxguard:/opt/maxguard/maxguard:ro
+    # The same scripts as maxguard/zeek/runner.py (site.zeek: Zeek's "local" policy
+    # without its DNS lookups), plus live/rotate.zeek.
+    # No -D: a live sensor keeps Zeek's random seeds (docs/ARCHITECTURE.md section 7).
+    command: >-
+      zeek -i ${MAXGUARD_CAPTURE_IFACE:-eth0} -C
+      LogAscii::use_json=T
+      Log::default_rotation_interval=${MAXGUARD_INTERVAL_MINUTES:-15}min
+      /opt/maxguard/maxguard/zeek/site.zeek
+      policy/protocols/conn/community-id-logging
+      /opt/maxguard/maxguard/zeek/scripts/cleartext.zeek
+      /opt/maxguard/maxguard/zeek/scripts/inventory.zeek
+      /opt/maxguard/maxguard/zeek/scripts/live/rotate.zeek
+    restart: unless-stopped
+
+  suricata:
+    image: jasonish/suricata:8.0.7
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add:
+      # What Suricata needs to capture (Suricata user guide, "Packet capture"):
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_NICE
+      # Only for starting up: the image's start script gives /var/log/suricata to
+      # the "suricata" user, and Suricata then switches to that user. From then
+      # on the running process holds only the three capabilities above.
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      - SETPCAP
+    security_opt: [no-new-privileges:true]
+    environment:
+      TZ: UTC       # the minute in each eve-<YYYY-MM-DD-HHMM>.json name is UTC
+    volumes:
+      - ${MAXGUARD_SENSOR_DATA:-/data}/spool/suricata:/var/log/suricata
+      - ../maxguard:/opt/maxguard/maxguard:ro
+    # Only MaxGuard's own rules file: Suricata starts in about a second. A large
+    # rule set takes much longer to load (about 50 s for ET Open on a 4-core x86
+    # machine), and Suricata captures nothing until it has finished.
+    command: >-
+      -c /opt/maxguard/maxguard/suricata/maxguard-suricata-live.yaml
+      --af-packet=${MAXGUARD_CAPTURE_IFACE:-eth0}
+      -S /opt/maxguard/maxguard/suricata/rules/maxguard.rules
+    restart: unless-stopped
+
+  shipper:
+    # Used only for its Python 3.13: the shipper needs nothing but the standard library.
+    image: zeek/zeek:9.0.0
+    network_mode: host   # reaches the console through the management port
+    cap_drop: [ALL]
+    cap_add:
+      - DAC_OVERRIDE     # delete Suricata's minute files, which belong to the "suricata" user
+    security_opt: [no-new-privileges:true]
+    environment:
+      TZ: UTC
+      PYTHONPATH: /opt/maxguard
+      PYTHONDONTWRITEBYTECODE: "1"   # the code folder is mounted read-only
+    volumes:
+      - ${MAXGUARD_SENSOR_DATA:-/data}:/data
+      - ../maxguard:/opt/maxguard/maxguard:ro
+    command: >-
+      python3 -m maxguard.sensor.shipper --data /data
+      --interval-minutes ${MAXGUARD_INTERVAL_MINUTES:-15}
+    restart: unless-stopped

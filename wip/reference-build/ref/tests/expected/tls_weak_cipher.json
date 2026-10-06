@@ -1,0 +1,7 @@
+{
+  "capture": "tls_weak_cipher.pcap",
+  "expected": [
+    {"rule_id": "tls.weak_cipher", "dst_port": 4432, "min_count": 1}
+  ],
+  "must_not_contain": ["cert.expired", "cert.self_signed", "cert.sha1_signature", "cert.weak_key", "tls.weak_version"]
+}

@@ -1,0 +1,57 @@
+# Home mode text: one plain-language headline and one clear action per rule_id.
+# Written by people, not by the AI, so it is the same on every machine.
+# Aim for an 8th-grade reading level: short sentences, everyday words.
+# Every rule_id in the rule registry needs an entry here
+# (tests/unit/test_home_text.py checks the Fall 2026 rules).
+
+cleartext.ftp:
+  headline: "A device used FTP, which sends passwords and files without encryption."
+  action: "Switch that device to SFTP, then change any password it sent over FTP."
+
+cleartext.telnet:
+  headline: "A device used Telnet, which sends everything you type, even passwords, without encryption."
+  action: "Turn off Telnet on that device and use SSH instead, then change its password."
+
+cleartext.http:
+  headline: "A website or device was used over plain HTTP, so the traffic was not encrypted."
+  action: "Use the https:// address instead, or turn on HTTPS in the device's settings."
+
+cleartext.http_alt:
+  headline: "A web service on port 8080 was used over plain HTTP, so the traffic was not encrypted."
+  action: "Turn on HTTPS for that service, or turn the service off if nobody needs it."
+
+cleartext.pop3:
+  headline: "An email app downloaded mail without encryption (POP3), so the password and messages could be read."
+  action: "In the email app's settings, turn on SSL/TLS for incoming mail (usually port 995)."
+
+cleartext.imap:
+  headline: "An email app read mail without encryption (IMAP), so the password and messages could be read."
+  action: "In the email app's settings, turn on SSL/TLS for incoming mail (usually port 993)."
+
+rdp.standard_security:
+  headline: "A Remote Desktop session used an old, weak safety setting, so someone could listen in."
+  action: "On the computer you connect to, turn on Network Level Authentication (NLA) for Remote Desktop."
+
+tls.weak_version:
+  headline: "A secure connection used an old version of TLS or SSL that is no longer safe."
+  action: "Update the device or app so it uses TLS 1.2 or newer."
+
+tls.weak_cipher:
+  headline: "A connection that looked safe used weak encryption, or none at all."
+  action: "Update the server and turn off its old, weak encryption settings."
+
+cert.expired:
+  headline: "A website or device used a security certificate that was out of date."
+  action: "Renew the certificate, or ask the owner of the site or device to renew it."
+
+cert.self_signed:
+  headline: "A website or device used a self-signed certificate. Your computer cannot check who it really is."
+  action: "Get a certificate from a trusted provider and put it on that device."
+
+cert.weak_key:
+  headline: "A security certificate uses a key shorter than 2048 bits, which is too weak today."
+  action: "Make a new certificate with a 2048-bit or longer key and install it on that server."
+
+cert.sha1_signature:
+  headline: "A security certificate was signed with SHA-1, an old method that can be faked."
+  action: "Replace the certificate with a new one signed with SHA-256 or stronger."

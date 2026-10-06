@@ -1,0 +1,5 @@
+reading from file /p/telnet.pcap, link-type EN10MB (Ethernet), snapshot length 262144
+01:31:24.287418 IP 172.18.0.3.55398 > 172.18.0.2.23: Flags [S], seq 2328852918, win 64240, options [mss 1460,sackOK,TS val 3374244774 ecr 0,nop,wscale 10], length 0
+01:31:24.287571 IP 172.18.0.2.23 > 172.18.0.3.55398: Flags [S.], seq 3945191018, ack 2328852919, win 65160, options [mss 1460,sackOK,TS val 4015193217 ecr 3374244774,nop,wscale 10], length 0
+01:31:24.287595 IP 172.18.0.3.55398 > 172.18.0.2.23: Flags [.], ack 1, win 63, options [nop,nop,TS val 3374244775 ecr 4015193217], length 0
+01:31:24.288242 IP 172.18.0.2.23 > 172.18.0.3.55398: Flags [P.], seq 1:12, ack 1, win 64, options [nop,nop,TS val 4015193218 ecr 3374244775], length 11

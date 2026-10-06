@@ -1,0 +1,151 @@
+# MITRE ATT&CK mappings for MaxGuard rules (Contract 2; fields explained in
+# mappings/schema.md). Each row names a technique an attacker would use
+# AGAINST the weakness a rule finds (for example: a cleartext password is
+# collected with T1040 Network Sniffing). These rows fill Finding.attack, not
+# Finding.controls, so they never appear in the compliance tables.
+#
+# How the rows were checked (CLAUDE.md rule 8), on 2026-10-06:
+#   Current Enterprise release = 19.2 (modified 2026-08-05), read from MITRE's
+#   own index: https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/index.json
+#   Every technique ID, name and tactic below was read from that release's
+#   STIX bundle (the "source" link): attack-pattern name, external_id, and
+#   kill_chain_phases.phase_name (= the tactic shortname). None is revoked or
+#   deprecated in 19.2.
+#   Note: v19 split Defense Evasion into "stealth" and "defense-impairment",
+#   so older lists that say "defense-evasion" are out of date.
+#
+# Sources for facts used in the rationales:
+#   RDP: MS-RDPBCGR 1.3.1.2 says the standard RDP connection sequence does not
+#     authenticate the server and is open to man-in-the-middle attacks:
+#     https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/49e2791f-72d0-4229-92b7-8f32c48a7206
+#   SHA-1: first practical chosen-prefix collision (Leurent & Peyrin, USENIX Security 2020):
+#     https://www.usenix.org/conference/usenixsecurity20/presentation/leurent
+#
+# Fields for ATT&CK rows:
+#   control_id = technique ID, title = technique name (a sub-technique is
+#   written "<technique>: <sub-technique>", the way attack.mitre.org shows it),
+#   tactic = ONE tactic shortname (a technique can belong to several; we pick
+#   the one the rationale describes), rationale = one plain sentence.
+#
+# Before every release, check for a newer point release in the index above.
+
+framework: MITRE ATT&CK
+version: "v19.2"
+source: https://github.com/mitre-attack/attack-stix-data/blob/master/enterprise-attack/enterprise-attack-19.2.json
+
+mappings:
+  cleartext.ftp:
+    - control_id: T1040
+      title: Network Sniffing
+      tactic: credential-access
+      rationale: FTP sends the user name and password unencrypted, so anyone who can capture traffic on the network path can read the login.
+      verified: "enterprise-attack-19.2.json, T1040 (credential-access, discovery)"
+
+  cleartext.telnet:
+    - control_id: T1040
+      title: Network Sniffing
+      tactic: credential-access
+      rationale: Telnet sends the password and every command unencrypted, so anyone who can capture traffic on the network path can read them.
+      verified: "enterprise-attack-19.2.json, T1040 (credential-access, discovery)"
+
+  cleartext.http:
+    - control_id: T1040
+      title: Network Sniffing
+      tactic: credential-access
+      rationale: Plain HTTP sends logins, form data and session cookies unencrypted, so anyone who can capture traffic can read them.
+      verified: "enterprise-attack-19.2.json, T1040 (credential-access, discovery)"
+    - control_id: T1557
+      title: Adversary-in-the-Middle
+      tactic: credential-access
+      rationale: Without TLS the client cannot tell whether it is talking to the real server, so an attacker in the middle can read and change pages and steal sessions.
+      verified: "enterprise-attack-19.2.json, T1557 (credential-access, collection)"
+
+  cleartext.http_alt:
+    - control_id: T1040
+      title: Network Sniffing
+      tactic: credential-access
+      rationale: Plain HTTP on port 8080 sends logins, form data and session cookies unencrypted, so anyone who can capture traffic can read them.
+      verified: "enterprise-attack-19.2.json, T1040 (credential-access, discovery)"
+    - control_id: T1557
+      title: Adversary-in-the-Middle
+      tactic: credential-access
+      rationale: Without TLS the client cannot tell whether it is talking to the real server, so an attacker in the middle can read and change pages and steal sessions.
+      verified: "enterprise-attack-19.2.json, T1557 (credential-access, collection)"
+
+  cleartext.pop3:
+    - control_id: T1040
+      title: Network Sniffing
+      tactic: credential-access
+      rationale: POP3 without TLS sends the mailbox password and the mail itself unencrypted, so anyone who can capture traffic can read both.
+      verified: "enterprise-attack-19.2.json, T1040 (credential-access, discovery)"
+
+  cleartext.imap:
+    - control_id: T1040
+      title: Network Sniffing
+      tactic: credential-access
+      rationale: IMAP without TLS sends the mailbox password and the mail itself unencrypted, so anyone who can capture traffic can read both.
+      verified: "enterprise-attack-19.2.json, T1040 (credential-access, discovery)"
+
+  rdp.standard_security:
+    - control_id: T1557
+      title: Adversary-in-the-Middle
+      tactic: credential-access
+      rationale: Standard RDP Security does not prove the server's identity (MS-RDPBCGR 1.3.1.2), so an attacker in the middle can pose as the server and capture the login.
+      verified: "enterprise-attack-19.2.json, T1557 (credential-access, collection)"
+
+  tls.weak_version:
+    - control_id: T1557
+      title: Adversary-in-the-Middle
+      tactic: credential-access
+      rationale: Old SSL/TLS versions have known attacks that an attacker in the middle can use to read or change the protected traffic.
+      verified: "enterprise-attack-19.2.json, T1557 (credential-access, collection); its description names SSL/TLS version downgrades"
+    - control_id: T1689
+      title: Downgrade Attack
+      tactic: defense-impairment
+      rationale: Because the server still accepts an outdated TLS version, an attacker can push connections down to it on purpose.
+      verified: "enterprise-attack-19.2.json, T1689 (defense-impairment); replaces revoked T1562.010"
+
+  tls.weak_cipher:
+    - control_id: T1040
+      title: Network Sniffing
+      tactic: credential-access
+      rationale: A NULL, export-grade or broken cipher leaves the traffic readable or easy to decrypt, so captured traffic exposes logins and data.
+      verified: "enterprise-attack-19.2.json, T1040 (credential-access, discovery)"
+    - control_id: T1689
+      title: Downgrade Attack
+      tactic: defense-impairment
+      rationale: Because the server still accepts a weak cipher, an attacker can steer connections to use it on purpose.
+      verified: "enterprise-attack-19.2.json, T1689 (defense-impairment); replaces revoked T1562.010"
+
+  cert.expired:
+    - control_id: T1557
+      title: Adversary-in-the-Middle
+      tactic: credential-access
+      rationale: Users who are used to clicking through an expired-certificate warning will also click through the warning for an attacker's fake certificate.
+      verified: "enterprise-attack-19.2.json, T1557 (credential-access, collection)"
+
+  cert.self_signed:
+    - control_id: T1557
+      title: Adversary-in-the-Middle
+      tactic: credential-access
+      rationale: Clients that accept this self-signed certificate cannot tell it apart from an attacker's, so an attacker in the middle can pose as the server.
+      verified: "enterprise-attack-19.2.json, T1557 (credential-access, collection)"
+    - control_id: T1587.003
+      title: "Develop Capabilities: Digital Certificates"
+      tactic: resource-development
+      rationale: Making a self-signed certificate that looks just like this one costs an attacker nothing, because no certificate authority has to sign it.
+      verified: "enterprise-attack-19.2.json, T1587.003 (resource-development)"
+
+  cert.weak_key:
+    - control_id: T1557
+      title: Adversary-in-the-Middle
+      tactic: credential-access
+      rationale: An RSA key shorter than 2048 bits may be broken, and with the private key an attacker in the middle can pose as the server.
+      verified: "enterprise-attack-19.2.json, T1557 (credential-access, collection)"
+
+  cert.sha1_signature:
+    - control_id: T1557
+      title: Adversary-in-the-Middle
+      tactic: credential-access
+      rationale: SHA-1 collisions are practical, so a forged certificate with a matching SHA-1 signature could let an attacker in the middle pose as the server.
+      verified: "enterprise-attack-19.2.json, T1557 (credential-access, collection)"

@@ -1,0 +1,7 @@
+{
+  "capture": "pop3.pcap",
+  "expected": [
+    {"rule_id": "cleartext.pop3", "dst_port": 110, "min_count": 1}
+  ],
+  "must_not_contain": ["cleartext.ftp", "cleartext.http", "cleartext.http_alt", "cleartext.imap", "cleartext.telnet", "rdp.standard_security"]
+}

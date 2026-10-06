@@ -1,0 +1,25 @@
+== labels
+would run: gh label create type:task --repo ahmadalkhoudeir/maxguard --color 1D76DB --description A\ roadmap\ task --force
+would run: gh label create type:bug --repo ahmadalkhoudeir/maxguard --color D73A4A --description Something\ is\ broken --force
+would run: gh label create type:question --repo ahmadalkhoudeir/maxguard --color D876E3 --description A\ question\ \(prefer\ GitHub\ Discussions\) --force
+would run: gh label create type:docs --repo ahmadalkhoudeir/maxguard --color 0075CA --description Documentation\ only --force
+would run: gh label create phase:alpha --repo ahmadalkhoudeir/maxguard --color 0E8A16 --description Ships\ in\ v2.0-alpha\ \(Fall\ 2026\) --force
+would run: gh label create phase:spring --repo ahmadalkhoudeir/maxguard --color 5319E7 --description Ships\ in\ v2.0\ \(Spring\ 2027\) --force
+would run: gh label create area:engine --repo ahmadalkhoudeir/maxguard --color FBCA04 --description Adapters\,\ Zeek\,\ Suricata\,\ rules\,\ pipeline --force
+would run: gh label create area:ai --repo ahmadalkhoudeir/maxguard --color C5DEF5 --description Local\ AI\,\ citations\,\ offline\ guard\,\ evaluation --force
+would run: gh label create area:mapping --repo ahmadalkhoudeir/maxguard --color BFD4F2 --description Compliance\ and\ ATT\&CK\ mapping\ files\,\ reports --force
+would run: gh label create area:ui --repo ahmadalkhoudeir/maxguard --color F9D0C4 --description Dashboard\ pages --force
+would run: gh label create area:api --repo ahmadalkhoudeir/maxguard --color D4C5F9 --description FastAPI\ backend --force
+would run: gh label create area:storage --repo ahmadalkhoudeir/maxguard --color C2E0C6 --description SQLite\ state\,\ Parquet\ events --force
+would run: gh label create area:sensor --repo ahmadalkhoudeir/maxguard --color FEF2C0 --description Live\ sensor\,\ NetFlow\,\ host\ agent\,\ hardware --force
+would run: gh label create area:response --repo ahmadalkhoudeir/maxguard --color E99695 --description Blocking\,\ preview\,\ approvals\,\ enforcers --force
+would run: gh label create area:testing --repo ahmadalkhoudeir/maxguard --color BFDADC --description Lab\,\ captures\,\ fixtures\,\ integration\ tests\,\ CI --force
+would run: gh label create area:release --repo ahmadalkhoudeir/maxguard --color 006B75 --description Packaging\,\ Docker\,\ releases\,\ signing --force
+would run: gh label create area:program --repo ahmadalkhoudeir/maxguard --color EDEDED --description Planning\,\ meetings\,\ reviews\,\ onboarding --force
+would run: gh label create critical-path --repo ahmadalkhoudeir/maxguard --color B60205 --description A\ delay\ here\ delays\ the\ next\ demo --force
+would run: gh label create contract-change --repo ahmadalkhoudeir/maxguard --color B60205 --description Changes\ a\ contract:\ Jaiden\ reviews\,\ Security\ Lead\ approves --force
+would run: gh label create blocked --repo ahmadalkhoudeir/maxguard --color 000000 --description Waiting\ on\ another\ task\ \(say\ which\ in\ a\ comment\) --force
+would run: gh label create needs-hardware --repo ahmadalkhoudeir/maxguard --color FEF2C0 --description Has\ steps\ marked:\ not\ run\,\ verify\ on\ hardware --force
+would run: gh label create owner:ahmad --repo ahmadalkhoudeir/maxguard --color EDEDED --description Assigned\ to\ Ahmad --force
+would run: gh label create owner:jaiden --repo ahmadalkhoudeir/maxguard --color EDEDED --description Assigned\ to\ Jaiden --force
+would run: gh label create owner:fiona --repo ahmadalkhoudeir/maxguard --color EDEDED --description Assigned\ to\ Fiona --force

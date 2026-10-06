@@ -1,0 +1,151 @@
+{
+ "owner": "karthik-tests (Karthik: KAR-03, KAR-04 step 3, KAR-06 step 2)",
+ "files": [
+  "tests/expected/cert_expired.json",
+  "tests/expected/cert_self_signed.json",
+  "tests/expected/cert_sha1.json",
+  "tests/expected/cert_weak_key.json",
+  "tests/expected/clean_tls13.json",
+  "tests/expected/dns_lookup.json",
+  "tests/expected/ftp.json",
+  "tests/expected/imap.json",
+  "tests/expected/plain_http.json",
+  "tests/expected/plain_http_alt.json",
+  "tests/expected/pop3.json",
+  "tests/expected/telnet.json",
+  "tests/expected/tls_weak_cipher.json",
+  "tests/expected/tls_weak_version.json",
+  "tests/integration/test_pcaps.py",
+  "tests/integration/test_determinism.py",
+  "tests/unit/test_suricata_eve.py",
+  "scripts/live_check.sh",
+  "docs-draft/test-results.md"
+ ],
+ "commands": [
+  {
+   "command": "docker run --rm --network none --user $(id -u):$(id -g) -e PYTHONDONTWRITEBYTECODE=1 -e HOME=/tmp -v $PWD:/src -w /src maxguard-sandbox:test /opt/venv/bin/python -m pytest -m integration -q -p no:cacheprovider -rs   (run 1, final repo state)",
+   "output": "..............................s                                          [100%]\nSKIPPED [1] tests/integration/test_pcaps.py:69: suricata is not installed here; the engine image has it\n30 passed, 1 skipped, 585 deselected in 26.25s"
+  },
+  {
+   "command": "same command, run 2",
+   "output": "..............................s                                          [100%]\nSKIPPED [1] tests/integration/test_pcaps.py:69: suricata is not installed here; the engine image has it\n30 passed, 1 skipped, 585 deselected in 27.24s"
+  },
+  {
+   "command": "(sandbox only) env REF=$PWD PATH=<wrappers running zeek/zeek:9.0.0 and jasonish/suricata:7.0.10 with --network none>:$PATH ./.venv/bin/pytest -m integration -q -p no:cacheprovider -rs tests/integration/test_pcaps.py tests/integration/test_determinism.py",
+   "output": "..............................                                           [100%]\n30 passed, 1 deselected in 59.72s   (test_zeek_and_suricata_both_ran ran and passed; determinism held with eve.json in the reports)"
+  },
+  {
+   "command": "(sandbox mutation) same, but the zeek wrapper drops -D; test_determinism.py::test_two_runs_give_the_same_report[telnet]",
+   "output": "E       AssertionError: report['events'][0]['event_id']: 'bbd7657c05875bf9' != 'e194059dc0684047'\nE         report['events'][0]['uid']: 'CVMEphCWuT6KpTUQg' != 'CeUBb01T2VDCDQU2S6'\nE         report['findings'][0]['evidence'][0]['record_id']: '7f3d21c7f2629d9b' != '9f57616dfb7046b2'\nE         report['findings'][0]['evidence'][0]['uid']: 'CVMEphCWuT6KpTUQg' != 'CeUBb01T2VDCDQU2S6'\n1 failed in 1.71s"
+  },
+  {
+   "command": "(sandbox mutation) zeek wrapper leaves out cleartext.zeek; pytest -m integration tests/integration/test_pcaps.py",
+   "output": "FAILED ...test_capture_gives_the_expected_findings[imap]\nFAILED ...test_capture_gives_the_expected_findings[pop3]\nFAILED ...test_capture_gives_the_expected_findings[telnet]\n3 failed, 12 passed, 1 skipped in 12.08s"
+  },
+  {
+   "command": "./.venv/bin/pytest tests/unit/test_suricata_eve.py -q",
+   "output": ".........................................................                [100%]\n57 passed in 0.09s"
+  },
+  {
+   "command": "for name in tls_weak_version dns_lookup; do mkdir -p \"$FRESH/$name\"; docker run --rm --network none --user \"$(id -u):$(id -g)\" --entrypoint suricata -v \"$PWD/tests/pcaps:/pcaps:ro\" -v \"$PWD/maxguard/suricata:/cfg:ro\" -v \"$FRESH/$name:/out\" jasonish/suricata:7.0.10 -c /cfg/maxguard-suricata.yaml -r \"/pcaps/$name.pcap\" -l /out -k none --runmode single -S /cfg/rules/maxguard.rules; cp tests/fixtures/zeek/\"$name\"/*.log \"$FRESH/$name/\"; done",
+   "output": "i: suricata: This is Suricata version 7.0.10 RELEASE running in USER mode\nW: counters: stats are enabled but no loggers are active\nW: detect: 1 rule files specified, but no rules were loaded!\ni: threads: Threads created -> W: 1 FM: 1 FR: 1   Engine started.\ni: suricata: Signal Received.  Stopping engine.\ni: pcap: read 1 file, 21 packets, 3094 bytes\n(... same for dns_lookup: 14 packets, 860 bytes). Only eve.json is written (config has no other outputs)."
+  },
+  {
+   "command": "FIXTURES_DIR=$FRESH ./.venv/bin/pytest tests/unit/test_suricata_eve.py -v",
+   "output": "9 passed in 0.06s (4 checks x tls_weak_version, dns_lookup + the 'there are eve files' guard). Fresh eve.json == fixture eve.json except flow_id for both captures; fresh JA4 t10d230600_44099cda8a52_242d16716555"
+  },
+  {
+   "command": "(mutation) FIXTURES_DIR=<copies with: tls ja4 removed, one DNS community_id changed, TLS1.3 client hello removed> pytest tests/unit/test_suricata_eve.py -q",
+   "output": "FAILED test_zeek_logged_the_same_community_ids[dns_lookup]\nFAILED test_every_client_hello_has_a_ja4[clean_tls13]\nFAILED test_every_client_hello_has_a_ja4[tls_weak_version]\nFAILED test_normalize_puts_the_ja4_on_the_event[tls_weak_version]\n4 failed, 9 passed"
+  },
+  {
+   "command": "docker run --rm --network none -v \"$PWD/scripts:/mnt:ro\" koalaman/shellcheck:stable /mnt/live_check.sh && echo \"shellcheck: no findings\"",
+   "output": "shellcheck: no findings   (ShellCheck 0.11.0)"
+  },
+  {
+   "command": "LIVE_CHECK_POLL_SECONDS=1 LIVE_CHECK_TIMEOUT_SECONDS=20 bash scripts/live_check.sh http://127.0.0.1:8765 172.19.0.2   (fake console = python3 -m http.server serving api/alerts, rewritten by a background job; lab-server container on an --internal network)",
+   "output": "sent: plain HTTP request to 172.19.0.2 port 80\nsent: Telnet session to 172.19.0.2 port 23\nwaiting for the alerts (checking every 1 s, for up to 0 min 20 s)\ncleartext.telnet alert after 0 min 2 s\ncleartext.http alert after 0 min 4 s\nPASS: both alerts appeared\nexit code: 0"
+  },
+  {
+   "command": "LIVE_CHECK_POLL_SECONDS=1 LIVE_CHECK_TIMEOUT_SECONDS=4 bash scripts/live_check.sh http://127.0.0.1:8765/ 172.19.0.2   (only telnet alert appears)",
+   "output": "cleartext.telnet alert after 0 min 1 s\nFAIL: no cleartext.http alert\nafter 0 min 4 s\nexit code: 1"
+  },
+  {
+   "command": "bash scripts/live_check.sh http://127.0.0.1:9 <addr> for 17 addresses",
+   "output": "refused (exit 2): 100.64.0.1 127.0.0.1 lab-server 010.0.0.1 172.32.0.1 172.15.255.255 192.169.0.1 256.1.1.1 2001:db8::1 '10.0.0.1 '\naccepted (reach console check -> exit 1 'cannot read http://127.0.0.1:9/api/alerts'): 10.0.0.1 172.16.0.1 172.31.255.255 192.168.0.1 192.0.2.10 198.51.100.7 203.0.113.200\nrefused message: refused: 100.64.0.1 is not a lab address (allowed: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 and the documentation ranges 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24; IPv4 numbers only)"
+  },
+  {
+   "command": "bash scripts/live_check.sh (no args) / console without http:// / LIVE_CHECK_POLL_SECONDS=abc / console down / console returns HTML / service without Telnet",
+   "output": "usage ... exit 2 / exit 2 / 'error: LIVE_CHECK_POLL_SECONDS and LIVE_CHECK_TIMEOUT_SECONDS must be whole numbers above 0' exit 2 / 'curl: (7) Failed to connect to 127.0.0.1 port 9 ... error: cannot read http://127.0.0.1:9/api/alerts: is the console running?' exit 1 / 'error: http://127.0.0.1:8765/api/alerts did not return a JSON list: is this a MaxGuard console?' exit 1 / 'error: no Telnet answer from 172.17.0.1 port 23 (curl exit code 7): is the test service running?' exit 1"
+  },
+  {
+   "command": "(sandbox end-to-end stand-in) tcpdump (netshoot) in the lab-server netns + real API (maxguard.api.app create_app(explain=False) on 127.0.0.1:8766 with zeek/suricata wrappers); live_check.sh with POLL=2; capture uploaded via POST /api/analyses 5 s after start",
+   "output": "[stand-in] upload: {\"analysis_id\":\"fdae7ab0f0f2f693\",\"findings\":2}\ncleartext.http alert after 0 min 8 s\ncleartext.telnet alert after 0 min 8 s\nPASS: both alerts appeared\nexit code: 0\nsecond run (alerts already existed): both after 0 min 9 s; alerts then count 2, last_seen moved forward"
+  },
+  {
+   "command": "docker run --rm --network none --user 65534:65534 -v \"$PWD/tests/pcaps:/p:ro\" -v crosscheck.sh:/crosscheck.sh:ro --entrypoint sh nicolaka/netshoot:v0.15 /crosscheck.sh | expand -t 17",
+   "output": "14x14 matrix, exactly one 1 per row on the diagonal (telnet->telnet, ftp->ftp PASS, plain_http->http 80, plain_http_alt->http 8080, pop3->pop PASS, imap->imap LOGIN, tls_weak_version->ServerHello<=0x0302, tls_weak_cipher->0x003b, cert_expired->all utcTime<2026-10-06, cert_weak_key->len(pkixalgs.modulus)<257, cert_sha1->OID 1.2.840.113549.1.1.5, cert_self_signed->issuer CN==subject CN, clean_tls13->TLS1.3 only, dns_lookup->DNS only); every other cell 0. ~33 s."
+  },
+  {
+   "command": "stand-in image: for p in tests/pcaps/*.pcap; do python -m cli.main analyze $p --no-ai | ...; done",
+   "output": "cert_expired [('cert.expired', 4433, 1)] / cert_self_signed [('cert.self_signed', 4437, 1)] / cert_sha1 [('cert.sha1_signature', 4435, 1)] / cert_weak_key [('cert.weak_key', 4434, 1)] / clean_tls13 no findings / dns_lookup no findings / ftp [('cleartext.ftp', 21, 1)] / imap [('cleartext.imap', 143, 1)] / plain_http [('cleartext.http', 80, 1)] / plain_http_alt [('cleartext.http_alt', 8080, 1)] / pop3 [('cleartext.pop3', 110, 1)] / telnet [('cleartext.telnet', 23, 1)] / tls_weak_cipher [('tls.weak_cipher', 4432, 1)] / tls_weak_version [('tls.weak_version', 4431, 1)]; with Suricata (wrappers) identical findings, tools {'suricata': True, 'zeek': True}, JA4 on all 7 TLS captures"
+  },
+  {
+   "command": "./.venv/bin/pytest -m \"not integration\" -q -p no:cacheprovider",
+   "output": "584 passed, 1 skipped, 31 deselected in 8.67s  (skip is tests/unit/test_mappings.py, not mine)"
+  },
+  {
+   "command": "./.venv/bin/ruff check tests/unit/test_suricata_eve.py tests/integration/test_pcaps.py tests/integration/test_determinism.py",
+   "output": "All checks passed!"
+  },
+  {
+   "command": "python3: compare bash is_lab_address (sourced from live_check.sh) with ipaddress membership in the 6 allowed networks on 3574 addresses (all range ends +/-1, 3000 random, 600 in-range)",
+   "output": "mismatches: 0"
+  },
+  {
+   "command": "env -u no_proxy -u NO_PROXY http_proxy=http://127.0.0.1:9 curl ... http://172.17.0.1/   with and without --noproxy '*'",
+   "output": "without: curl: (7) Failed to connect to 127.0.0.1 port 9 (went to the proxy) / with --noproxy '*': 200"
+  }
+ ],
+ "tests_passed": true,
+ "verified_facts": [
+  "Every lab capture gives exactly its one rule through the real pipeline (Zeek 9.0.0, stand-in image, analyze(explain=False)): telnet 23, ftp 21, plain_http 80, plain_http_alt 8080, pop3 110, imap 143, tls_weak_version 4431, tls_weak_cipher 4432, cert_expired 4433, cert_weak_key 4434, cert_sha1 4435, cert_self_signed 4437 (each count 1, src 172.18.0.3 dst 172.18.0.2); clean_tls13 and dns_lookup give none. Matches lab/server/services.py ports and the karthik.md KAR-01 SOURCES table. Same with Suricata 7.0.10 also running.",
+  "Independent tshark 4.6.2 cross-check (nicolaka/netshoot:v0.15, --network none) matches MaxGuard on all 14 captures: one matching connection for each capture's own check, zero for every other check (matrix in docs-draft/test-results.md).",
+  "tshark in nicolaka/netshoot:v0.15 = TShark (Wireshark) 4.6.2, Alpine package tshark-4.6.2-r0, license GPL-2.0-or-later (tshark --version and apk info inside the image). Image digest sha256:47b907d662d139d1e2f22bfe14f4efca1e3f1feed283572f47c970c780c03b61 (linux/amd64).",
+  "tshark field names verified with tshark -G fields / -T pdml: pkixalgs.modulus (FT_BYTES; 1024-bit key = 129 bytes, 2048-bit = 257 bytes), x509af.utcTime (FT_STRING), x509af.algorithm.id (FT_OID), x509sat.uTF8String, imap.request.command, pop.request.command, ftp.request.command, tls.handshake.extensions.supported_version; the 'all' quantifier with a string comparison works (all x509af.utcTime < \"2026-10-06\" matched only cert_expired).",
+  "Suricata 7.0.10 logs tls.sni from the client side (client_connp.sni) and tls.ja4 from client_connp.ja4, and creates the JA4 state only while parsing a ClientHello: https://github.com/OISF/suricata/blob/suricata-7.0.10/src/output-json-tls.c (lines 149-151, 215-221) and https://github.com/OISF/suricata/blob/suricata-7.0.10/src/app-layer-ssl.c (lines 1544-1547, 997). Hence 'tls record has sni' => Suricata saw the client hello => JA4 present when enabled.",
+  "Suricata 7.0.10 JA4 string format: 10-char prefix (t/q, version 13/12/11/10/s3/00, d/i, 2-digit cipher count, 2-digit extension count, 2 ALPN chars) + '_' + 12 hex + '_' + 12 hex = 36 chars: https://github.com/OISF/suricata/blob/suricata-7.0.10/rust/src/ja4.rs (get_hash, version_to_ja4code).",
+  "JA4 is enabled by default when building Suricata 7.0.10 (configure option --disable-ja4, default enable_ja4=yes): https://github.com/OISF/suricata/blob/suricata-7.0.10/configure.ac line 2223. jasonish/suricata:7.0.10 reports 'JA4 support: yes' (suricata --build-info); digest sha256:f8e7d04babeaab8bfac7e327b09e8f7471f144b0b205bfc503f7dd3130a6d2e7.",
+  "Suricata license GPL-2.0: https://github.com/OISF/suricata/blob/suricata-7.0.10/LICENSE (GNU GPL Version 2, June 1991).",
+  "Community ID v1 = '1:' + base64 of a SHA-1 digest, default seed 0: https://github.com/corelight/community-id-spec (fetched). All 14 fixture eve.json files and the fresh ones: every record has a community_id matching ^1:[A-Za-z0-9+/]{27}=$ and present in Zeek's conn.log.",
+  "Fresh Suricata 7.0.10 output (maxguard-suricata.yaml, -S maxguard.rules, --network none) for tls_weak_version and dns_lookup is identical to the committed fixtures except flow_id (run here).",
+  "ShellCheck 0.11.0 (license GPL-3.0, from shellcheck --version) in koalaman/shellcheck:stable sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d: no findings on scripts/live_check.sh.",
+  "curl 8.5.0 (host, Ubuntu build) lists telnet under Protocols; curl telnet://host:23 with stdin 'labuser\\r\\nexit\\r\\n' against the lab server receives the banner+echo and exits 0 when the server closes (run). curl's own manual (curl --manual): '--noproxy ... The only wildcard is a single * character, which matches all hosts, and effectively disables the proxy'; verified empirically that with http_proxy set and no --noproxy the probe goes to the proxy.",
+  "RFC 1918 (10/8, 172.16/12, 192.168/16) and RFC 5737 (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) ranges: rfc-editor.org/ietf.org/iana.org are blocked by the sandbox egress policy, so verified by running: Python 3.11 ipaddress marks all six as not globally reachable (is_private True; 100.64.0.0/10 False), and the script's classifier agreed with ipaddress membership on 3574 addresses (0 mismatches). Cite https://www.rfc-editor.org/rfc/rfc1918 and https://www.rfc-editor.org/rfc/rfc5737 in docs.",
+  "The probes of live_check.sh (curl HTTP to port 80, curl telnet to port 23) really trigger cleartext.http and cleartext.telnet through the real pipeline and the lead's real API (tcpdump capture uploaded to POST /api/analyses -> findings 2; GET /api/alerts JSON has rule_id and last_seen in Unix seconds).",
+  "Determinism holds with real Zeek and real Suricata: two analyze() runs into different folders gave equal report dicts for all 14 captures (stand-in image without Suricata, and host run with both tools via wrappers).",
+  "No new images were pulled (all used images were already on the host). All karthik-tests-* containers and networks were removed; my test console process was stopped."
+ ],
+ "not_run": [
+  "KAR-03 step 4 / KAR-04: docker build -f docker/Dockerfile --target test -t maxguard:test . and docker run --rm --network none maxguard:test pytest -m integration -q: the engine image cannot be built here (Debian package servers blocked, HTTP 403). Ran instead in maxguard-sandbox:test (Zeek 9.0.0 + Python 3.13, no Suricata): 30 passed, 1 skipped. Expected in the real image: 31 passed (test_zeek_and_suricata_both_ran runs there).",
+  "test_zeek_and_suricata_both_ran inside the real engine image with Debian 13's suricata 7.0.10 package: never run. Whether Debian's package is built with JA4 is unverified (salsa.debian.org blocked); the test asserts a JA4, so the first CI run answers it. Verify on the first CI run.",
+  "GitHub Actions integration job (KAR-04 step 2/4): not run (no Actions here).",
+  "KAR-06 real lab runs (Raspberry Pi sensor, mirror port, live shipping by JAK-07, laptop on lab Wi-Fi, three runs on different days, docs/testing/live-sensor.md): not run - verify on hardware. Only the sandbox stand-in (tcpdump + manual upload to the real API) was run.",
+  "live_check.sh on macOS / Docker Desktop / WSL: not run (only Linux bash 5.2 + curl 8.5.0 here). macOS curl telnet support and python3 availability not checked.",
+  "maxguard analyze inside the real maxguard:2.0.0a0 image (docs-draft command): not run as written; the equivalent ran in the stand-in image via python -m cli.main."
+ ],
+ "issues_for_lead": [
+  "KAR-03 'How to test' says '14 tests, one per capture'. test_pcaps.py now has 16 integration tests: 14 captures + test_every_capture_has_an_expected_file (automates the 'one expected file per capture' checklist item) + test_zeek_and_suricata_both_ran. test_determinism.py adds 14 integration tests + 1 unmarked helper test. With the JAI-07 API test, 'pytest -m integration -q' in the real image should print 31 passed; in the planning stand-in it printed '30 passed, 1 skipped'. Please update the counts in karthik.md.",
+  "KAR-03 step 3 says the capture test checks report['tools'] for both tools. As the computed task asked, the Zeek part is in the per-capture test (tools['zeek'] is True) and 'both ran' is its own test, skipped with reason 'suricata is not installed here; the engine image has it' when shutil.which('suricata') is None. It also asserts the Suricata TLS event has a JA4 and the same community_id as Zeek's TLS event (this catches a Debian Suricata built without JA4 or a config regression; fixture-based unit tests cannot). A missing Suricata in CI is still caught by the workflow's 'suricata -V' step. Consider adding 'suricata --build-info | grep \"JA4 support: *yes\"' to that CI step.",
+  "must_not_contain contents (my choice; spec example lists 2): each cleartext capture lists the other 6 rules of the cleartext family (cleartext.* + rdp.standard_security); each TLS/cert capture lists the other 5 tls.*/cert.* rules. Reason: those read the same logs, so they are the plausible misfires; exactness over ALL rules is already checked on fixtures by tests/unit/test_rule_registry.py, and adding a new rule then does not require editing every expected file. Clean captures have only expected [] + expect_no_findings true (stricter, so no must_not_contain). Change to 'all 12 other rules' if you prefer.",
+  "Suricata eve test placed in tests/unit/test_suricata_eve.py: it only reads saved files (fast, runs in CI's unit job and on laptops). It honours FIXTURES_DIR (the same variable scripts/make_fixtures.sh uses), so fresh output can be checked: 'FIXTURES_DIR=/tmp/fresh bash scripts/make_fixtures.sh && FIXTURES_DIR=/tmp/fresh pytest tests/unit/test_suricata_eve.py -q'. It covers tests/fixtures/zeek/*/eve.json (14 lab captures), not _handmade/ (the Suricata 8 one has no conn.log). 'Client hello seen' is defined as 'tls record has sni' (sourced from Suricata 7.0.10 code); Zeek's TLS sessions are used as a second witness so the JA4 check cannot pass vacuously. Extra check beyond the brief: every eve community_id appears in Zeek's conn.log (seed 0 on both sides).",
+  "tests/integration/__init__.py and tests/integration/conftest.py were NOT created (not needed; unique test module basenames). Note for the docs: a second conftest.py in tests/integration would replace sys.modules['conftest'], so any future 'from conftest import ...' in tests would break; tests here compute paths from __file__ like the existing ones.",
+  "KAR-06 step 2 design choices to reflect in karthik.md: probes are fixed to port 80 (cleartext.http is port-based; 8080 would be http_alt) and port 23; both via curl (curl telnet://, so no telnet client needed), with --noproxy '*'; the service address must be an IPv4 number in RFC 1918 or RFC 5737 ranges (loopback, CGNAT, names, leading zeros, IPv6 refused, exit 2); exit 1 = probe/console failure or timeout; the console is checked once before probing (fail fast), later poll failures only warn; GET /api/alerts?limit=1000 (API maximum; newest first within a severity). Env: LIVE_CHECK_POLL_SECONDS (60), LIVE_CHECK_TIMEOUT_SECONDS (1800). Needs bash, curl with telnet, python3 (JSON parsing; jq not assumed).",
+  "KAR-06 clock caveat: the script compares alert last_seen (sensor clock: when the traffic was seen) with the laptop's start time, so sensor and laptop clocks must agree (NTP). On an offline lab the Pi 5's clock may drift (its RTC needs a battery) - a hardware question for JAK-06/07. If that is a problem, the alternative is last_received_at (console clock), correct only when the script runs on the console machine.",
+  "KAR-06 step 2 should say what the 'test service on another lab machine' is: KAR-01's lab-server image is a good one (Telnet 23 + HTTP 80; the planning test used it), e.g. 'docker run -d --rm -p 23:23 -p 80:80 lab-server' on a lab machine - not run on hardware, and it must only run on the lab network (insecure on purpose).",
+  "Outdated '13 captures' text: tests/fixtures/zeek/_handmade/README.md line 3 and karthik.md KAR-02 step 4 ('The 13 lab captures have no DNS or DHCP traffic', and make_dns_dhcp_pcap.py docstring 'None of the 13 lab captures contains DNS') are wrong since dns_lookup (14th capture, DNS) exists; SPEC.md lines 242 and 273 also say 13. I did not edit these (not my files).",
+  "The tshark cross-check script lives inline in docs-draft/test-results.md (I own no scripts/ file except live_check.sh). If you want it in the repo, it could become scripts/crosscheck_pcaps.sh (runs inside nicolaka/netshoot:v0.15 with --network none).",
+  "No new dependency: tshark (GPL-2.0-or-later) and ShellCheck (GPL-3.0) are only used as external checking tools via Docker; nothing ships. If DEPENDENCIES.md lists dev/test tools, add koalaman/shellcheck:stable (pin a digest or a version tag such as v0.11.0 instead of 'stable')."
+ ],
+ "doc_notes": "WHAT EACH FILE IS FOR\n- tests/expected/<capture>.json (14): the answer key. Format (Fall 2026): capture, expected [{rule_id, dst_port, min_count}], must_not_contain [rule IDs], and for the two clean captures expect_no_findings: true. min_count is 1 because each lab capture has one session; counts are summed per (rule_id, dst_port) in case several findings share them.\n- tests/integration/test_pcaps.py: parametrized over the expected files; runs maxguard.pipeline.analyze(capture, tmp_path, explain=False). Why integration tests at all: unit tests read saved logs, so only these notice when the way MaxGuard RUNS Zeek/Suricata breaks (proved: removing cleartext.zeek made telnet/pop3/imap fail; nothing else did).\n- tests/integration/test_determinism.py: analyze twice into two DIFFERENT folders (so a leaked path also fails) and compare dicts. The small differences() helper turns a failure into exact paths, e.g. report['events'][0]['uid']: 'CVMEph...' != 'CeUBb0...' (seen when Zeek ran without -D). Its own unit test is unmarked on purpose so it runs in the fast job.\n- tests/unit/test_suricata_eve.py: Community ID on every eve record (pattern ^1:[A-Za-z0-9+/]{27}=$: '1:' + base64 of 20-byte SHA-1), the same IDs in Zeek's conn.log, a JA4 on every TLS record with an SNI, and normalize() copying it (event_id == record_id('eve.json', rec)). SNI = proof Suricata parsed the client hello, because SNI only exists in the ClientHello and Suricata builds the JA4 while parsing that same message.\n- scripts/live_check.sh: bash, set -euo pipefail, shellcheck-clean.\n- docs-draft/test-results.md: the cross-check page (MaxGuard vs tshark), runs, failure demos, live_check results.\n\nGOTCHAS\n- Integration tests need Zeek; on a laptop run 'pytest -m \"not integration\" -q'. Missing Zeek is a FAILURE with a clear ZeekError message (never silently skipped), but missing Suricata is a visible SKIP, because the sandbox image lacks it; CI's 'suricata -V' step guards the real image.\n- Inside the test image the tests run as user maxguard and /opt/maxguard is root-owned: tests must write only to tmp_path (they do).\n- Running the stand-in: docker run --rm --network none --user $(id -u):$(id -g) -e PYTHONDONTWRITEBYTECODE=1 -e HOME=/tmp -v $PWD:/src -w /src maxguard-sandbox:test /opt/venv/bin/python -m pytest -m integration -q -p no:cacheprovider (sandbox only; never document the image name as a junior step).\n- Suricata's flow_id is random per run (fresh eve.json differed from the fixtures ONLY there); record IDs ignore it, which is why determinism holds with Suricata too.\n- tshark: TLS 1.3 encrypts the certificate, so clean_tls13 proves 'no rule fires on modern TLS', not 'its certificate is fine'. len(pkixalgs.modulus) < 257 means < 2048 bits because DER adds a leading zero byte to a full 2048-bit modulus. 'all x509af.utcTime < \"2026-10-06\"' compares both certificate dates with the capture day (like MaxGuard's rule: session time, never today). Self-signed needs awk because a display filter cannot compare two values of one field. Run tshark as --user 65534:65534 with --network none.\n- live_check.sh: '--noproxy *' matters (a proxy in http_proxy would otherwise receive the probes: shown). Names are refused (a name can point anywhere); leading zeros refused (some tools read 010 as octal 8). The Telnet probe succeeds whenever the service sent something (MaxGuard only reports Telnet sessions where the server sent data), even if curl stops at its 10 s limit (exit 28) because a real service keeps asking for a password. 'last_seen >= start' (not count) is the right test because a repeat run updates the SAME alert (same finding_id): the second sandbox run proved count 1->2 and last_seen moved.\n- Local test recipe used in planning (Linux): lab-server container on 'docker network create --internal <net>' (host can still reach the container's 172.x address), fake console 'python3 -m http.server 8765 --bind 127.0.0.1 --directory <dir>' serving <dir>/api/alerts (query string ignored), a background job rewriting that JSON atomically (write tmp + os.replace) with last_seen=time.time(); LIVE_CHECK_POLL_SECONDS=1 LIVE_CHECK_TIMEOUT_SECONDS=20. On Docker Desktop (macOS/Windows) container IPs are not reachable from the host: publish ports on the laptop's LAN address instead (not run)."
+}

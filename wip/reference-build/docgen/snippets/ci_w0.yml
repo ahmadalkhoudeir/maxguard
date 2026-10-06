@@ -1,0 +1,35 @@
+# Runs on every pull request and on every push to main.
+# "test": lint + unit tests on Python 3.11 (fast, no Docker).
+# (Karthik adds an "integration" job in KAR-04, once there are integration tests.)
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The jobs only read the code; they never need write access to the repository.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install MaxGuard and the dev tools
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Unit tests
+        run: pytest -m "not integration" -q

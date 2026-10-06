@@ -1,0 +1,5 @@
+built data/intel-2027.03.01.tar.gz: version 2027.03.01, 2 files
+ok: version 2027.03.01, 2 files
+installed version 2027.03.01
+current -> versions/2027.03.01
+refused: version 2027.03.01 is not newer than the installed 2027.03.01; use rollback to go back

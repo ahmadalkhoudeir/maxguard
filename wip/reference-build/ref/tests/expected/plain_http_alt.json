@@ -1,0 +1,7 @@
+{
+  "capture": "plain_http_alt.pcap",
+  "expected": [
+    {"rule_id": "cleartext.http_alt", "dst_port": 8080, "min_count": 1}
+  ],
+  "must_not_contain": ["cleartext.ftp", "cleartext.http", "cleartext.imap", "cleartext.pop3", "cleartext.telnet", "rdp.standard_security"]
+}

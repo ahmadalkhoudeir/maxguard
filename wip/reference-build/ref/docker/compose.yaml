@@ -1,0 +1,52 @@
+# MaxGuard: the engine (web dashboard + API) and a local Ollama for AI explanations.
+#
+# Start:  docker compose -f docker/compose.yaml up -d
+# Open:   http://127.0.0.1:8000
+# Stop:   docker compose -f docker/compose.yaml down      (volumes and data are kept)
+#
+# The maxguard:2.0.0a0 image must already exist on this machine, either built with
+#   docker build -f docker/Dockerfile -t maxguard:2.0.0a0 .
+# or loaded from the offline bundle. For development use compose.dev.yaml.
+name: maxguard
+
+services:
+  maxguard:
+    image: maxguard:2.0.0a0
+    ports:
+      # Only this computer can open the dashboard; other machines on the network cannot.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - maxguard-data:/data
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      MAXGUARD_OFFLINE: "1" # the Python guard blocks any connection except Ollama
+    networks:
+      - ui
+      - ai
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:0.35.1
+    volumes:
+      - maxguard-ollama-models:/root/.ollama # where this image keeps downloaded models
+    networks:
+      - ai # only the internal network: Ollama can reach nothing outside
+    restart: unless-stopped
+
+networks:
+  # A normal network: needed for the published port, and later for reaching
+  # the user's own firewall when a block is approved.
+  ui: {}
+  # internal: true means containers on it have no route to the internet.
+  ai:
+    internal: true
+
+volumes:
+  maxguard-data:
+    name: maxguard-data
+  # A fixed name (no "maxguard_" project prefix) so the offline installer can
+  # put model files into this volume before the first start.
+  maxguard-ollama-models:
+    name: maxguard-ollama-models

@@ -1,0 +1,24 @@
+# Files Docker never sends to the build. The Dockerfile copies only what it
+# needs, but a smaller build context is faster, and secrets listed here can
+# never end up inside an image by accident.
+
+# Version control and local tooling
+.git
+.github
+.venv
+venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+
+# Runtime data: databases, Parquet files and the custody signing keys
+data
+**/*.pem
+**/*.key
+
+# Not part of the engine image
+docs
+lab
+scripts
+docker

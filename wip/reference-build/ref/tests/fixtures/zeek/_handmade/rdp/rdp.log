@@ -1,0 +1,2 @@
+{"ts":1791253200.003,"uid":"CJKFoj4bpHEhTeaRoj","id.orig_h":"192.168.56.50","id.orig_p":50001,"id.resp_h":"192.168.56.30","id.resp_p":3389,"cookie":"labuser","security_protocol":"RDP","cert_count":0}
+{"ts":1791253201.003,"uid":"CRdT6w4PA64qWKmBk3","id.orig_h":"192.168.56.50","id.orig_p":50002,"id.resp_h":"192.168.56.31","id.resp_p":3389,"cookie":"labuser","result":"encrypted","security_protocol":"HYBRID","cert_count":0}

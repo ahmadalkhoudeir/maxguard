@@ -1,0 +1,1 @@
+maxguard.offline.OfflineViolation: OFFLINE MODE: blocked address lookup of 'example.com'. Allowed hosts: 127.0.0.1, ::1, localhost

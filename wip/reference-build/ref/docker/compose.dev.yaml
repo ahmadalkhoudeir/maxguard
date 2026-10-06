@@ -1,0 +1,33 @@
+# Development override: build the engine from this checkout and run the code
+# from the repository folder, restarting the server when a .py file changes.
+#
+# Use it on top of compose.yaml:
+#   docker compose -f docker/compose.yaml -f docker/compose.dev.yaml up --build
+#
+# Paths here are relative to docker/ (the folder of the first -f file), so ".."
+# is the repository root.
+services:
+  maxguard:
+    image: maxguard:dev
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: runtime
+    volumes:
+      # Read-only: the container can read your code but never change it.
+      - ..:/src:ro
+    working_dir: /src
+    environment:
+      # Import maxguard from /src (your checkout) instead of the copy installed in the image.
+      PYTHONPATH: /src
+    command:
+      - uvicorn
+      - maxguard.api.app:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /src/maxguard

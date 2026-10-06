@@ -1,0 +1,19 @@
+# MaxGuard traffic lab: insecure test services on an isolated network.
+# `internal: true` means nothing here can reach the internet or your LAN.
+services:
+  server:
+    build: ./server
+    networks: [lab]
+  sniffer:
+    image: nicolaka/netshoot:v0.15
+    network_mode: "service:server"      # shares the server's network card
+    volumes: ["./captures:/captures"]
+    command: ["tcpdump", "-i", "eth0", "-s", "0", "-U", "-w", "/captures/${CAPTURE:-capture}.pcap"]
+    depends_on: [server]
+  client:
+    build: ./client
+    networks: [lab]
+    depends_on: [server, sniffer]
+    command: ["python", "/scenarios/${SCENARIO:-telnet}.py"]
+networks:
+  lab: { internal: true }

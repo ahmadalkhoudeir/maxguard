@@ -1,0 +1,5 @@
+{
+  "capture": "dns_lookup.pcap",
+  "expected": [],
+  "expect_no_findings": true
+}

@@ -1,0 +1,7 @@
+{
+  "capture": "imap.pcap",
+  "expected": [
+    {"rule_id": "cleartext.imap", "dst_port": 143, "min_count": 1}
+  ],
+  "must_not_contain": ["cleartext.ftp", "cleartext.http", "cleartext.http_alt", "cleartext.pop3", "cleartext.telnet", "rdp.standard_security"]
+}

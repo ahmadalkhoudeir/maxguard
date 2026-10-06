@@ -1,0 +1,7 @@
+{
+  "capture": "cert_expired.pcap",
+  "expected": [
+    {"rule_id": "cert.expired", "dst_port": 4433, "min_count": 1}
+  ],
+  "must_not_contain": ["cert.self_signed", "cert.sha1_signature", "cert.weak_key", "tls.weak_cipher", "tls.weak_version"]
+}

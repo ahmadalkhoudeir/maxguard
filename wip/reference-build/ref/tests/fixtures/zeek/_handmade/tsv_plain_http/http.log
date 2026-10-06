@@ -1,0 +1,10 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	http
+#open	2026-10-06-01-52-44
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	trans_depth	method	host	uri	referrer	version	user_agent	origin	request_body_len	response_body_len	status_code	status_msg	info_code	info_msg	tags	username	password	proxied	orig_fuids	orig_filenames	orig_mime_types	resp_fuids	resp_filenames	resp_mime_types
+#types	time	string	addr	port	addr	port	count	string	string	string	string	string	string	string	count	count	count	string	count	string	set[enum]	string	string	set[string]	vector[string]	vector[string]	vector[string]	vector[string]	vector[string]	vector[string]
+1791250493.372930	CJKFoj4bpHEhTeaRoj	172.18.0.3	40288	172.18.0.2	80	1	GET	server:80	/	-	1.0	Python-urllib/3.11	-	0	768	200	OK	-	-	(empty)	-	-	-	-	-	-	FWdPeg1VU9ihKRmF5g	-	text/html
+#close	2026-10-06-01-52-44

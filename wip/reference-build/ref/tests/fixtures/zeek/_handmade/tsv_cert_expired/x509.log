@@ -1,0 +1,10 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	x509
+#open	2026-10-06-02-49-18
+#fields	ts	fingerprint	certificate.version	certificate.serial	certificate.subject	certificate.issuer	certificate.not_valid_before	certificate.not_valid_after	certificate.key_alg	certificate.sig_alg	certificate.key_type	certificate.key_length	certificate.exponent	certificate.curve	san.dns	san.uri	san.email	san.ip	basic_constraints.ca	basic_constraints.path_len	host_cert	client_cert
+#types	time	string	count	string	string	string	time	time	string	string	string	count	string	string	vector[string]	vector[string]	vector[string]	vector[addr]	bool	count	bool	bool
+1791250651.539417	cb926136cb1ba3036a29f1224a5fe4a134b44e206efaeae80873d5e1c5d35aad	3	6C3DF9F08F58C1DBB91C0CCEBFD30CD66E8BAD64	CN=expired.lab.invalid	CN=MaxGuard Lab CA	1577836800.000000	1609372800.000000	rsaEncryption	sha256WithRSAEncryption	rsa	2048	65537	-	-	-	-	-	F	-	T	F
+#close	2026-10-06-02-49-18

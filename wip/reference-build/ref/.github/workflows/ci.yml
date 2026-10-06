@@ -1,0 +1,61 @@
+# Runs on every pull request and on every push to main.
+# "test": lint + unit tests on Python 3.11 (fast, no Docker).
+# "integration": builds the engine image and runs the integration tests inside
+# it with networking switched off, the same way MaxGuard runs for real.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The jobs only read the code; they never need write access to the repository.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install MaxGuard and the dev tools
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Unit tests
+        run: pytest -m "not integration" -q
+
+  integration:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the engine image
+        run: docker build -f docker/Dockerfile -t maxguard:ci .
+
+      # Same Dockerfile, "test" stage: the engine plus pytest and the tests
+      # folder. Reuses the cached engine layers from the step above.
+      - name: Build the test image
+        run: docker build -f docker/Dockerfile --target test -t maxguard:ci-test .
+
+      - name: Check the engine image starts offline
+        run: |
+          docker run --rm --network none maxguard:ci zeek --version
+          docker run --rm --network none maxguard:ci suricata -V
+          docker run --rm --network none maxguard:ci maxguard --help
+
+      # pytest is already inside the image, so the tests run with no network at all.
+      - name: Integration tests (no network)
+        run: docker run --rm --network none maxguard:ci-test pytest -m integration -q

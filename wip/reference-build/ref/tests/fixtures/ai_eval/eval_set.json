@@ -1,0 +1,1137 @@
+{
+ "items": [
+  {
+   "finding": {
+    "attack": [
+     {
+      "name": "Adversary-in-the-Middle",
+      "tactic": "credential-access",
+      "technique_id": "T1557",
+      "version": "v19.2"
+     }
+    ],
+    "controls": [
+     {
+      "control_id": "IA-5",
+      "framework": "NIST SP 800-53",
+      "rationale": "A server certificate is the server's authenticator, and part (f) requires refreshing authenticators, but this one was used after it expired.",
+      "title": "Authenticator Management",
+      "version": "Rev. 5 (Release 5.2.0)"
+     }
+    ],
+    "count": 1,
+    "details": {
+     "not_valid_after": 1609372800.0,
+     "subject": "CN=expired.lab.invalid"
+    },
+    "dst_ip": "172.18.0.2",
+    "dst_port": 4433,
+    "evidence": [
+     {
+      "log": "ssl.log",
+      "record_id": "c4e373ad73162b38",
+      "ts": 1791250651.53796,
+      "uid": "CJKFoj4bpHEhTeaRoj"
+     },
+     {
+      "log": "x509.log",
+      "record_id": "a342526c41ce0a9d",
+      "ts": 1791250651.539417,
+      "uid": ""
+     }
+    ],
+    "explanation": null,
+    "explanation_sentences": [],
+    "finding_id": "63ed8c36136c2c5a",
+    "first_seen": 1791250651.53796,
+    "last_seen": 1791250651.53796,
+    "protocol": "tls",
+    "rule_id": "cert.expired",
+    "severity": "high",
+    "source": "zeek",
+    "src_ip": "172.18.0.3",
+    "title": "Expired certificate"
+   },
+   "fixture": "cert_expired",
+   "item_id": "cert_expired/63ed8c36136c2c5a",
+   "records": {
+    "a342526c41ce0a9d": {
+     "_log": "x509.log",
+     "basic_constraints.ca": false,
+     "certificate.exponent": "65537",
+     "certificate.issuer": "CN=MaxGuard Lab CA",
+     "certificate.key_alg": "rsaEncryption",
+     "certificate.key_length": 2048,
+     "certificate.key_type": "rsa",
+     "certificate.not_valid_after": 1609372800.0,
+     "certificate.not_valid_before": 1577836800.0,
+     "certificate.serial": "6C3DF9F08F58C1DBB91C0CCEBFD30CD66E8BAD64",
+     "certificate.sig_alg": "sha256WithRSAEncryption",
+     "certificate.subject": "CN=expired.lab.invalid",
+     "certificate.version": 3,
+     "client_cert": false,
+     "fingerprint": "cb926136cb1ba3036a29f1224a5fe4a134b44e206efaeae80873d5e1c5d35aad",
+     "host_cert": true,
+     "ts": 1791250651.539417
+    },
+    "c4e373ad73162b38": {
+     "_log": "ssl.log",
+     "cert_chain_fps": [
+      "cb926136cb1ba3036a29f1224a5fe4a134b44e206efaeae80873d5e1c5d35aad"
+     ],
+     "cipher": "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+     "client_cert_chain_fps": [],
+     "curve": "x25519",
+     "established": true,
+     "id.orig_h": "172.18.0.3",
+     "id.orig_p": 59322,
+     "id.resp_h": "172.18.0.2",
+     "id.resp_p": 4433,
+     "resumed": false,
+     "server_name": "port4433.lab.invalid",
+     "sni_matches_cert": false,
+     "ssl_history": "CsxknGIti",
+     "ts": 1791250651.53796,
+     "uid": "CJKFoj4bpHEhTeaRoj",
+     "validation_status": "unable to get local issuer certificate",
+     "version": "TLSv12"
+    }
+   }
+  },
+  {
+   "finding": {
+    "attack": [
+     {
+      "name": "Adversary-in-the-Middle",
+      "tactic": "credential-access",
+      "technique_id": "T1557",
+      "version": "v19.2"
+     },
+     {
+      "name": "Develop Capabilities: Digital Certificates",
+      "tactic": "resource-development",
+      "technique_id": "T1587.003",
+      "version": "v19.2"
+     }
+    ],
+    "controls": [
+     {
+      "control_id": "SC-17",
+      "framework": "NIST SP 800-53",
+      "rationale": "A self-signed certificate was not issued under a certificate policy or by an approved provider, and it acts as its own trust anchor.",
+      "title": "Public Key Infrastructure Certificates",
+      "version": "Rev. 5 (Release 5.2.0)"
+     }
+    ],
+    "count": 1,
+    "details": {
+     "issuer": "CN=selfsigned.lab.invalid",
+     "subject": "CN=selfsigned.lab.invalid"
+    },
+    "dst_ip": "172.18.0.2",
+    "dst_port": 4437,
+    "evidence": [
+     {
+      "log": "ssl.log",
+      "record_id": "e052b93b0894a7ec",
+      "ts": 1791250701.326648,
+      "uid": "CJKFoj4bpHEhTeaRoj"
+     },
+     {
+      "log": "x509.log",
+      "record_id": "0d95c32448a6cc35",
+      "ts": 1791250701.328165,
+      "uid": ""
+     }
+    ],
+    "explanation": null,
+    "explanation_sentences": [],
+    "finding_id": "1ce77761f477d601",
+    "first_seen": 1791250701.326648,
+    "last_seen": 1791250701.326648,
+    "protocol": "tls",
+    "rule_id": "cert.self_signed",
+    "severity": "medium",
+    "source": "zeek",
+    "src_ip": "172.18.0.3",
+    "title": "Self-signed certificate"
+   },
+   "fixture": "cert_self_signed",
+   "item_id": "cert_self_signed/1ce77761f477d601",
+   "records": {
+    "0d95c32448a6cc35": {
+     "_log": "x509.log",
+     "basic_constraints.ca": false,
+     "certificate.exponent": "65537",
+     "certificate.issuer": "CN=selfsigned.lab.invalid",
+     "certificate.key_alg": "rsaEncryption",
+     "certificate.key_length": 2048,
+     "certificate.key_type": "rsa",
+     "certificate.not_valid_after": 2082758400.0,
+     "certificate.not_valid_before": 1767225600.0,
+     "certificate.serial": "05E131930C134384075778C17885FBA27EA67A05",
+     "certificate.sig_alg": "sha256WithRSAEncryption",
+     "certificate.subject": "CN=selfsigned.lab.invalid",
+     "certificate.version": 3,
+     "client_cert": false,
+     "fingerprint": "be2f3e2c6f587e241544cf2d38026d8c5e5f836c3ee46524175ed854dc045ce2",
+     "host_cert": true,
+     "ts": 1791250701.328165
+    },
+    "e052b93b0894a7ec": {
+     "_log": "ssl.log",
+     "cert_chain_fps": [
+      "be2f3e2c6f587e241544cf2d38026d8c5e5f836c3ee46524175ed854dc045ce2"
+     ],
+     "cipher": "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+     "client_cert_chain_fps": [],
+     "curve": "x25519",
+     "established": true,
+     "id.orig_h": "172.18.0.3",
+     "id.orig_p": 46630,
+     "id.resp_h": "172.18.0.2",
+     "id.resp_p": 4437,
+     "resumed": false,
+     "server_name": "port4437.lab.invalid",
+     "sni_matches_cert": false,
+     "ssl_history": "CsxknGIti",
+     "ts": 1791250701.326648,
+     "uid": "CJKFoj4bpHEhTeaRoj",
+     "validation_status": "self signed certificate",
+     "version": "TLSv12"
+    }
+   }
+  },
+  {
+   "finding": {
+    "attack": [
+     {
+      "name": "Adversary-in-the-Middle",
+      "tactic": "credential-access",
+      "technique_id": "T1557",
+      "version": "v19.2"
+     }
+    ],
+    "controls": [
+     {
+      "control_id": "SC-13",
+      "framework": "NIST SP 800-53",
+      "rationale": "The certificate is signed with SHA-1, an outdated hash algorithm, so the cryptography in use is weaker than an organization should require.",
+      "title": "Cryptographic Protection",
+      "version": "Rev. 5 (Release 5.2.0)"
+     }
+    ],
+    "count": 1,
+    "details": {
+     "sig_alg": "sha1WithRSAEncryption",
+     "subject": "CN=sha1.lab.invalid"
+    },
+    "dst_ip": "172.18.0.2",
+    "dst_port": 4435,
+    "evidence": [
+     {
+      "log": "ssl.log",
+      "record_id": "be952d3e0f1bec0d",
+      "ts": 1791250684.714709,
+      "uid": "CJKFoj4bpHEhTeaRoj"
+     },
+     {
+      "log": "x509.log",
+      "record_id": "958751b72fb4e9b7",
+      "ts": 1791250684.716183,
+      "uid": ""
+     }
+    ],
+    "explanation": null,
+    "explanation_sentences": [],
+    "finding_id": "9a68f45acdc6f5a5",
+    "first_seen": 1791250684.714709,
+    "last_seen": 1791250684.714709,
+    "protocol": "tls",
+    "rule_id": "cert.sha1_signature",
+    "severity": "medium",
+    "source": "zeek",
+    "src_ip": "172.18.0.3",
+    "title": "Certificate signed with SHA-1"
+   },
+   "fixture": "cert_sha1",
+   "item_id": "cert_sha1/9a68f45acdc6f5a5",
+   "records": {
+    "958751b72fb4e9b7": {
+     "_log": "x509.log",
+     "certificate.exponent": "65537",
+     "certificate.issuer": "CN=MaxGuard Lab CA",
+     "certificate.key_alg": "rsaEncryption",
+     "certificate.key_length": 2048,
+     "certificate.key_type": "rsa",
+     "certificate.not_valid_after": 2106610612.0,
+     "certificate.not_valid_before": 1791250612.0,
+     "certificate.serial": "773279710B38B68D7086A26F52150F2D8EF40FA8",
+     "certificate.sig_alg": "sha1WithRSAEncryption",
+     "certificate.subject": "CN=sha1.lab.invalid",
+     "certificate.version": 1,
+     "client_cert": false,
+     "fingerprint": "5aab000f182f06fe56cd3534b0c654262cfe60779939e38a50e72394db5a2b22",
+     "host_cert": true,
+     "ts": 1791250684.716183
+    },
+    "be952d3e0f1bec0d": {
+     "_log": "ssl.log",
+     "cert_chain_fps": [
+      "5aab000f182f06fe56cd3534b0c654262cfe60779939e38a50e72394db5a2b22"
+     ],
+     "cipher": "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+     "client_cert_chain_fps": [],
+     "curve": "x25519",
+     "established": true,
+     "id.orig_h": "172.18.0.3",
+     "id.orig_p": 59418,
+     "id.resp_h": "172.18.0.2",
+     "id.resp_p": 4435,
+     "resumed": false,
+     "server_name": "port4435.lab.invalid",
+     "sni_matches_cert": false,
+     "ssl_history": "CsxknGIti",
+     "ts": 1791250684.714709,
+     "uid": "CJKFoj4bpHEhTeaRoj",
+     "validation_status": "unable to get local issuer certificate",
+     "version": "TLSv12"
+    }
+   }
+  },
+  {
+   "finding": {
+    "attack": [
+     {
+      "name": "Adversary-in-the-Middle",
+      "tactic": "credential-access",
+      "technique_id": "T1557",
+      "version": "v19.2"
+     }
+    ],
+    "controls": [
+     {
+      "control_id": "SC-12",
+      "framework": "NIST SP 800-53",
+      "rationale": "The certificate's RSA key is shorter than 2048 bits, too weak for the key management requirements this control asks the organization to set.",
+      "title": "Cryptographic Key Establishment and Management",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "SC-13",
+      "framework": "NIST SP 800-53",
+      "rationale": "A short RSA key is weaker cryptography than an organization should require for protecting connections.",
+      "title": "Cryptographic Protection",
+      "version": "Rev. 5 (Release 5.2.0)"
+     }
+    ],
+    "count": 1,
+    "details": {
+     "key_length": 1024,
+     "subject": "CN=weak.lab.invalid"
+    },
+    "dst_ip": "172.18.0.2",
+    "dst_port": 4434,
+    "evidence": [
+     {
+      "log": "ssl.log",
+      "record_id": "76805dc1cac6b2e9",
+      "ts": 1791250668.156485,
+      "uid": "CJKFoj4bpHEhTeaRoj"
+     },
+     {
+      "log": "x509.log",
+      "record_id": "5fc907ede8b8848c",
+      "ts": 1791250668.157393,
+      "uid": ""
+     }
+    ],
+    "explanation": null,
+    "explanation_sentences": [],
+    "finding_id": "ce46981b3d099d8d",
+    "first_seen": 1791250668.156485,
+    "last_seen": 1791250668.156485,
+    "protocol": "tls",
+    "rule_id": "cert.weak_key",
+    "severity": "high",
+    "source": "zeek",
+    "src_ip": "172.18.0.3",
+    "title": "Weak 1024-bit RSA key"
+   },
+   "fixture": "cert_weak_key",
+   "item_id": "cert_weak_key/ce46981b3d099d8d",
+   "records": {
+    "5fc907ede8b8848c": {
+     "_log": "x509.log",
+     "basic_constraints.ca": false,
+     "certificate.exponent": "65537",
+     "certificate.issuer": "CN=MaxGuard Lab CA",
+     "certificate.key_alg": "rsaEncryption",
+     "certificate.key_length": 1024,
+     "certificate.key_type": "rsa",
+     "certificate.not_valid_after": 2082758400.0,
+     "certificate.not_valid_before": 1767225600.0,
+     "certificate.serial": "7718F90F36BD35480756179EF38C412C41370B5B",
+     "certificate.sig_alg": "sha256WithRSAEncryption",
+     "certificate.subject": "CN=weak.lab.invalid",
+     "certificate.version": 3,
+     "client_cert": false,
+     "fingerprint": "2554678d605bf82365341a2cad01d1e7035d5428db648c78d8bdd0d9a9c269fc",
+     "host_cert": true,
+     "ts": 1791250668.157393
+    },
+    "76805dc1cac6b2e9": {
+     "_log": "ssl.log",
+     "cert_chain_fps": [
+      "2554678d605bf82365341a2cad01d1e7035d5428db648c78d8bdd0d9a9c269fc"
+     ],
+     "cipher": "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+     "client_cert_chain_fps": [],
+     "curve": "x25519",
+     "established": true,
+     "id.orig_h": "172.18.0.3",
+     "id.orig_p": 60940,
+     "id.resp_h": "172.18.0.2",
+     "id.resp_p": 4434,
+     "resumed": false,
+     "server_name": "port4434.lab.invalid",
+     "sni_matches_cert": false,
+     "ssl_history": "CsxknGIti",
+     "ts": 1791250668.156485,
+     "uid": "CJKFoj4bpHEhTeaRoj",
+     "validation_status": "unable to get local issuer certificate",
+     "version": "TLSv12"
+    }
+   }
+  },
+  {
+   "finding": {
+    "attack": [
+     {
+      "name": "Network Sniffing",
+      "tactic": "credential-access",
+      "technique_id": "T1040",
+      "version": "v19.2"
+     }
+    ],
+    "controls": [
+     {
+      "control_id": "SC-8",
+      "framework": "NIST SP 800-53",
+      "rationale": "FTP sends commands, files and the login without encryption, so the data it carries is not protected.",
+      "title": "Transmission Confidentiality and Integrity",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "SC-8(1)",
+      "framework": "NIST SP 800-53",
+      "rationale": "No encryption protects the FTP session, so anyone on the network path can read or change it.",
+      "title": "Transmission Confidentiality and Integrity | Cryptographic Protection",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "IA-5(1)",
+      "framework": "NIST SP 800-53",
+      "rationale": "The FTP login sent a password without encryption, but part (c) allows passwords only over cryptographically protected channels.",
+      "title": "Authenticator Management | Password-based Authentication",
+      "version": "Rev. 5 (Release 5.2.0)"
+     }
+    ],
+    "count": 1,
+    "details": {
+     "command": "PASV",
+     "user": "labuser"
+    },
+    "dst_ip": "172.18.0.2",
+    "dst_port": 21,
+    "evidence": [
+     {
+      "log": "ftp.log",
+      "record_id": "3ff82a1627e228ab",
+      "ts": 1791250302.331831,
+      "uid": "CJKFoj4bpHEhTeaRoj"
+     }
+    ],
+    "explanation": null,
+    "explanation_sentences": [],
+    "finding_id": "d40587760f9dbaf2",
+    "first_seen": 1791250302.331831,
+    "last_seen": 1791250302.331831,
+    "protocol": "ftp",
+    "rule_id": "cleartext.ftp",
+    "severity": "high",
+    "source": "zeek",
+    "src_ip": "172.18.0.3",
+    "title": "FTP login and data sent unencrypted"
+   },
+   "fixture": "ftp",
+   "item_id": "ftp/d40587760f9dbaf2",
+   "records": {
+    "3ff82a1627e228ab": {
+     "_log": "ftp.log",
+     "command": "PASV",
+     "data_channel.orig_h": "172.18.0.3",
+     "data_channel.passive": true,
+     "data_channel.resp_h": "172.18.0.2",
+     "data_channel.resp_p": 45817,
+     "id.orig_h": "172.18.0.3",
+     "id.orig_p": 39084,
+     "id.resp_h": "172.18.0.2",
+     "id.resp_p": 21,
+     "password": "<hidden>",
+     "reply_code": 227,
+     "reply_msg": "Entering passive mode (172,18,0,2,178,249).",
+     "ts": 1791250302.331831,
+     "uid": "CJKFoj4bpHEhTeaRoj",
+     "user": "labuser"
+    }
+   }
+  },
+  {
+   "finding": {
+    "attack": [
+     {
+      "name": "Network Sniffing",
+      "tactic": "credential-access",
+      "technique_id": "T1040",
+      "version": "v19.2"
+     }
+    ],
+    "controls": [
+     {
+      "control_id": "SC-8",
+      "framework": "NIST SP 800-53",
+      "rationale": "IMAP without TLS sends email in readable form, so the data it carries is not protected.",
+      "title": "Transmission Confidentiality and Integrity",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "SC-8(1)",
+      "framework": "NIST SP 800-53",
+      "rationale": "No TLS protects the IMAP session, so anyone on the network path can read or change it.",
+      "title": "Transmission Confidentiality and Integrity | Cryptographic Protection",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "IA-5(1)",
+      "framework": "NIST SP 800-53",
+      "rationale": "An IMAP login without TLS normally sends the mailbox password unencrypted, but part (c) allows passwords only over cryptographically protected channels.",
+      "title": "Authenticator Management | Password-based Authentication",
+      "version": "Rev. 5 (Release 5.2.0)"
+     }
+    ],
+    "count": 1,
+    "details": {},
+    "dst_ip": "172.18.0.2",
+    "dst_port": 143,
+    "evidence": [
+     {
+      "log": "maxguard_cleartext.log",
+      "record_id": "b186d40219198d14",
+      "ts": 1791250365.893353,
+      "uid": "CJKFoj4bpHEhTeaRoj"
+     }
+    ],
+    "explanation": null,
+    "explanation_sentences": [],
+    "finding_id": "97bbe888b21725d6",
+    "first_seen": 1791250365.893353,
+    "last_seen": 1791250365.893353,
+    "protocol": "imap",
+    "rule_id": "cleartext.imap",
+    "severity": "high",
+    "source": "zeek",
+    "src_ip": "172.18.0.3",
+    "title": "IMAP mail access in cleartext"
+   },
+   "fixture": "imap",
+   "item_id": "imap/97bbe888b21725d6",
+   "records": {
+    "b186d40219198d14": {
+     "_log": "maxguard_cleartext.log",
+     "id.orig_h": "172.18.0.3",
+     "id.orig_p": 47238,
+     "id.resp_h": "172.18.0.2",
+     "id.resp_p": 143,
+     "proto": "imap",
+     "service": "IMAP",
+     "ts": 1791250365.893353,
+     "uid": "CJKFoj4bpHEhTeaRoj"
+    }
+   }
+  },
+  {
+   "finding": {
+    "attack": [
+     {
+      "name": "Network Sniffing",
+      "tactic": "credential-access",
+      "technique_id": "T1040",
+      "version": "v19.2"
+     },
+     {
+      "name": "Adversary-in-the-Middle",
+      "tactic": "credential-access",
+      "technique_id": "T1557",
+      "version": "v19.2"
+     }
+    ],
+    "controls": [
+     {
+      "control_id": "SC-8",
+      "framework": "NIST SP 800-53",
+      "rationale": "Plain HTTP sends pages, form data and cookies in readable form, so the data it carries is not protected.",
+      "title": "Transmission Confidentiality and Integrity",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "SC-8(1)",
+      "framework": "NIST SP 800-53",
+      "rationale": "No TLS protects this HTTP traffic, so anyone on the network path can read or change it.",
+      "title": "Transmission Confidentiality and Integrity | Cryptographic Protection",
+      "version": "Rev. 5 (Release 5.2.0)"
+     }
+    ],
+    "count": 1,
+    "details": {
+     "basic_auth_user": null,
+     "host": "server:80",
+     "uri": "/"
+    },
+    "dst_ip": "172.18.0.2",
+    "dst_port": 80,
+    "evidence": [
+     {
+      "log": "http.log",
+      "record_id": "c6ccac80c30ac7ce",
+      "ts": 1791250493.37293,
+      "uid": "CJKFoj4bpHEhTeaRoj"
+     }
+    ],
+    "explanation": null,
+    "explanation_sentences": [],
+    "finding_id": "74dda0c69904c16e",
+    "first_seen": 1791250493.37293,
+    "last_seen": 1791250493.37293,
+    "protocol": "http",
+    "rule_id": "cleartext.http",
+    "severity": "medium",
+    "source": "zeek",
+    "src_ip": "172.18.0.3",
+    "title": "Unencrypted HTTP"
+   },
+   "fixture": "plain_http",
+   "item_id": "plain_http/74dda0c69904c16e",
+   "records": {
+    "c6ccac80c30ac7ce": {
+     "_log": "http.log",
+     "host": "server:80",
+     "id.orig_h": "172.18.0.3",
+     "id.orig_p": 40288,
+     "id.resp_h": "172.18.0.2",
+     "id.resp_p": 80,
+     "method": "GET",
+     "request_body_len": 0,
+     "resp_fuids": [
+      "FWdPeg1VU9ihKRmF5g"
+     ],
+     "resp_mime_types": [
+      "text/html"
+     ],
+     "response_body_len": 768,
+     "status_code": 200,
+     "status_msg": "OK",
+     "tags": [],
+     "trans_depth": 1,
+     "ts": 1791250493.37293,
+     "uid": "CJKFoj4bpHEhTeaRoj",
+     "uri": "/",
+     "user_agent": "Python-urllib/3.11",
+     "version": "1.0"
+    }
+   }
+  },
+  {
+   "finding": {
+    "attack": [
+     {
+      "name": "Network Sniffing",
+      "tactic": "credential-access",
+      "technique_id": "T1040",
+      "version": "v19.2"
+     },
+     {
+      "name": "Adversary-in-the-Middle",
+      "tactic": "credential-access",
+      "technique_id": "T1557",
+      "version": "v19.2"
+     }
+    ],
+    "controls": [
+     {
+      "control_id": "SC-8",
+      "framework": "NIST SP 800-53",
+      "rationale": "Plain HTTP on port 8080 sends pages, form data and cookies in readable form, so the data it carries is not protected.",
+      "title": "Transmission Confidentiality and Integrity",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "SC-8(1)",
+      "framework": "NIST SP 800-53",
+      "rationale": "No TLS protects this HTTP traffic on port 8080, so anyone on the network path can read or change it.",
+      "title": "Transmission Confidentiality and Integrity | Cryptographic Protection",
+      "version": "Rev. 5 (Release 5.2.0)"
+     }
+    ],
+    "count": 1,
+    "details": {
+     "host": "server:8080"
+    },
+    "dst_ip": "172.18.0.2",
+    "dst_port": 8080,
+    "evidence": [
+     {
+      "log": "http.log",
+      "record_id": "cdeaf95188e0c246",
+      "ts": 1791250510.138296,
+      "uid": "CJKFoj4bpHEhTeaRoj"
+     }
+    ],
+    "explanation": null,
+    "explanation_sentences": [],
+    "finding_id": "2460c354583953c4",
+    "first_seen": 1791250510.138296,
+    "last_seen": 1791250510.138296,
+    "protocol": "http",
+    "rule_id": "cleartext.http_alt",
+    "severity": "medium",
+    "source": "zeek",
+    "src_ip": "172.18.0.3",
+    "title": "Unencrypted HTTP on port 8080"
+   },
+   "fixture": "plain_http_alt",
+   "item_id": "plain_http_alt/2460c354583953c4",
+   "records": {
+    "cdeaf95188e0c246": {
+     "_log": "http.log",
+     "host": "server:8080",
+     "id.orig_h": "172.18.0.3",
+     "id.orig_p": 43918,
+     "id.resp_h": "172.18.0.2",
+     "id.resp_p": 8080,
+     "method": "GET",
+     "request_body_len": 0,
+     "resp_fuids": [
+      "FVjJQ31hkGbB6bjFs7"
+     ],
+     "resp_mime_types": [
+      "text/html"
+     ],
+     "response_body_len": 768,
+     "status_code": 200,
+     "status_msg": "OK",
+     "tags": [],
+     "trans_depth": 1,
+     "ts": 1791250510.138296,
+     "uid": "CJKFoj4bpHEhTeaRoj",
+     "uri": "/",
+     "user_agent": "Python-urllib/3.11",
+     "version": "1.0"
+    }
+   }
+  },
+  {
+   "finding": {
+    "attack": [
+     {
+      "name": "Network Sniffing",
+      "tactic": "credential-access",
+      "technique_id": "T1040",
+      "version": "v19.2"
+     }
+    ],
+    "controls": [
+     {
+      "control_id": "SC-8",
+      "framework": "NIST SP 800-53",
+      "rationale": "POP3 without TLS sends email in readable form, so the data it carries is not protected.",
+      "title": "Transmission Confidentiality and Integrity",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "SC-8(1)",
+      "framework": "NIST SP 800-53",
+      "rationale": "No TLS protects the POP3 session, so anyone on the network path can read or change it.",
+      "title": "Transmission Confidentiality and Integrity | Cryptographic Protection",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "IA-5(1)",
+      "framework": "NIST SP 800-53",
+      "rationale": "A POP3 login without TLS normally sends the mailbox password unencrypted, but part (c) allows passwords only over cryptographically protected channels.",
+      "title": "Authenticator Management | Password-based Authentication",
+      "version": "Rev. 5 (Release 5.2.0)"
+     }
+    ],
+    "count": 1,
+    "details": {},
+    "dst_ip": "172.18.0.2",
+    "dst_port": 110,
+    "evidence": [
+     {
+      "log": "maxguard_cleartext.log",
+      "record_id": "a1ceb74841e22aa8",
+      "ts": 1791250348.269109,
+      "uid": "CJKFoj4bpHEhTeaRoj"
+     }
+    ],
+    "explanation": null,
+    "explanation_sentences": [],
+    "finding_id": "75f100e53bb74319",
+    "first_seen": 1791250348.269109,
+    "last_seen": 1791250348.269109,
+    "protocol": "pop3",
+    "rule_id": "cleartext.pop3",
+    "severity": "high",
+    "source": "zeek",
+    "src_ip": "172.18.0.3",
+    "title": "POP3 mail retrieval in cleartext"
+   },
+   "fixture": "pop3",
+   "item_id": "pop3/75f100e53bb74319",
+   "records": {
+    "a1ceb74841e22aa8": {
+     "_log": "maxguard_cleartext.log",
+     "id.orig_h": "172.18.0.3",
+     "id.orig_p": 59634,
+     "id.resp_h": "172.18.0.2",
+     "id.resp_p": 110,
+     "proto": "pop3",
+     "service": "POP3",
+     "ts": 1791250348.269109,
+     "uid": "CJKFoj4bpHEhTeaRoj"
+    }
+   }
+  },
+  {
+   "finding": {
+    "attack": [
+     {
+      "name": "Network Sniffing",
+      "tactic": "credential-access",
+      "technique_id": "T1040",
+      "version": "v19.2"
+     }
+    ],
+    "controls": [
+     {
+      "control_id": "SC-8",
+      "framework": "NIST SP 800-53",
+      "rationale": "Telnet sends every keystroke and every screen of output in readable form, so the data it carries is not protected.",
+      "title": "Transmission Confidentiality and Integrity",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "SC-8(1)",
+      "framework": "NIST SP 800-53",
+      "rationale": "Telnet has no encryption, so nothing stops someone on the network path from reading or changing the session.",
+      "title": "Transmission Confidentiality and Integrity | Cryptographic Protection",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "AC-17(2)",
+      "framework": "NIST SP 800-53",
+      "rationale": "Telnet is a remote login session, and this control requires remote access sessions to be protected with encryption.",
+      "title": "Remote Access | Protection of Confidentiality and Integrity Using Encryption",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "IA-5(1)",
+      "framework": "NIST SP 800-53",
+      "rationale": "A Telnet login sends the password without encryption, but part (c) allows passwords only over cryptographically protected channels.",
+      "title": "Authenticator Management | Password-based Authentication",
+      "version": "Rev. 5 (Release 5.2.0)"
+     }
+    ],
+    "count": 1,
+    "details": {},
+    "dst_ip": "172.18.0.2",
+    "dst_port": 23,
+    "evidence": [
+     {
+      "log": "maxguard_cleartext.log",
+      "record_id": "aab5e36795eaa77e",
+      "ts": 1791250285.789302,
+      "uid": "CJKFoj4bpHEhTeaRoj"
+     }
+    ],
+    "explanation": null,
+    "explanation_sentences": [],
+    "finding_id": "c6823b232c932762",
+    "first_seen": 1791250285.789302,
+    "last_seen": 1791250285.789302,
+    "protocol": "telnet",
+    "rule_id": "cleartext.telnet",
+    "severity": "high",
+    "source": "zeek",
+    "src_ip": "172.18.0.3",
+    "title": "Telnet session in cleartext"
+   },
+   "fixture": "telnet",
+   "item_id": "telnet/c6823b232c932762",
+   "records": {
+    "aab5e36795eaa77e": {
+     "_log": "maxguard_cleartext.log",
+     "id.orig_h": "172.18.0.3",
+     "id.orig_p": 55398,
+     "id.resp_h": "172.18.0.2",
+     "id.resp_p": 23,
+     "proto": "telnet",
+     "service": "",
+     "ts": 1791250285.789302,
+     "uid": "CJKFoj4bpHEhTeaRoj"
+    }
+   }
+  },
+  {
+   "finding": {
+    "attack": [
+     {
+      "name": "Network Sniffing",
+      "tactic": "credential-access",
+      "technique_id": "T1040",
+      "version": "v19.2"
+     },
+     {
+      "name": "Downgrade Attack",
+      "tactic": "defense-impairment",
+      "technique_id": "T1689",
+      "version": "v19.2"
+     }
+    ],
+    "controls": [
+     {
+      "control_id": "SC-8(1)",
+      "framework": "NIST SP 800-53",
+      "rationale": "The connection used a weak or NULL cipher, so data in transit was weakly encrypted or not encrypted at all.",
+      "title": "Transmission Confidentiality and Integrity | Cryptographic Protection",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "SC-13",
+      "framework": "NIST SP 800-53",
+      "rationale": "A weak or NULL cipher is not the kind of cryptography an organization should require for data in transit.",
+      "title": "Cryptographic Protection",
+      "version": "Rev. 5 (Release 5.2.0)"
+     }
+    ],
+    "count": 1,
+    "details": {
+     "cipher": "TLS_RSA_WITH_NULL_SHA256"
+    },
+    "dst_ip": "172.18.0.2",
+    "dst_port": 4432,
+    "evidence": [
+     {
+      "log": "ssl.log",
+      "record_id": "9b48dcdde032ec78",
+      "ts": 1791250634.910889,
+      "uid": "CJKFoj4bpHEhTeaRoj"
+     }
+    ],
+    "explanation": null,
+    "explanation_sentences": [],
+    "finding_id": "508197254fa1c6d8",
+    "first_seen": 1791250634.910889,
+    "last_seen": 1791250634.910889,
+    "protocol": "tls",
+    "rule_id": "tls.weak_cipher",
+    "severity": "high",
+    "source": "zeek",
+    "src_ip": "172.18.0.3",
+    "title": "Weak cipher TLS_RSA_WITH_NULL_SHA256"
+   },
+   "fixture": "tls_weak_cipher",
+   "item_id": "tls_weak_cipher/508197254fa1c6d8",
+   "records": {
+    "9b48dcdde032ec78": {
+     "_log": "ssl.log",
+     "cert_chain_fps": [
+      "915f2f9f976bc2afbd1d258d5f949ae46c8790291d49cc62c0972064cf947ddb"
+     ],
+     "cipher": "TLS_RSA_WITH_NULL_SHA256",
+     "client_cert_chain_fps": [],
+     "established": true,
+     "id.orig_h": "172.18.0.3",
+     "id.orig_p": 60174,
+     "id.resp_h": "172.18.0.2",
+     "id.resp_p": 4432,
+     "resumed": false,
+     "server_name": "port4432.lab.invalid",
+     "sni_matches_cert": false,
+     "ssl_history": "CsxnGIti",
+     "ts": 1791250634.910889,
+     "uid": "CJKFoj4bpHEhTeaRoj",
+     "validation_status": "unable to get local issuer certificate",
+     "version": "TLSv12"
+    }
+   }
+  },
+  {
+   "finding": {
+    "attack": [
+     {
+      "name": "Adversary-in-the-Middle",
+      "tactic": "credential-access",
+      "technique_id": "T1557",
+      "version": "v19.2"
+     },
+     {
+      "name": "Downgrade Attack",
+      "tactic": "defense-impairment",
+      "technique_id": "T1689",
+      "version": "v19.2"
+     }
+    ],
+    "controls": [
+     {
+      "control_id": "SC-8(1)",
+      "framework": "NIST SP 800-53",
+      "rationale": "The connection used an outdated SSL or TLS version, so its protection in transit is weaker than it should be.",
+      "title": "Transmission Confidentiality and Integrity | Cryptographic Protection",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "SC-13",
+      "framework": "NIST SP 800-53",
+      "rationale": "An outdated SSL or TLS version is not the kind of cryptography an organization should require for data in transit.",
+      "title": "Cryptographic Protection",
+      "version": "Rev. 5 (Release 5.2.0)"
+     }
+    ],
+    "count": 1,
+    "details": {
+     "server_name": "port4431.lab.invalid",
+     "version": "TLSv10"
+    },
+    "dst_ip": "172.18.0.2",
+    "dst_port": 4431,
+    "evidence": [
+     {
+      "log": "ssl.log",
+      "record_id": "812dd8e25732d7e9",
+      "ts": 1791250618.240692,
+      "uid": "CJKFoj4bpHEhTeaRoj"
+     }
+    ],
+    "explanation": null,
+    "explanation_sentences": [],
+    "finding_id": "84b305c9d7dd0654",
+    "first_seen": 1791250618.240692,
+    "last_seen": 1791250618.240692,
+    "protocol": "tls",
+    "rule_id": "tls.weak_version",
+    "severity": "high",
+    "source": "zeek",
+    "src_ip": "172.18.0.3",
+    "title": "Outdated protocol TLSv10"
+   },
+   "fixture": "tls_weak_version",
+   "item_id": "tls_weak_version/84b305c9d7dd0654",
+   "records": {
+    "812dd8e25732d7e9": {
+     "_log": "ssl.log",
+     "cert_chain_fps": [
+      "915f2f9f976bc2afbd1d258d5f949ae46c8790291d49cc62c0972064cf947ddb"
+     ],
+     "cipher": "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+     "client_cert_chain_fps": [],
+     "curve": "x25519",
+     "established": true,
+     "id.orig_h": "172.18.0.3",
+     "id.orig_p": 59362,
+     "id.resp_h": "172.18.0.2",
+     "id.resp_p": 4431,
+     "resumed": false,
+     "server_name": "port4431.lab.invalid",
+     "sni_matches_cert": false,
+     "ssl_history": "CsxknGIti",
+     "ts": 1791250618.240692,
+     "uid": "CJKFoj4bpHEhTeaRoj",
+     "validation_status": "unable to get local issuer certificate",
+     "version": "TLSv10"
+    }
+   }
+  },
+  {
+   "finding": {
+    "attack": [
+     {
+      "name": "Adversary-in-the-Middle",
+      "tactic": "credential-access",
+      "technique_id": "T1557",
+      "version": "v19.2"
+     }
+    ],
+    "controls": [
+     {
+      "control_id": "AC-17(2)",
+      "framework": "NIST SP 800-53",
+      "rationale": "The remote desktop session used legacy Standard RDP Security instead of TLS, so it lacks the encryption protection this control expects for remote access.",
+      "title": "Remote Access | Protection of Confidentiality and Integrity Using Encryption",
+      "version": "Rev. 5 (Release 5.2.0)"
+     },
+     {
+      "control_id": "SC-23",
+      "framework": "NIST SP 800-53",
+      "rationale": "Without TLS the client cannot check the server's identity, so the session is open to a man-in-the-middle.",
+      "title": "Session Authenticity",
+      "version": "Rev. 5 (Release 5.2.0)"
+     }
+    ],
+    "count": 1,
+    "details": {
+     "security_protocol": "RDP"
+    },
+    "dst_ip": "192.168.56.30",
+    "dst_port": 3389,
+    "evidence": [
+     {
+      "log": "rdp.log",
+      "record_id": "39aa9989ae900dcf",
+      "ts": 1791253200.003,
+      "uid": "CJKFoj4bpHEhTeaRoj"
+     }
+    ],
+    "explanation": null,
+    "explanation_sentences": [],
+    "finding_id": "0ea47ba067afa71a",
+    "first_seen": 1791253200.003,
+    "last_seen": 1791253200.003,
+    "protocol": "rdp",
+    "rule_id": "rdp.standard_security",
+    "severity": "high",
+    "source": "zeek",
+    "src_ip": "192.168.56.50",
+    "title": "RDP using legacy Standard RDP Security"
+   },
+   "fixture": "_handmade/rdp",
+   "item_id": "_handmade/rdp/0ea47ba067afa71a",
+   "records": {
+    "39aa9989ae900dcf": {
+     "_log": "rdp.log",
+     "cert_count": 0,
+     "cookie": "labuser",
+     "id.orig_h": "192.168.56.50",
+     "id.orig_p": 50001,
+     "id.resp_h": "192.168.56.30",
+     "id.resp_p": 3389,
+     "security_protocol": "RDP",
+     "ts": 1791253200.003,
+     "uid": "CJKFoj4bpHEhTeaRoj"
+    }
+   }
+  }
+ ],
+ "schema": "maxguard.eval_set/1"
+}

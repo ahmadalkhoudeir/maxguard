@@ -1,0 +1,1 @@
+([Sentence(text='Telnet was used.', evidence_ids=['aab5e36795eaa77e'])], 1)

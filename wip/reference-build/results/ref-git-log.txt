@@ -1,0 +1,16 @@
+341fcf4 2026-10-06 15:59:05 +0000 package data: zeek/site.zeek and live scripts
+a46f825 2026-10-06 15:58:31 +0000 zeek: site.zeek replaces Zeek's local policy (no DNS lookups: detect-MHR, interesting-hostnames, extend-email); guard test
+d396016 2026-10-06 15:33:38 +0000 api: refuse same-site and null-origin changes (OWASP CSRF); static mount test without dashboard files
+5596ddb 2026-10-06 15:25:10 +0000 lead: custody log (AMO-05), signed intel bundles (JAI-11), prompt-injection set and tests (JON-06)
+850a5b2 2026-10-06 15:15:57 +0000 lead: API (JAI-07), analyze(sensor_id=), spec copies and API contract
+cce3abc 2026-10-06 10:48:51 +0000 duckdb: no extension auto-install; dev: httpx2
+9e58ffe 2026-10-06 10:32:35 +0000 docs wording: task IDs instead of planning jargon
+167d729 2026-10-06 10:29:42 +0000 eval scripts, make_fixtures, suricata runner test
+a2d8a67 2026-10-06 03:18:06 +0000 lead: split tests by task, contract/pipeline/package tests
+aff34b5 2026-10-06 02:59:21 +0000 lead: lint config + fixes
+461b5b0 2026-10-06 02:58:18 +0000 lead: ai reason, repeat uploads, reopen
+185a0d3 2026-10-06 02:50:11 +0000 wave1 + lead fixes
+035910d 2026-10-06 01:44:48 +0000 spec
+647933a 2026-10-06 01:44:37 +0000 zeek+eve fixtures
+d95fe5d 2026-10-06 01:43:14 +0000 ignore venv
+d08f63c 2026-10-06 01:43:09 +0000 reference spine

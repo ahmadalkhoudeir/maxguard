@@ -1,0 +1,2 @@
+1 events written
+conn 172.18.0.3 -> 172.18.0.2 23 tcp/23 SF out=23 in=40

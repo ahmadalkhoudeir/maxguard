@@ -1,0 +1,87 @@
+%YAML 1.1
+---
+# MaxGuard's Suricata settings for the LIVE sensor (Jakub, JAK-07).
+# A copy of maxguard-suricata.yaml (capture files) with three changes:
+#   1. af-packet: listen on the capture port named on the command line
+#      (--af-packet=eth0). Listening only: no copy-mode, so Suricata never sends.
+#   2. eve-log: a new file every minute, eve-YYYY-MM-DD-HHMM.json (UTC), so the
+#      minutes of each interval can be merged into that interval's Zeek folder.
+#   3. unix-command off: nothing on the sensor needs Suricata's control socket.
+# Community ID and JA4 are exactly as in maxguard-suricata.yaml.
+vars:
+  address-groups:
+    HOME_NET: "[10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7]"
+    EXTERNAL_NET: "!$HOME_NET"
+  port-groups:
+    HTTP_PORTS: "80"
+    SHELLCODE_PORTS: "!80"
+    ORACLE_PORTS: 1521
+    SSH_PORTS: 22
+    DNP3_PORTS: 20000
+    MODBUS_PORTS: 502
+    FILE_DATA_PORTS: "[$HTTP_PORTS,110,143]"
+    FTP_PORTS: 21
+    GENEVE_PORTS: 6081
+    VXLAN_PORTS: 4789
+    TEREDO_PORTS: 3544
+
+default-log-dir: /var/log/suricata/
+
+af-packet:
+  # "default" applies to whichever interface the command line names, so the
+  # same file works for eth0 on a Raspberry Pi and enp1s0 on a mini PC.
+  - interface: default
+    # Spread the work over all cores, keeping each connection on one thread.
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+    # Never add copy-mode or copy-iface here: they turn Suricata into an inline
+    # device that sends packets, and a MaxGuard sensor only listens (CLAUDE.md rule 5).
+
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      # A new file each minute, named after the minute it starts in.
+      # rotate-interval "minute" (Suricata 8.0 user guide, "Rotate log file").
+      filename: eve-%Y-%m-%d-%H%M.json
+      rotate-interval: minute
+      community-id: yes
+      community-id-seed: 0
+      types:
+        - alert
+        - dns
+        - http:
+            extended: yes
+        - tls:
+            extended: yes
+            ja4: on
+        - dhcp:
+            enabled: yes
+        - flow
+
+app-layer:
+  protocols:
+    tls:
+      enabled: yes
+      detection-ports:
+        dp: 443
+      ja4-fingerprints: yes
+    http:
+      enabled: yes
+    dns:
+      tcp:
+        enabled: yes
+      udp:
+        enabled: yes
+    dhcp:
+      enabled: yes
+
+unix-command:
+  enabled: no
+
+logging:
+  default-log-level: notice
+  outputs:
+    - console:
+        enabled: yes

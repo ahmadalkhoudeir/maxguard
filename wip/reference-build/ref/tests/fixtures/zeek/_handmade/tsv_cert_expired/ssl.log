@@ -1,0 +1,10 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	ssl
+#open	2026-10-06-02-49-18
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	version	cipher	curve	server_name	resumed	last_alert	next_protocol	established	ssl_history	cert_chain_fps	client_cert_chain_fps	sni_matches_cert	validation_status
+#types	time	string	addr	port	addr	port	string	string	string	string	bool	string	string	bool	string	vector[string]	vector[string]	bool	string
+1791250651.537960	CJKFoj4bpHEhTeaRoj	172.18.0.3	59322	172.18.0.2	4433	TLSv12	TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384	x25519	port4433.lab.invalid	F	-	-	T	CsxknGIti	cb926136cb1ba3036a29f1224a5fe4a134b44e206efaeae80873d5e1c5d35aad	(empty)	F	unable to get local issuer certificate
+#close	2026-10-06-02-49-18

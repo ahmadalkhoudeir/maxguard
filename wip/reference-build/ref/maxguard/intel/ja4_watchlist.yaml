@@ -1,0 +1,17 @@
+# JA4 watchlist for the tls.ja4_watchlist rule (maxguard/rules/ja4.py).
+#
+# A list of TLS client fingerprints (JA4 only, from Suricata's eve.json) that
+# should raise a "high" finding when a device on the network uses them.
+# Each entry needs three keys:
+#   ja4:    the fingerprint, e.g. t13d1516h2_8daaf6152771_e5627efa2ab1
+#   label:  what it is, in plain words
+#   source: where it came from (our own capture, or a source whose license allows copying)
+#
+# The list ships EMPTY on purpose. Do not paste entries from third-party JA4
+# databases unless their license allows it and you record that in "source".
+#
+# Example (from MaxGuard's own lab capture tests/pcaps/clean_tls13.pcap):
+# - ja4: t13d041000_16476d049b0b_78f1d400d464
+#   label: "MaxGuard lab client (Python ssl, TLS 1.3 only)"
+#   source: "MaxGuard lab capture clean_tls13.pcap (Suricata 7.0.10)"
+[]
