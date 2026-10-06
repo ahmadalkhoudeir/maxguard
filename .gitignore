@@ -18,15 +18,19 @@ venv/
 *.cap
 !tests/pcaps/*.pcap
 !tests/pcaps/*.pcapng
+!tests/fixtures/**/*.pcap
 lab/captures/
 
-# Runtime data
+# Runtime data, and the offline bundle and package builds (gigabytes)
 data/
+dist/
+build/
 scan_results.json
 maxguard-report.json
 
-# Legacy build output
+# Legacy build output (before and after the move to legacy/ in JAI-01)
 dashboard/maxguard/
+legacy/dashboard/maxguard/
 
 # OS and editor files
 .DS_Store
