@@ -344,7 +344,7 @@ so it is never committed.
 
 #### Goal
 
-Write the two Zeek scripts MaxGuard loads on every run. `cleartext.zeek` writes `maxguard_cleartext.log`, one line per real Telnet, POP3 or IMAP session that was not upgraded to TLS. `inventory.zeek` turns on Zeek's host, service and software tracking for every address, which the asset inventory (JAK-04) reads.
+Write the two Zeek scripts MaxGuard loads on every run. `cleartext.zeek` writes `maxguard_cleartext.log`, one line per real Telnet, POP3 or IMAP session that was not upgraded to TLS. `inventory.zeek` turns on Zeek's host, service and software tracking for every address, which the asset inventory (JAK-04) reads. `site.zeek` replaces Zeek's own `local` policy, without the scripts that make DNS lookups.
 
 #### Prerequisites
 
@@ -424,10 +424,69 @@ redef Known::service_tracking = ALL_HOSTS;
 redef Software::asset_tracking = ALL_HOSTS;
 ```
 
-**Step 4.** Run Zeek on the Telnet capture with your script (the Zeek image has everything; `--network none` proves it needs no network):
+**Step 4.** Create `maxguard/zeek/site.zeek`, MaxGuard's site policy. It is outside `scripts/` on purpose: everything in `scripts/` is loaded on every run, and this file replaces the `local` argument instead:
+
+```zeek
+##! MaxGuard's Zeek site policy (Jakub, JAK-01). MaxGuard loads this file
+##! instead of Zeek's own "local" policy, on capture files and on the live sensor.
+##!
+##! It is Zeek 9.0.0's share/zeek/site/local.zeek without the three scripts that
+##! send network traffic of their own. MaxGuard never contacts anything
+##! (CLAUDE.md rule 1) and a sensor only listens (rule 5):
+##!
+##! - frameworks/files/detect-MHR asks Team Cymru's Malware Hash Registry, with a
+##!   DNS query, about the SHA-1 of every executable, PDF, video ... seen on the
+##!   network. That also tells an outside service what people downloaded.
+##! - protocols/ssh/interesting-hostnames makes a reverse DNS lookup of both ends
+##!   of every successful SSH login.
+##! - frameworks/notice/extend-email/hostnames makes reverse DNS lookups for
+##!   notice e-mails.
+##!
+##! Zeek runs as its own program, so the Python offline guard (maxguard/offline.py)
+##! cannot stop it: leaving these scripts out is the fix. Everything else is the
+##! same as local.zeek, so the logs MaxGuard reads do not change.
+
+# Kept as in local.zeek: it only salts file IDs (fuid), and a different value
+# would change every file ID in the test fixtures.
+redef digest_salt = "Please change this value.";
+
+@load misc/loaded-scripts
+@load misc/capture-loss
+@load misc/stats
+
+@load frameworks/software/vulnerable
+@load frameworks/software/version-changes
+@load-sigs frameworks/signatures/detect-windows-shells
+
+@load protocols/ftp/software
+@load protocols/smtp/software
+@load protocols/ssh/software
+@load protocols/http/software
+
+@load protocols/dns/detect-external-names
+@load protocols/ftp/detect
+
+@load protocols/conn/known-hosts
+@load protocols/conn/known-services
+@load protocols/ssl/known-certs
+
+@load protocols/ssl/validate-certs
+@load protocols/ssl/log-hostcerts-only
+
+@load protocols/ssh/geo-data
+@load protocols/ssh/detect-bruteforcing
+
+@load protocols/http/detect-sql-injection
+
+@load frameworks/files/hash-all-files
+```
+
+Zeek's own `local` policy is fine on an analyst's laptop that is meant to be online, but MaxGuard must never contact anything (CLAUDE.md rule 1), and Zeek runs as its own program, so MaxGuard's Python offline guard cannot stop its DNS queries. This was found while building the live sensor in planning.
+
+**Step 5.** Run Zeek on the Telnet capture with your script (the Zeek image has everything; `--network none` proves it needs no network):
 
 ```bash
-docker run --rm --network none -v "$PWD:/src:ro" -w /tmp zeek/zeek:9.0.0 sh -c "zeek -D -C -r /src/tests/pcaps/telnet.pcap local LogAscii::use_json=T /src/maxguard/zeek/scripts/cleartext.zeek && cat maxguard_cleartext.log"
+docker run --rm --network none -v "$PWD:/src:ro" -w /tmp zeek/zeek:9.0.0 sh -c "zeek -D -C -r /src/tests/pcaps/telnet.pcap /src/maxguard/zeek/site.zeek LogAscii::use_json=T /src/maxguard/zeek/scripts/cleartext.zeek && cat maxguard_cleartext.log"
 ```
 
 Expected output:
@@ -436,10 +495,10 @@ Expected output:
 {"ts":1791250285.789302,"uid":"CJKFoj4bpHEhTeaRoj","id.orig_h":"172.18.0.3","id.orig_p":55398,"id.resp_h":"172.18.0.2","id.resp_p":23,"service":"","proto":"telnet"}
 ```
 
-**Step 5.** Run it on the clean TLS 1.3 capture: there must be **no** cleartext log, and the inventory logs must appear:
+**Step 6.** Run it on the clean TLS 1.3 capture: there must be **no** cleartext log, and the inventory logs must appear:
 
 ```bash
-docker run --rm --network none -v "$PWD:/src:ro" -w /tmp zeek/zeek:9.0.0 sh -c "zeek -D -C -r /src/tests/pcaps/clean_tls13.pcap local LogAscii::use_json=T /src/maxguard/zeek/scripts/*.zeek && ls *.log"
+docker run --rm --network none -v "$PWD:/src:ro" -w /tmp zeek/zeek:9.0.0 sh -c "zeek -D -C -r /src/tests/pcaps/clean_tls13.pcap /src/maxguard/zeek/site.zeek LogAscii::use_json=T /src/maxguard/zeek/scripts/*.zeek && ls *.log"
 ```
 
 Expected output:
@@ -455,7 +514,20 @@ ssl.log
 stats.log
 ```
 
-**Step 6.** Commit, push, and open the pull request:
+**Step 7.** Compare the scripts that `site.zeek` and Zeek's `local` load: `loaded_scripts.log` names every script, and the first count must be 0:
+
+```bash
+docker run --rm --network none -v "$PWD:/src:ro" -w /tmp zeek/zeek:9.0.0 sh -c "zeek -D -C -r /src/tests/pcaps/plain_http.pcap /src/maxguard/zeek/site.zeek; grep -c 'detect-MHR\|interesting-hostnames\|extend-email' loaded_scripts.log; rm -f *.log; zeek -D -C -r /src/tests/pcaps/plain_http.pcap local; grep -c 'detect-MHR\|interesting-hostnames\|extend-email' loaded_scripts.log"
+```
+
+Expected output:
+
+```text
+0
+3
+```
+
+**Step 8.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -468,11 +540,11 @@ git push -u origin HEAD
 
 #### How to test
 
-The Telnet run prints one JSON line with `"proto":"telnet"`. The clean run lists `known_hosts.log` and `known_services.log` but no `maxguard_cleartext.log`. KAR-02 then bakes both scripts into the test fixtures.
+The Telnet run prints one JSON line with `"proto":"telnet"`. The clean run lists `known_hosts.log` and `known_services.log` but no `maxguard_cleartext.log`. The lookups check prints `0` for `site.zeek` and `3` for `local`. KAR-02 then bakes both scripts into the test fixtures.
 
 #### What you just did and why
 
-Zeek already logs FTP and HTTP in detail, but it has no Telnet log, and its POP3/IMAP support does not say clearly whether a session stayed unencrypted. A small script that watches the port and the analyzers gives one clear line per cleartext session, with the connection `uid` that links it to `conn.log`. By default Zeek tracks known hosts only inside its `Site::local_nets` list, which is empty in a container, so without `ALL_HOSTS` the inventory would always be empty.
+Zeek already logs FTP and HTTP in detail, but it has no Telnet log, and its POP3/IMAP support does not say clearly whether a session stayed unencrypted. A small script that watches the port and the analyzers gives one clear line per cleartext session, with the connection `uid` that links it to `conn.log`. By default Zeek tracks known hosts only inside its `Site::local_nets` list, which is empty in a container, so without `ALL_HOSTS` the inventory would always be empty. And a sensor that quietly asks an outside DNS service about the files people download would break the promise MaxGuard makes in every report: your data never leaves this computer.
 
 #### Pull request checklist
 

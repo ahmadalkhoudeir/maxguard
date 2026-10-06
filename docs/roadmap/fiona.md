@@ -371,12 +371,16 @@ Fall 2026 roadmap runner with two v2.0 additions:
   Only use -D for capture files; a live sensor keeps random seeds.
 - community-id logging: adds `community_id` to conn.log, the same value
   Suricata writes, so Zeek and Suricata records can be joined.
+And one fix found in planning: Zeek's own "local" policy makes DNS lookups
+(detect-MHR asks an outside service about file hashes), so MaxGuard loads its
+own copy without them, site.zeek (CLAUDE.md rule 1).
 """
 
 import subprocess
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).parent / "scripts"
+SITE_POLICY = Path(__file__).parent / "site.zeek"  # Zeek's "local" without network lookups
 
 
 class ZeekError(RuntimeError):
@@ -387,7 +391,7 @@ def run_zeek(pcap: Path, out_dir: Path, timeout: int = 1800) -> Path:
     """Run Zeek on one capture file and write JSON logs into out_dir."""
     out_dir.mkdir(parents=True, exist_ok=True)
     extra = sorted(str(p) for p in SCRIPTS_DIR.glob("*.zeek"))  # Jakub's scripts
-    cmd = ["zeek", "-D", "-C", "-r", str(pcap.resolve()), "local",
+    cmd = ["zeek", "-D", "-C", "-r", str(pcap.resolve()), str(SITE_POLICY),
            "LogAscii::use_json=T", "policy/protocols/conn/community-id-logging", *extra]
     try:
         res = subprocess.run(cmd, cwd=out_dir, capture_output=True,
@@ -404,9 +408,69 @@ def run_zeek(pcap: Path, out_dir: Path, timeout: int = 1800) -> Path:
     return out_dir
 ```
 
-`-D` makes Zeek's connection IDs (`uid`) the same on every run, and the Community ID script adds the `community_id` that Suricata also writes. `docs/ARCHITECTURE.md` section 7 explains why both matter.
+`-D` makes Zeek's connection IDs (`uid`) the same on every run, and the Community ID script adds the `community_id` that Suricata also writes. `docs/ARCHITECTURE.md` section 7 explains why both matter. The runner loads `site.zeek` (JAK-01) where Zeek's documentation would say `local`.
 
-**Step 3.** Create `maxguard/adapters/pcap.py`:
+**Step 3.** Create `tests/unit/test_zeek_site.py`. It fails if any MaxGuard `.zeek` file loads `local` or a script that makes DNS lookups, and checks that the runner passes `site.zeek` to Zeek:
+
+```python
+"""MaxGuard's Zeek site policy makes no network lookups (Jakub, JAK-01).
+
+Zeek's own "local" policy loads scripts that send DNS queries (CLAUDE.md rule 1).
+Zeek runs as its own program, so the Python offline guard cannot catch them:
+these tests make sure no MaxGuard Zeek file loads them, and that the runner
+uses site.zeek instead of "local".
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+from maxguard.zeek import runner
+
+ZEEK_DIR = Path(runner.__file__).parent
+NETWORK_SCRIPTS = (
+    "frameworks/files/detect-MHR",              # DNS query per downloaded file's hash
+    "protocols/ssh/interesting-hostnames",      # reverse DNS on SSH logins
+    "frameworks/notice/extend-email/hostnames",  # reverse DNS for notice e-mails
+)
+
+
+def loaded(path: Path) -> list[str]:
+    """The scripts a .zeek file loads with @load."""
+    return [line.split()[1] for line in path.read_text().splitlines()
+            if line.startswith("@load ")]
+
+
+def test_no_maxguard_zeek_file_loads_a_script_that_uses_the_network():
+    for path in sorted(ZEEK_DIR.rglob("*.zeek")):
+        for script in loaded(path):
+            assert not script.endswith(NETWORK_SCRIPTS), f"{path.name} loads {script}"
+            assert script not in ("local", "site/local"), f"{path.name} loads Zeek's local"
+
+
+def test_site_policy_keeps_the_logs_maxguard_reads():
+    scripts = loaded(runner.SITE_POLICY)
+    for needed in ("protocols/conn/known-hosts", "protocols/conn/known-services",
+                   "protocols/ssl/validate-certs", "frameworks/files/hash-all-files"):
+        assert needed in scripts
+
+
+def test_runner_loads_site_zeek_not_local(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        (tmp_path / "conn.log").write_text("")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    runner.run_zeek(tmp_path / "x.pcap", tmp_path)
+    assert str(runner.SITE_POLICY) in seen["cmd"]
+    assert "local" not in seen["cmd"]
+```
+
+**Step 4.** Create `maxguard/adapters/pcap.py`:
 
 ```python
 """PcapAdapter: a .pcap or .pcapng file -> Zeek logs."""
@@ -435,7 +499,7 @@ class PcapAdapter:
 
 It decides by the file's first four bytes (its *magic number*), not by its name, so a renamed text file is refused. JAK-05 adds Suricata to it in Week 4.
 
-**Step 4.** Create `maxguard/adapters/zeeklogs.py`:
+**Step 5.** Create `maxguard/adapters/zeeklogs.py`:
 
 ```python
 """ZeekLogAdapter: a folder, .zip, or .tar.gz of existing Zeek logs (JSON or TSV).
@@ -574,7 +638,7 @@ class ZeekLogAdapter:
 
 The long part is the TSV conversion: Zeek's older text format puts the type of every column in a `#types` header line, and `_convert` uses it so that numbers become numbers and sets become lists, exactly as in Zeek's JSON output.
 
-**Step 5.** Create the tests `tests/unit/test_adapters.py`:
+**Step 6.** Create the tests `tests/unit/test_adapters.py`:
 
 ```python
 """Adapter tests (Fiona, FIO-01): which inputs each adapter accepts, and TSV -> JSON.
@@ -721,20 +785,20 @@ def test_tsv_conn_log_becomes_one_json_record_per_row(tmp_path):
     assert first["tunnel_parents"] == []
 ```
 
-**Step 6.** Run them:
+**Step 7.** Run them:
 
 ```bash
-pytest tests/unit/test_adapters.py -q
+pytest tests/unit/test_adapters.py tests/unit/test_zeek_site.py -q
 ```
 
 Expected output:
 
 ```text
-.............                                                                                [100%]
-13 passed in 0.09s
+................                                                                             [100%]
+16 passed in 0.64s
 ```
 
-**Step 7.** See the TSV conversion work on a hand-made fixture:
+**Step 8.** See the TSV conversion work on a hand-made fixture:
 
 ```bash
 python -c "import json, tempfile; from pathlib import Path; from maxguard.adapters.zeeklogs import ZeekLogAdapter; out = ZeekLogAdapter().to_zeek_logs(Path('tests/fixtures/zeek/_handmade/tsv_plain_http'), Path(tempfile.mkdtemp())); print(sorted(p.name for p in out.iterdir())); rec = json.loads((out / 'conn.log').read_text().splitlines()[0]); print({k: rec[k] for k in ('ts', 'id.orig_h', 'id.resp_p', 'proto', 'service')})"
@@ -747,7 +811,7 @@ Expected output:
 {'ts': 1791250493.372657, 'id.orig_h': '172.18.0.3', 'id.resp_p': 80, 'proto': 'tcp', 'service': 'http'}
 ```
 
-**Step 8.** Commit, push, and open the pull request:
+**Step 9.** Commit, push, and open the pull request:
 
 ```bash
 git add -A

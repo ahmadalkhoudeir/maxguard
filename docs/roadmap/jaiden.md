@@ -441,7 +441,9 @@ include = ["maxguard*", "cli*"]
 # Non-Python files the engine reads at run time. Without these lines a normal
 # (non-editable) install, like the one in the Docker image, would leave them out.
 maxguard = [
+    "zeek/*.zeek",
     "zeek/scripts/*.zeek",
+    "zeek/scripts/live/*.zeek",
     "suricata/*.yaml",
     "suricata/rules/*",
     "ai/*.yaml",

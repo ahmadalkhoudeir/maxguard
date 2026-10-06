@@ -595,18 +595,26 @@ emulation; not run on a Pi.)
 sudo mkdir -p /data/smoke/zeek && sudo chown $USER /data/smoke/zeek
 docker run --rm --network host --cap-add NET_RAW --cap-add NET_ADMIN \
   -v /data/smoke/zeek:/logs -w /logs zeek/zeek:9.0.0 \
-  timeout 60 zeek -i eth0 -C LogAscii::use_json=T local
+  timeout 60 zeek -i eth0 -C LogAscii::use_json=T misc/capture-loss misc/stats
 ls /data/smoke/zeek
 ```
+
+`misc/capture-loss` and `misc/stats` add the two logs that show lost packets.
+Do **not** add Zeek's own `local` policy here or anywhere else: it loads scripts
+that send DNS queries to the internet, one of them about every file people
+download (`docs/ARCHITECTURE.md` section 12). MaxGuard loads its own copy
+without them, `maxguard/zeek/site.zeek`.
 
 While it runs, browse a few websites on a phone on the mesh Wi-Fi.
 
 Expected: after 60 seconds Zeek stops and prints a line like
-`449 packets received on interface eth0, 0 (0.00%) dropped`, and the folder
-contains `conn.log`, `dns.log`, `ssl.log` and others. **[SIM]** The output above
+`736 packets received on interface eth0, 0 (0.00%) dropped, 0 (0.00%) not processed`,
+and the folder contains `conn.log`, `capture_loss.log`, `stats.log` and, from
+the phone's traffic, `dns.log`, `ssl.log` and others. **[SIM]** The line above
 is from the planning simulation, where Zeek listened on a web server
 container's interface while another container fetched pages (it wrote
-`conn.log`, `http.log`, `capture_loss.log`, `stats.log` and more).
+`conn.log`, `http.log`, `files.log`, `capture_loss.log`, `stats.log`,
+`packet_filter.log` and `reporter.log`).
 
 What the options do: `--network host` lets the container see the Pi's real `eth0`;
 `NET_RAW` and `NET_ADMIN` are the two capabilities Zeek needs to capture; `-i eth0`
@@ -645,11 +653,18 @@ count above zero and its drops (something like `packets: 5120, drops: 0
 counts `flow`, `dns`, `tls` and `http` events. `docker stop` sends Suricata the
 signal to shut down cleanly, which is when it prints the capture summary.
 
-**A problem to watch for.** In the planning simulation, Suricata captured
-**0 packets** on a container's network interface where Zeek, in the same setup,
-captured 449 (tried with `-i eth0`, `--af-packet=eth0` and `--pcap=eth0`). The
-cause was not found; those runs did not add `SYS_NICE`. If the Pi also reports
-zero packets:
+**Why an early planning test saw 0 packets (solved).** In the first planning
+test, Suricata reported **0 packets** on a container's network interface where
+Zeek, in the same setup, captured 449. The cause was the image, not the
+capture: `jasonish/suricata:7.0.17`, used then, ships the ET Open rule set
+(53,021 rules), loading it took about 50 seconds on a 4-core x86 machine, and
+Suricata captures nothing until its rules are loaded. Those tests stopped after
+18–20 seconds. With no rules (`-S /dev/null`) the same image started capturing
+in under a second (241 packets in 20 seconds). `jasonish/suricata:8.0.7` ships
+no rule file, so the command above starts in about a second; in planning it
+captured 738 packets in 60 seconds on a container's interface (**[SIM]**). On the
+Pi, loading a large rule set takes longer still: wait for `Engine started` in
+the log before you test. If the Pi still reports zero packets:
 
 1. Make sure test 1 in section 12 passes with `tcpdump` (so the mirror works).
 2. Read `sudo grep -iE "af-packet|error" /data/smoke/suricata/suricata.log`.
@@ -824,10 +839,13 @@ sudo mkdir -p /data/test4/zeek && sudo chown $USER /data/test4/zeek
 docker run --rm --network host --cap-add NET_RAW --cap-add NET_ADMIN \
   -v /data/test4/zeek:/logs -w /logs \
   -v ~/mirror-test-timing.zeek:/extra/mirror-test-timing.zeek:ro \
-  zeek/zeek:9.0.0 timeout 1500 zeek -i eth0 -C LogAscii::use_json=T local /extra/mirror-test-timing.zeek
+  zeek/zeek:9.0.0 timeout 1500 zeek -i eth0 -C LogAscii::use_json=T \
+    misc/capture-loss misc/stats /extra/mirror-test-timing.zeek
 ```
 
-(The script parses with `zeek -a local /extra/mirror-test-timing.zeek` on Zeek
+(The two `misc/` scripts must come before the file, because the file changes
+their settings. It parses with
+`zeek -a misc/capture-loss misc/stats /extra/mirror-test-timing.zeek` on Zeek
 9.0.0 — run in planning.)
 
 On A: `iperf3 -s`. On B, one stage at a time (3 minutes each, 1 minute apart):

@@ -992,10 +992,11 @@ for pcap in tests/pcaps/*.pcap; do
 
   # Zeek: -D makes the output identical on every run; --network none proves it is offline.
   docker run --rm --network none --user "$USER_IDS" \
-    -v "$PWD/tests/pcaps:/pcaps:ro" -v "$PWD/maxguard/zeek/scripts:/scripts:ro" \
+    -v "$PWD/tests/pcaps:/pcaps:ro" -v "$PWD/maxguard/zeek:/mgzeek:ro" \
     -v "$out:/logs" -w /logs "$ZEEK_IMAGE" \
-    zeek -D -C -r "/pcaps/$name.pcap" local LogAscii::use_json=T \
-      policy/protocols/conn/community-id-logging /scripts/cleartext.zeek /scripts/inventory.zeek
+    zeek -D -C -r "/pcaps/$name.pcap" /mgzeek/site.zeek LogAscii::use_json=T \
+      policy/protocols/conn/community-id-logging /mgzeek/scripts/cleartext.zeek \
+      /mgzeek/scripts/inventory.zeek
   # These logs describe the Zeek run itself, not the traffic, and change every run.
   rm -f "$out"/loaded_scripts.log "$out"/packet_filter.log "$out"/stats.log \
         "$out"/capture_loss.log "$out"/reporter.log
@@ -1448,7 +1449,7 @@ Expected output:
 
 ```text
 ..............                                                                               [100%]
-14 passed in 0.08s
+14 passed in 0.11s
 ```
 
 **Step 7.** Commit, push, and open the pull request:
