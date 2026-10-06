@@ -14,8 +14,8 @@ This is your part of the MaxGuard v2.0 roadmap. Read [the roadmap overview](READ
 | [FIO-03](#fio-03-mitre-attck-mapping-file) | W2 | MITRE ATT&CK mapping file | [AMO-01](amory.md#amo-01-nist-sp-800-53-mapping-file-and-the-mapping-checks), [JAK-03](jakub.md#jak-03-cleartext-and-rdp-rules-the-rule-set-is-complete) | code, tested |
 | [FIO-04](#fio-04-the-maxguard-command-first-version-json-reports) | W2 | The maxguard command, first version (JSON reports) | [JAI-05](jaiden.md#jai-05-the-pipeline-one-function-from-input-to-report), [FIO-03](#fio-03-mitre-attck-mapping-file) | code, tested |
 | [FIO-05](#fio-05-cli-csv-and-html-reports-and---offline) | W4 | CLI: CSV and HTML reports, and --offline | [FIO-04](#fio-04-the-maxguard-command-first-version-json-reports), [AMO-03](amory.md#amo-03-report-export-json-csv-and-html), [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly) | code, tested |
-| [FIO-06](#fio-06-decoys-fake-services-on-their-own-ip-address) | S11 | Decoys: fake services on their own IP address | [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JON-04](jonattan.md#jon-04-home-mode-text-for-every-rule) | design |
-| [FIO-07](#fio-07-per-device-baselines) | S11 | Per-device baselines | [JAI-06](jaiden.md#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files), [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address) | design |
+| [FIO-06](#fio-06-decoys-fake-services-on-their-own-ip-address) | S11 | Decoys: fake services on their own IP address | [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JON-04](jonattan.md#jon-04-home-mode-text-for-every-rule) | code, tested |
+| [FIO-07](#fio-07-per-device-baselines) | S11 | Per-device baselines | [JAI-06](jaiden.md#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files), [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address) | code, tested |
 
 **Kind:** *code, tested* — the complete code below was run with its tests during planning; copy it exactly, then improve it in a later pull request if you like. *code, written* — written in planning, but part of it needs a machine planning did not have. *design* — you write the code from the steps. *process* — no code: setup, review, testing or release work.
 
@@ -2352,15 +2352,15 @@ Order matters for `--offline`: a guard switched on after the analysis started co
 
 ### FIO-06: Decoys: fake services on their own IP address
 
-**Due:** Spring S9-S11 (due Fri Apr 16, 2027) · **Milestone:** `S9-S11 Detect more` · **Needs first:** [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JON-04](jonattan.md#jon-04-home-mode-text-for-every-rule) · **Kind:** design
+**Due:** Spring S9-S11 (due Fri Apr 16, 2027) · **Milestone:** `S9-S11 Detect more` · **Needs first:** [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JON-04](jonattan.md#jon-04-home-mode-text-for-every-rule) · **Kind:** code, tested
 
-**Issue labels:** `type:task` `phase:spring` `owner:fiona` `area:engine`
+**Issue labels:** `type:task` `phase:spring` `owner:fiona` `area:engine` `needs-hardware`
 
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
+> **Needs hardware.** Steps that use the Raspberry Pi, the switch or other devices were not run during planning; they are marked *not run — verify on hardware*.
 
 #### Goal
 
-Add decoys (canaries): fake Telnet, FTP and printer web services on their own IP address that nothing legitimate should ever contact, plus rule `decoy.contact`, which turns any contact into a critical, high-confidence finding.
+Add decoys (canaries): fake Telnet, FTP and printer web services on their own IP address that nothing legitimate should ever contact, plus rule `decoy.contact`, which turns any contact into a critical finding.
 
 #### Prerequisites
 
@@ -2379,15 +2379,574 @@ git checkout -b fiona/decoys
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** `maxguard/decoy/service.py`: asyncio TCP listeners on configured ports with fake banners (Telnet `login:`, FTP `220`, an HTTP page titled "Printer admin"). For every connection write one JSON line to `decoy.log` (`ts`, `src_ip`, `src_port`, `dst_ip`, `dst_port`, the first 64 bytes received as hex) and close after a short timeout. The decoy only answers; it never opens a connection (CLAUDE.md rule 5).
+**Step 2.** Create `maxguard/decoy/__init__.py` and the decoy itself, `maxguard/decoy/service.py`:
 
-**Step 3.** `docker/decoy-compose.yaml`: run the decoy as its own container with its own LAN address (a `macvlan` network on the console's network card; document the `parent` setting and check the file with `docker compose config`). Never run a decoy on the sensor's capture interface.
+```python
+"""Decoys: fake services on their own IP address (Fiona, FIO-06).
 
-**Step 4.** `maxguard/rules/decoy.py`: rule `decoy.contact` (severity `critical`) reads `decoy.log` from the log folder. Do not add it to `maxguard/rules/__init__.py` until Ahmad approves the rule ID; add its Home text and mapping rows with Jonattan and Amory.
+A decoy only answers connections made to it and writes one line per connection
+to decoy.log. Rule decoy.contact (maxguard/rules/decoy.py) turns those lines
+into critical findings. Decoys are not sensors (CLAUDE.md rule 5).
+"""
+```
 
-**Step 5.** Tests `tests/unit/test_decoy.py`: the service logs a connection made by the test on `127.0.0.1` and never connects out; the rule turns a `decoy.log` line into one finding.
+```python
+"""Fake Telnet, FTP and printer web services (Fiona, FIO-06).
 
-**Step 6.** Commit, push, and open the pull request:
+Nothing legitimate on the network has a reason to contact these services, so
+every connection is worth an alert. For each connection the decoy:
+
+1. sends a fake banner (Telnet and FTP speak first; HTTP answers a request),
+2. reads at most READ_LIMIT bytes, waiting at most `timeout` seconds,
+3. writes one JSON line to decoy.log and closes the connection.
+
+Safety (CLAUDE.md rule 5): the decoy only answers. This module never opens a
+connection, never resolves a name and never sends anything except its banner
+to the client that connected. It runs in its own container with its own IP
+address, never on the sensor's capture interface.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import functools
+import json
+import time
+from collections.abc import Callable
+from pathlib import Path
+
+DEFAULT_PORTS = {"telnet": 23, "ftp": 21, "http": 80}
+DEFAULT_TIMEOUT = 5.0  # seconds; a slow or silent client cannot keep a connection open
+READ_LIMIT = 1024  # bytes; we never buffer more than this from one client
+LOGGED_BYTES = 64  # bytes of what the client sent that go into decoy.log (as hex)
+
+PRINTER_PAGE = (
+    b"<!doctype html><html><head><title>Printer admin</title></head>"
+    b"<body><h1>Printer admin</h1><form method=post>"
+    b"<input name=user><input name=pass type=password><button>Log in</button>"
+    b"</form></body></html>"
+)
+HTTP_RESPONSE = (
+    b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n"
+    b"Content-Length: " + str(len(PRINTER_PAGE)).encode() + b"\r\n"
+    b"Connection: close\r\n\r\n" + PRINTER_PAGE
+)
+# Sent as soon as a client connects (these protocols make the server speak first).
+GREETINGS = {"telnet": b"login: ", "ftp": b"220 FTP server ready\r\n"}
+# Sent after the client has said something (HTTP waits for the request).
+REPLIES = {"http": HTTP_RESPONSE}
+
+
+def parse_ports(text: str) -> dict[str, int]:
+    """Turn "telnet=23,ftp=21,http=80" into {"telnet": 23, "ftp": 21, "http": 80}."""
+    ports: dict[str, int] = {}
+    for item in text.split(","):
+        name, _, port = item.strip().partition("=")
+        if name not in GREETINGS and name not in REPLIES:
+            raise ValueError(f"unknown decoy service {name!r} (use telnet, ftp or http)")
+        if not port.isdigit() or not 0 <= int(port) <= 65535:
+            raise ValueError(f"bad port for {name}: {port!r}")
+        ports[name] = int(port)
+    return ports
+
+
+def contact_record(service: str, peer: tuple, local: tuple, data: bytes, ts: float) -> dict:
+    """The decoy.log line for one connection."""
+    return {
+        "ts": ts,
+        "service": service,
+        "src_ip": peer[0],
+        "src_port": peer[1],
+        "dst_ip": local[0],
+        "dst_port": local[1],
+        "first_bytes_hex": data[:LOGGED_BYTES].hex(),
+    }
+
+
+def append_line(log_path: Path, record: dict) -> None:
+    # asyncio runs one handler at a time, so lines from two clients never mix.
+    with log_path.open("a") as f:
+        f.write(json.dumps(record, sort_keys=True) + "\n")
+
+
+async def read_some(reader: asyncio.StreamReader, timeout: float) -> bytes:
+    """Whatever the client sends first, capped at READ_LIMIT bytes; b"" if it stays silent."""
+    try:
+        return await asyncio.wait_for(reader.read(READ_LIMIT), timeout)
+    except (TimeoutError, OSError):  # silent client, or it reset the connection
+        return b""
+
+
+async def send(writer: asyncio.StreamWriter, data: bytes) -> None:
+    """Send data; a client that already left is not an error for a decoy."""
+    try:
+        writer.write(data)
+        await writer.drain()
+    except OSError:
+        pass
+
+
+async def close(writer: asyncio.StreamWriter) -> None:
+    writer.close()
+    try:
+        await writer.wait_closed()
+    except OSError:
+        pass
+
+
+async def handle(service: str, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+                 *, log_path: Path, timeout: float, clock: Callable[[], float]) -> None:
+    """Answer one connection, log it, close it."""
+    ts = clock()  # the time the client connected
+    # (ip, port). IPv6 adds two more fields, which we drop. None if the client already left.
+    peer = (writer.get_extra_info("peername") or ("", 0))[:2]
+    local = (writer.get_extra_info("sockname") or ("", 0))[:2]
+    data = b""
+    try:
+        if service in GREETINGS:
+            await send(writer, GREETINGS[service])
+        data = await read_some(reader, timeout)
+        if service in REPLIES and data:
+            await send(writer, REPLIES[service])
+    finally:
+        # Log even if something above failed: the contact itself is the evidence.
+        append_line(log_path, contact_record(service, peer, local, data, ts))
+        await close(writer)
+
+
+async def start(ports: dict[str, int], log_path: Path, *, host: str = "0.0.0.0",
+                timeout: float = DEFAULT_TIMEOUT,
+                clock: Callable[[], float] = time.time) -> list[asyncio.Server]:
+    """Start one listener per service. Port 0 picks a free port (used by the tests)."""
+    servers = []
+    for service, port in sorted(ports.items()):
+        # partial() fixes everything except (reader, writer), which asyncio passes in.
+        on_connect = functools.partial(handle, service, log_path=log_path, timeout=timeout,
+                                       clock=clock)
+        servers.append(await asyncio.start_server(on_connect, host, port))
+    return servers
+
+
+async def serve_forever(ports: dict[str, int], log_path: Path, *, host: str = "0.0.0.0",
+                        timeout: float = DEFAULT_TIMEOUT) -> None:
+    servers = await start(ports, log_path, host=host, timeout=timeout)
+    for service, server in zip(sorted(ports), servers, strict=True):  # start() sorts too
+        for sock in server.sockets:
+            address, port = sock.getsockname()[:2]
+            print(f"decoy {service} listening on {address}:{port}", flush=True)
+    await asyncio.gather(*(server.serve_forever() for server in servers))
+```
+
+Telnet and FTP send their banner first (those servers speak first); HTTP waits for the request and answers with a page titled "Printer admin". Every connection writes one JSON line to `decoy.log` in a `finally` block, so garbage, silence or an early hang-up is still logged: the contact itself is the evidence. It reads at most 1024 bytes, keeps the first 64 as hex, and waits at most 5 seconds. The decoy only answers; it never opens a connection (CLAUDE.md rule 5).
+
+**Step 3.** Create `maxguard/decoy/__main__.py`, so `python -m maxguard.decoy` starts it with settings from environment variables:
+
+```python
+"""Run the decoys: python -m maxguard.decoy (Fiona, FIO-06).
+
+Settings come from environment variables, so docker/decoy-compose.yaml can set them:
+  MAXGUARD_DECOY_PORTS    services and ports, default "telnet=23,ftp=21,http=80"
+  MAXGUARD_DECOY_LOG      where decoy.log goes, default "decoy.log"
+  MAXGUARD_DECOY_HOST     address to listen on, default "0.0.0.0" (all of the container's)
+  MAXGUARD_DECOY_TIMEOUT  seconds to wait for a client, default 5
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+from pathlib import Path
+
+from maxguard.decoy.service import DEFAULT_TIMEOUT, parse_ports, serve_forever
+
+
+def main() -> None:
+    ports = parse_ports(os.environ.get("MAXGUARD_DECOY_PORTS", "telnet=23,ftp=21,http=80"))
+    log_path = Path(os.environ.get("MAXGUARD_DECOY_LOG", "decoy.log"))
+    host = os.environ.get("MAXGUARD_DECOY_HOST", "0.0.0.0")
+    timeout = float(os.environ.get("MAXGUARD_DECOY_TIMEOUT", DEFAULT_TIMEOUT))
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    asyncio.run(serve_forever(ports, log_path, host=host, timeout=timeout))
+
+
+if __name__ == "__main__":
+    main()
+```
+
+**Step 4.** Create the rule `maxguard/rules/decoy.py`. Do **not** add it to `maxguard/rules/__init__.py` until Ahmad approves the rule ID; importing the module registers it, which is how the tests use it. Its Home text and mapping rows come from Jonattan and Amory:
+
+```python
+"""Rule decoy.contact (Fiona, FIO-06, proposed for v2.0 spring).
+
+Each line of decoy.log (written by maxguard/decoy/service.py) records one
+connection to a decoy. Nothing legitimate has a reason to contact a decoy, so
+every line becomes a critical finding. The evidence is the decoy.log line
+itself (its record_id), so the AI can cite it.
+
+Not yet in maxguard/rules/__init__.py: the rule ID needs the Security Lead's
+approval first. Until then it registers only when imported, for example in a test:
+    from maxguard.rules.decoy import decoy_contact
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from maxguard.adapters.base import read_log
+from maxguard.ids import evidence
+from maxguard.models import Finding
+from maxguard.rules.base import rule
+
+RULE_ID = "decoy.contact"
+LOG_NAME = "decoy.log"
+
+
+def contact_finding(rec: dict) -> Finding:
+    ev = evidence(LOG_NAME, rec)  # uid is "": the decoy is not a Zeek connection
+    return Finding(rule_id=RULE_ID, title="Someone contacted a decoy", severity="critical",
+                   src_ip=rec["src_ip"], dst_ip=rec["dst_ip"], dst_port=int(rec["dst_port"]),
+                   protocol=rec.get("service") or "tcp", first_seen=ev.ts, last_seen=ev.ts,
+                   source="decoy",
+                   details={"service": rec.get("service"),
+                            "first_bytes_hex": rec.get("first_bytes_hex", "")},
+                   evidence=[ev])
+
+
+@rule(RULE_ID)
+def decoy_contact(log_dir: Path) -> list[Finding]:
+    """One finding per decoy.log line (merge() then counts repeats per src/dst/port)."""
+    return [contact_finding(rec) for rec in read_log(log_dir, LOG_NAME)]
+```
+
+**Step 5.** Create the tests `tests/unit/test_decoy.py`. "Never connects out" is tested by wrapping `socket.socket.connect`: after a client talks to the decoy, the only connection in the process is the test's own:
+
+```python
+"""Tests for the decoy service and rule decoy.contact (Fiona, FIO-06).
+
+The decoy listens on 127.0.0.1 with port 0 (the system picks a free port), so
+the tests need no root, no Docker and no network.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import socket
+
+import pytest
+
+from maxguard.decoy import service
+from maxguard.ids import record_id
+from maxguard.rules.base import RULES, merge
+
+# Importing the module registers decoy.contact. It is not in maxguard/rules/__init__.py
+# yet, because a new rule ID needs the Security Lead's approval.
+from maxguard.rules.decoy import decoy_contact
+
+FIXED_TS = 1791250284.5  # the tests pass a fixed clock, so decoy.log is predictable
+LINE = {"ts": FIXED_TS, "service": "telnet", "src_ip": "192.0.2.10", "src_port": 50000,
+        "dst_ip": "192.0.2.250", "dst_port": 23, "first_bytes_hex": "726f6f740d0a"}
+
+
+@pytest.fixture
+def connects(monkeypatch):
+    """Record every outgoing connection made in this process (the test client's too)."""
+    made: list[tuple] = []
+    real_connect, real_connect_ex = socket.socket.connect, socket.socket.connect_ex
+
+    def connect(sock, address):
+        made.append(tuple(address[:2]))
+        return real_connect(sock, address)
+
+    def connect_ex(sock, address):
+        made.append(tuple(address[:2]))
+        return real_connect_ex(sock, address)
+
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
+    return made
+
+
+async def talk(port: int, send: bytes, *, close_early: bool = False) -> bytes:
+    """Connect like an attacker would: read the banner, send something, read the answer."""
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    if close_early:
+        writer.close()
+        return b""
+    if send:
+        writer.write(send)
+        await writer.drain()
+    answer = await reader.read()  # until the decoy closes the connection
+    writer.close()
+    return answer
+
+
+async def run_decoys(log_path, clients: list[tuple[str, bytes]]) -> list[bytes]:
+    servers = await service.start({"telnet": 0, "ftp": 0, "http": 0}, log_path,
+                                  host="127.0.0.1", timeout=0.3, clock=lambda: FIXED_TS)
+    ports = {name: srv.sockets[0].getsockname()[1]
+             for name, srv in zip(sorted(["telnet", "ftp", "http"]), servers, strict=True)}
+    try:
+        return [await talk(ports[name], data) for name, data in clients]
+    finally:
+        for srv in servers:
+            srv.close()
+            await srv.wait_closed()
+
+
+def read_lines(path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+def test_service_logs_a_connection_and_never_connects_out(tmp_path, connects):
+    log_path = tmp_path / "decoy.log"
+    answers = asyncio.run(run_decoys(log_path, [("telnet", b"root\r\n")]))
+
+    assert answers == [b"login: "]
+    [line] = read_lines(log_path)
+    assert line["ts"] == FIXED_TS
+    assert line["service"] == "telnet"
+    assert line["src_ip"] == "127.0.0.1" and line["dst_ip"] == "127.0.0.1"
+    assert isinstance(line["src_port"], int) and isinstance(line["dst_port"], int)
+    assert bytes.fromhex(line["first_bytes_hex"]) == b"root\r\n"
+    # The only connection in this process is the test's own, to the decoy.
+    assert connects == [("127.0.0.1", line["dst_port"])]
+
+
+def test_each_service_has_its_banner(tmp_path):
+    answers = asyncio.run(run_decoys(tmp_path / "decoy.log", [
+        ("ftp", b"USER admin\r\n"), ("http", b"GET / HTTP/1.1\r\nHost: printer\r\n\r\n")]))
+    assert answers[0] == b"220 FTP server ready\r\n"
+    assert answers[1].startswith(b"HTTP/1.1 200 OK")
+    assert b"<title>Printer admin</title>" in answers[1]
+
+
+def test_only_the_first_64_bytes_are_logged(tmp_path):
+    log_path = tmp_path / "decoy.log"
+    asyncio.run(run_decoys(log_path, [("http", b"A" * 5000)]))
+    [line] = read_lines(log_path)
+    assert bytes.fromhex(line["first_bytes_hex"]) == b"A" * 64
+
+
+def test_silent_client_is_logged_after_the_timeout(tmp_path):
+    log_path = tmp_path / "decoy.log"
+    asyncio.run(run_decoys(log_path, [("ftp", b"")]))  # connects, sends nothing
+    [line] = read_lines(log_path)
+    assert line["first_bytes_hex"] == ""
+
+
+def test_garbage_and_early_close_do_not_stop_the_decoy(tmp_path):
+    log_path = tmp_path / "decoy.log"
+
+    async def scenario():
+        servers = await service.start({"telnet": 0}, log_path, host="127.0.0.1",
+                                      timeout=0.3, clock=lambda: FIXED_TS)
+        port = servers[0].sockets[0].getsockname()[1]
+        await talk(port, bytes(range(256)) * 8)  # binary garbage, not valid Telnet
+        await talk(port, b"", close_early=True)  # hangs up before the banner is read
+        answer = await talk(port, b"admin\r\n")  # the decoy still answers afterwards
+        servers[0].close()
+        await servers[0].wait_closed()
+        return answer
+
+    assert asyncio.run(scenario()) == b"login: "
+    assert len(read_lines(log_path)) == 3
+
+
+def test_parse_ports():
+    assert service.parse_ports("telnet=2323, http=8080") == {"telnet": 2323, "http": 8080}
+    with pytest.raises(ValueError):
+        service.parse_ports("ssh=22")
+    with pytest.raises(ValueError):
+        service.parse_ports("ftp=21x")
+
+
+def test_rule_turns_a_decoy_log_line_into_one_finding(tmp_path):
+    (tmp_path / "decoy.log").write_text(json.dumps(LINE) + "\n")
+    [finding] = decoy_contact(tmp_path)
+    assert finding.rule_id == "decoy.contact"
+    assert finding.severity == "critical"
+    assert finding.source == "decoy"
+    assert (finding.src_ip, finding.dst_ip, finding.dst_port) == ("192.0.2.10", "192.0.2.250", 23)
+    assert finding.protocol == "telnet"
+    assert finding.first_seen == finding.last_seen == FIXED_TS
+    # The evidence ID is the hash of the decoy.log line, so the AI can cite it.
+    assert finding.evidence[0].log == "decoy.log"
+    assert finding.evidence[0].record_id == record_id("decoy.log", LINE)
+
+
+def test_repeated_contacts_merge_into_one_finding(tmp_path):
+    second = {**LINE, "ts": FIXED_TS + 60, "src_port": 50001}
+    (tmp_path / "decoy.log").write_text(json.dumps(LINE) + "\n" + json.dumps(second) + "\n")
+    [finding] = merge(decoy_contact(tmp_path))
+    assert finding.count == 2
+    assert (finding.first_seen, finding.last_seen) == (FIXED_TS, FIXED_TS + 60)
+
+
+def test_no_decoy_log_means_no_findings(tmp_path):
+    assert decoy_contact(tmp_path) == []
+
+
+def test_rule_registers_when_imported():
+    assert RULES["decoy.contact"] is decoy_contact
+
+
+def test_service_end_to_end_with_the_rule(tmp_path):
+    asyncio.run(run_decoys(tmp_path / "decoy.log", [("http", b"GET / HTTP/1.1\r\n\r\n")]))
+    [finding] = decoy_contact(tmp_path)
+    assert finding.protocol == "http" and finding.src_ip == "127.0.0.1"
+```
+
+Run them:
+
+```bash
+pytest tests/unit/test_decoy.py -q
+```
+
+Expected output:
+
+```text
+...........                                                                                  [100%]
+11 passed in 0.39s
+```
+
+**Step 6.** Create `docker/decoy-compose.yaml`. `macvlan` gives the decoy its own MAC and IP address on your LAN; the parent must be the console's normal wired network card, never the sensor's capture port:
+
+```yaml
+# MaxGuard decoys (Fiona, FIO-06): fake Telnet, FTP and printer web services on
+# their OWN address on your LAN. Nothing legitimate should ever connect to them,
+# so every connection becomes a critical "decoy.contact" alert.
+#
+# Rules (CLAUDE.md rule 5):
+#   - The decoy has its own IP address on a macvlan network, so it looks like a
+#     separate device on the LAN (its own MAC address too).
+#   - It only answers connections made to it; it never opens one.
+#   - NEVER use the sensor's capture interface as the parent: that port has no IP
+#     address and must only listen. Use the console's normal network card.
+#
+# Settings (environment variables or a .env file next to the command you run):
+#   MAXGUARD_DECOY_PARENT   the console's normal LAN network card (default eth0;
+#                           see yours with: ip -br link). Use a wired card: the
+#                           card and switch must accept several MAC addresses on
+#                           one port ("promiscuous mode" in Docker's macvlan docs),
+#                           which Wi-Fi often cannot do.
+#   MAXGUARD_DECOY_SUBNET   your LAN, e.g. 192.168.1.0/24 (required)
+#   MAXGUARD_DECOY_GATEWAY  your router's address, e.g. 192.168.1.1 (required)
+#   MAXGUARD_DECOY_IP       a FREE address for the decoy, outside the router's
+#                           DHCP range, e.g. 192.168.1.250 (required)
+#
+# Check:  MAXGUARD_DECOY_SUBNET=192.168.1.0/24 MAXGUARD_DECOY_GATEWAY=192.168.1.1 \
+#         MAXGUARD_DECOY_IP=192.168.1.250 docker compose -f docker/decoy-compose.yaml config
+# Start:  (same variables) docker compose -f docker/decoy-compose.yaml up -d
+# Stop:   docker compose -f docker/decoy-compose.yaml down
+#
+# The console itself cannot reach a macvlan container ("a restriction in the Linux
+# kernel", Docker's macvlan docs); test from another device such as a laptop.
+name: maxguard-decoy
+
+services:
+  decoy:
+    image: maxguard:2.0.0a0 # the same image as the console; it contains maxguard.decoy
+    command: ["python", "-m", "maxguard.decoy"]
+    environment:
+      MAXGUARD_DECOY_PORTS: "telnet=23,ftp=21,http=80"
+      MAXGUARD_DECOY_LOG: /data/decoy.log
+    volumes:
+      - maxguard-decoy-data:/data # decoy.log lives here
+    networks:
+      decoy-lan:
+        ipv4_address: ${MAXGUARD_DECOY_IP:?set MAXGUARD_DECOY_IP to a free LAN address}
+    # Least privilege: the image's non-root user, no Linux capabilities, a
+    # read-only root file system. Ports 21/23/80 still work without root
+    # because this sysctl lets any user of this container use low ports.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
+    restart: unless-stopped
+
+networks:
+  decoy-lan:
+    name: maxguard-decoy-lan
+    driver: macvlan
+    driver_opts:
+      parent: ${MAXGUARD_DECOY_PARENT:-eth0}
+    ipam:
+      config:
+        - subnet: ${MAXGUARD_DECOY_SUBNET:?set MAXGUARD_DECOY_SUBNET to your LAN, e.g. 192.168.1.0/24}
+          gateway: ${MAXGUARD_DECOY_GATEWAY:?set MAXGUARD_DECOY_GATEWAY to your router address}
+
+volumes:
+  maxguard-decoy-data:
+    name: maxguard-decoy-data
+```
+
+Check it. The three addresses have no defaults on purpose (a default could clash with a real device), so the second command fails with a clear message:
+
+```bash
+MAXGUARD_DECOY_SUBNET=192.0.2.0/24 MAXGUARD_DECOY_GATEWAY=192.0.2.1 MAXGUARD_DECOY_IP=192.0.2.250 \
+  docker compose -f docker/decoy-compose.yaml config --format json | python -c "import json, sys; c = json.load(sys.stdin); n = c['networks']['decoy-lan']; s = c['services']['decoy']; print(n['driver'], n['driver_opts']['parent'], s['networks']['decoy-lan']['ipv4_address'], s['read_only'], s['cap_drop'])"
+docker compose -f docker/decoy-compose.yaml config --quiet
+```
+
+Expected output:
+
+```text
+macvlan eth0 192.0.2.250 True ['ALL']
+error while interpolating services.decoy.networks.decoy-lan.ipv4_address: required variable MAXGUARD_DECOY_IP is missing a value: set MAXGUARD_DECOY_IP to a free LAN address
+```
+
+*Documentation addresses (`192.0.2.0/24`) are used here; yours are free addresses on your own LAN.*
+
+**Step 7.** Prove the decoy in Docker. `macvlan` needs a real network card on a real LAN, so this uses a private bridge network with the same hardening as the Compose file (a non-root user, read-only, all capabilities dropped). A second container plays the intruder, then the rule reads the copied `decoy.log`:
+
+```bash
+mkdir -p data/decoy-test data/decoy-logs && chmod 777 data/decoy-test
+docker network create maxguard-decoy-test > /dev/null
+docker run -d --rm --name maxguard-decoy-test --network maxguard-decoy-test \
+  --user 10001:10001 --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+  --sysctl net.ipv4.ip_unprivileged_port_start=0 \
+  -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/src -e MAXGUARD_DECOY_LOG=/data/decoy.log -e MAXGUARD_DECOY_TIMEOUT=2 \
+  -v "$PWD/maxguard:/src/maxguard:ro" -v "$PWD/data/decoy-test:/data" \
+  python:3.11-slim-bookworm python -m maxguard.decoy > /dev/null
+for i in $(seq 1 40); do docker logs maxguard-decoy-test 2>&1 | grep -q telnet && break; sleep 0.5; done
+docker logs maxguard-decoy-test
+docker run --rm --network maxguard-decoy-test nicolaka/netshoot:v0.15 sh -c '
+  printf "root\r\n" | nc -w 3 maxguard-decoy-test 23; echo
+  printf "USER admin\r\n" | nc -w 3 maxguard-decoy-test 21
+  curl -s -m 5 http://maxguard-decoy-test/ | head -c 60; echo'
+docker rm -f maxguard-decoy-test > /dev/null && docker network rm maxguard-decoy-test > /dev/null
+cp data/decoy-test/decoy.log data/decoy-logs/decoy.log
+python -c "
+from pathlib import Path
+from maxguard.rules.base import merge
+from maxguard.rules.decoy import decoy_contact
+for f in merge(decoy_contact(Path('data/decoy-logs'))):
+    print(f.severity, f.rule_id, f.src_ip, '->', f.dst_ip, f.dst_port, f.protocol)"
+```
+
+Expected output:
+
+```text
+decoy ftp listening on 0.0.0.0:21
+decoy http listening on 0.0.0.0:80
+decoy telnet listening on 0.0.0.0:23
+login: 
+220 FTP server ready
+<!doctype html><html><head><title>Printer admin</title></hea
+critical decoy.contact 172.18.0.3 -> 172.18.0.2 23 telnet
+critical decoy.contact 172.18.0.3 -> 172.18.0.2 21 ftp
+critical decoy.contact 172.18.0.3 -> 172.18.0.2 80 http
+```
+
+*The addresses come from Docker's private network, so yours may differ. `chmod 777` lets the container's non-root user (10001) write the log into the folder.*
+
+In planning, a packet capture in the decoy's network namespace during these connections showed only SYN-ACK answers from the decoy: no connection it started and no DNS lookup.
+
+**Step 8.** **On the lab** (*not run — verify on hardware*): put the three addresses in `docker/.env`, start the decoy with `docker compose -f docker/decoy-compose.yaml up -d`, and connect to its address from a laptop (Docker's macvlan driver does not let the host itself reach its own macvlan containers). Check whether your network card accepts several MAC addresses; Wi-Fi cards often do not. Getting `decoy.log` into the console's analysis is still open (see `docs/ARCHITECTURE.md` section 5).
+
+**Step 9.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -2419,11 +2978,9 @@ Nobody has a reason to log in to a printer that does not exist, so any contact i
 
 ### FIO-07: Per-device baselines
 
-**Due:** Spring S9-S11 (due Fri Apr 16, 2027) · **Milestone:** `S9-S11 Detect more` · **Needs first:** [JAI-06](jaiden.md#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files), [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address) · **Kind:** design
+**Due:** Spring S9-S11 (due Fri Apr 16, 2027) · **Milestone:** `S9-S11 Detect more` · **Needs first:** [JAI-06](jaiden.md#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files), [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address) · **Kind:** code, tested
 
 **Issue labels:** `type:task` `phase:spring` `owner:fiona` `area:engine`
-
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
 
 #### Goal
 
@@ -2446,15 +3003,291 @@ git checkout -b fiona/baselines
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** `maxguard/rules/baseline.py`: `build_baseline(events) -> dict` gives, per device IP, the set of (`dst_port`, `proto`, `service`) it used and its peer count. Deterministic: sorted output, no clock.
+**Step 2.** Create `maxguard/rules/baseline.py`:
 
-**Step 3.** A second registry for rules that need history, `STATEFUL_RULES`, with a decorator `@stateful_rule(rule_id)` whose functions take `(log_dir, context)`; the baseline is passed in through `context`, never read from disk by the rule. `run_all()` and Contract 3 do not change (`docs/ARCHITECTURE.md` section 5).
+```python
+"""Per-device baselines and rule baseline.new_service (Fiona, FIO-07, proposed for v2.0 spring).
 
-**Step 4.** Rule `baseline.new_service`: a device using a (`dst_port`, `proto`, `service`) that is not in its baseline after the learning period gives a `medium` finding.
+During a learning period MaxGuard records, per device IP address, which services
+it uses: the set of (dst_port, proto, service) it connects to, plus how many
+different peers it talks to. After the learning period, a device that uses a
+service missing from its baseline gets a medium finding.
 
-**Step 5.** Tests `tests/unit/test_baseline.py`: the same events always build the same baseline; a new port is found; a known one is not.
+Why a second registry: a normal rule takes only a log folder, so the same logs
+always give the same findings (CLAUDE.md rule 2). This rule also needs history.
+The history (the baseline) and the end of the learning period are passed in
+through `context`; the rule never reads the clock or a baseline file itself.
+So the same logs plus the same context always give the same findings.
+run_all() and the Fall 2026 RULES registry (maxguard/rules/base.py) do not change.
+"""
 
-**Step 6.** Commit, push, and open the pull request:
+from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
+
+from maxguard.events.normalize import normalize
+from maxguard.models import Evidence, Finding
+from maxguard.rules.base import RULES, merge
+
+RULE_ID = "baseline.new_service"
+
+StatefulRule = Callable[[Path, dict], list[Finding]]
+STATEFUL_RULES: dict[str, StatefulRule] = {}
+
+# Zeek labels FTP data connections "ftp-data". Their port is picked fresh for every
+# file transfer, so it would look "new" every time: leave them out of baselines.
+IGNORED_SERVICES = frozenset({"ftp-data"})
+
+
+def stateful_rule(rule_id: str):
+    """Register a rule that takes (log_dir, context) instead of just log_dir."""
+    def wrap(fn: StatefulRule) -> StatefulRule:
+        if rule_id in STATEFUL_RULES or rule_id in RULES:  # rule IDs are unique across both
+            raise ValueError(f"duplicate rule_id {rule_id!r}")
+        STATEFUL_RULES[rule_id] = fn
+        return fn
+
+    return wrap
+
+
+def run_stateful(log_dir: Path, context: dict) -> list[Finding]:
+    """Run every stateful rule in rule_id order and merge the results (like run_all)."""
+    found: list[Finding] = []
+    for rule_id in sorted(STATEFUL_RULES):
+        found.extend(STATEFUL_RULES[rule_id](log_dir, context))
+    return merge(found)
+
+
+def connections(events: list[dict]) -> list[dict]:
+    """The events that describe one connection each (conn.log), with a destination port.
+
+    http.log, ssl.log and eve.json describe the same connections again, so counting
+    only conn events never counts a connection twice.
+    """
+    return [e for e in events
+            if e["kind"] == "conn" and e["dst_port"] is not None
+            and e["service"] not in IGNORED_SERVICES]
+
+
+def service_key(event: dict) -> tuple[int, str, str]:
+    return (int(event["dst_port"]), event["proto"], event["service"])
+
+
+def build_baseline(events: list[dict]) -> dict:
+    """Per device IP: the sorted (dst_port, proto, service) list it used and its peer count.
+
+    `events` are normalized events (maxguard.events.normalize) from the learning
+    period. The result only contains lists, strings and numbers in sorted order, so
+    it can be stored as JSON, and the same events (in any order) give the same baseline.
+    Example: {"192.0.2.10": {"peers": 1, "services": [[80, "tcp", "http"]]}}
+    """
+    services: dict[str, set[tuple[int, str, str]]] = {}
+    peers: dict[str, set[str]] = {}
+    for event in connections(events):
+        device = event["src_ip"]
+        services.setdefault(device, set()).add(service_key(event))
+        peers.setdefault(device, set()).add(event["dst_ip"])
+    return {device: {"peers": len(peers[device]),
+                     "services": [list(key) for key in sorted(services[device])]}
+            for device in sorted(services)}
+
+
+def known_services(baseline: dict, device: str) -> set[tuple[int, str, str]]:
+    """The device's services as tuples (JSON turned them into lists)."""
+    return {tuple(key) for key in baseline[device]["services"]}
+
+
+def is_known(key: tuple[int, str, str], known: set[tuple[int, str, str]]) -> bool:
+    if key in known:
+        return True
+    # Zeek leaves service empty when it could not tell the protocol (for example a
+    # connection that was refused). Same port and proto as a known service: not new.
+    port, proto, service = key
+    return service == "" and any(k[0] == port and k[1] == proto for k in known)
+
+
+def new_service_finding(event: dict, learning_ends: float) -> Finding:
+    ev = Evidence(log=event["log"], uid=event["uid"], ts=event["ts"],
+                  record_id=event["event_id"])  # event_id is the record_id of the conn record
+    return Finding(rule_id=RULE_ID, title="Device used a service new to it", severity="medium",
+                   src_ip=event["src_ip"], dst_ip=event["dst_ip"],
+                   dst_port=int(event["dst_port"]),
+                   protocol=event["service"] or event["proto"],
+                   first_seen=event["ts"], last_seen=event["ts"], source=event["source"],
+                   details={"proto": event["proto"], "service": event["service"],
+                            "learning_ends": learning_ends},
+                   evidence=[ev])
+
+
+@stateful_rule(RULE_ID)
+def new_service(log_dir: Path, context: dict) -> list[Finding]:
+    """A device used a (dst_port, proto, service) missing from its baseline.
+
+    context["baseline"]: the dict from build_baseline() (for example loaded from storage)
+    context["learning_ends"]: epoch seconds; events before it belong to the learning
+    period and never give a finding.
+    Devices without a baseline are skipped: there is nothing to compare them with
+    (new devices show up in the device inventory instead).
+    """
+    baseline: dict = context["baseline"]
+    learning_ends = float(context["learning_ends"])
+    findings = []
+    # sensor_id does not change any field this rule uses, so "" is fine here.
+    for event in connections(normalize(log_dir, sensor_id="")):
+        device = event["src_ip"]
+        if event["ts"] < learning_ends or device not in baseline:
+            continue
+        if not is_known(service_key(event), known_services(baseline, device)):
+            findings.append(new_service_finding(event, learning_ends))
+    return findings
+```
+
+Three parts. `build_baseline(events)` turns the learning period's events into `{ip: {"peers": n, "services": [[port, proto, service], ...]}}`, sorted and ready for `json.dumps`. `STATEFUL_RULES` and `@stateful_rule` are a second registry for rules that need history; `run_all()` and Contract 3 do not change (`docs/ARCHITECTURE.md` section 5). The rule `baseline.new_service` gets the baseline and the end of the learning period through `context` and never reads the clock or a file, so the same logs and the same context always give the same findings. Choices that cut false positives: only `conn` events count (http, ssl and eve records describe the same connections again); `ftp-data` is ignored (its port changes on every transfer); an event whose service Zeek could not tell is known when the device already used that port and protocol; a device with no baseline is skipped (the device inventory shows new devices). A *device* is the address that **starts** a connection, so this finds new services a device **uses**.
+
+**Step 3.** Create the tests `tests/unit/test_baseline.py`:
+
+```python
+"""Tests for per-device baselines and rule baseline.new_service (Fiona, FIO-07).
+
+The lab fixtures in tests/fixtures/zeek/ all come from one client (172.18.0.3)
+talking to one server (172.18.0.2), each capture on a different service. So the
+"learning period" here is the plain_http and clean_tls13 captures, and the
+telnet capture is the device trying something new.
+"""
+
+from __future__ import annotations
+
+import json
+import random
+from pathlib import Path
+
+import pytest
+
+from maxguard.events.normalize import normalize
+from maxguard.rules.base import RULES, run_all
+from maxguard.rules.baseline import (
+    STATEFUL_RULES,
+    build_baseline,
+    new_service,
+    run_stateful,
+    stateful_rule,
+)
+
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "zeek"
+CLIENT, SERVER = "172.18.0.3", "172.18.0.2"
+# Every lab capture was made after this moment, so all their events count as "after learning".
+LEARNING_ENDS = 1791250000.0
+
+
+def events_of(*captures: str) -> list[dict]:
+    events: list[dict] = []
+    for capture in captures:
+        events.extend(normalize(FIXTURES / capture, sensor_id="pcap"))
+    return events
+
+
+@pytest.fixture
+def baseline() -> dict:
+    return build_baseline(events_of("plain_http", "clean_tls13"))
+
+
+def test_baseline_lists_services_and_peers(baseline):
+    assert baseline == {CLIENT: {"peers": 1, "services": [[80, "tcp", "http"],
+                                                          [4436, "tcp", "ssl"]]}}
+
+
+def test_same_events_always_build_the_same_baseline():
+    events = events_of("plain_http", "clean_tls13", "_handmade/dns_dhcp", "ftp")
+    shuffled = list(events)
+    random.Random(7).shuffle(shuffled)  # a different order must not matter
+    first, second = build_baseline(events), build_baseline(shuffled)
+    assert json.dumps(first) == json.dumps(second)  # byte for byte, key order included
+
+
+def test_baseline_survives_a_json_round_trip(baseline):
+    # The baseline is stored as JSON between runs; the rule must work on the loaded copy.
+    stored = json.loads(json.dumps(baseline))
+    assert stored == baseline
+    context = {"baseline": stored, "learning_ends": LEARNING_ENDS}
+    assert new_service(FIXTURES / "plain_http", context) == []
+
+
+def test_several_devices_and_ftp_data_left_out():
+    baseline = build_baseline(events_of("_handmade/dns_dhcp", "ftp"))
+    assert baseline["192.168.56.50"] == {"peers": 1, "services": [[53, "udp", "dns"]]}
+    # ftp-data ports change on every transfer, so only the control port 21 is learned.
+    assert baseline[CLIENT]["services"] == [[21, "tcp", "ftp"]]
+    assert list(baseline) == sorted(baseline)
+
+
+def test_a_new_port_is_found(baseline):
+    context = {"baseline": baseline, "learning_ends": LEARNING_ENDS}
+    [finding] = new_service(FIXTURES / "telnet", context)
+    assert finding.rule_id == "baseline.new_service"
+    assert finding.severity == "medium"
+    assert (finding.src_ip, finding.dst_ip, finding.dst_port) == (CLIENT, SERVER, 23)
+    assert finding.protocol == "tcp"  # Zeek has no Telnet analyzer, so service is ""
+    [ev] = finding.evidence
+    [conn] = [e for e in normalize(FIXTURES / "telnet", "pcap") if e["log"] == "conn.log"]
+    assert ev.log == "conn.log" and ev.record_id == conn["event_id"]
+
+
+def test_a_known_service_is_not_found(baseline):
+    context = {"baseline": baseline, "learning_ends": LEARNING_ENDS}
+    assert new_service(FIXTURES / "plain_http", context) == []
+    assert new_service(FIXTURES / "clean_tls13", context) == []
+
+
+def test_nothing_is_found_during_the_learning_period(baseline):
+    # The telnet capture happened before this "end of learning": it is still learning.
+    context = {"baseline": baseline, "learning_ends": 1791260000.0}
+    assert new_service(FIXTURES / "telnet", context) == []
+
+
+def test_unknown_devices_are_skipped():
+    context = {"baseline": {"192.0.2.99": {"peers": 1, "services": [[80, "tcp", "http"]]}},
+               "learning_ends": LEARNING_ENDS}
+    assert new_service(FIXTURES / "telnet", context) == []
+
+
+def test_same_logs_and_context_give_the_same_findings(baseline):
+    context = {"baseline": baseline, "learning_ends": LEARNING_ENDS}
+    first = [f.to_dict() for f in run_stateful(FIXTURES / "telnet", context)]
+    second = [f.to_dict() for f in run_stateful(FIXTURES / "telnet", context)]
+    assert first == second and len(first) == 1
+
+
+def test_stateful_registry_is_separate_from_run_all():
+    assert STATEFUL_RULES["baseline.new_service"] is new_service
+    assert "baseline.new_service" not in RULES
+    # run_all() is unchanged: on the telnet capture it still finds only cleartext.telnet.
+    assert {f.rule_id for f in run_all(FIXTURES / "telnet")} == {"cleartext.telnet"}
+
+
+def test_duplicate_rule_ids_are_refused():
+    with pytest.raises(ValueError):
+        stateful_rule("baseline.new_service")(new_service)
+    with pytest.raises(ValueError):
+        stateful_rule("cleartext.telnet")(new_service)  # taken in the normal registry
+```
+
+Run them:
+
+```bash
+pytest tests/unit/test_baseline.py -q
+```
+
+Expected output:
+
+```text
+...........                                                                                  [100%]
+11 passed in 0.08s
+```
+
+**Step 4.** Nothing calls `run_stateful()` yet: where the baseline is stored and when the learning period ends is an open decision (`docs/ARCHITECTURE.md` section 5). Propose it in GitHub Discussions with Jaiden.
+
+**Step 5.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -2471,7 +3304,7 @@ The tests pass, including one that builds the baseline twice and compares.
 
 #### What you just did and why
 
-Small networks are predictable: a printer prints, a camera streams. A device that suddenly offers a new service is worth a look. Passing the baseline in explicitly keeps the rule deterministic: given the same logs and the same baseline it always gives the same answer (CLAUDE.md rule 2).
+Small networks are predictable: a printer prints, a camera streams. A device that suddenly uses a new service is worth a look. Passing the baseline in explicitly keeps the rule deterministic: given the same logs and the same baseline it always gives the same answer (CLAUDE.md rule 2).
 
 #### Pull request checklist
 

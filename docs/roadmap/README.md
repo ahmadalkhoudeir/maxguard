@@ -278,8 +278,8 @@ How the team avoids waiting:
 | S8 | [AHM-08](ahmad.md#ahm-08-response-approvals-audit-revert-and-the-opnsense-connector) | Ahmad | Response: approvals, audit, revert, and the OPNsense connector | code, tested |
 | S8 | [JON-06](jonattan.md#jon-06-prompt-injection-tests-for-the-ai-layer) | Jonattan | Prompt-injection tests for the AI layer | code, tested |
 | S8 | [ALI-05](ali.md#ali-05-re-evaluate-the-models-against-prompt-injection-and-the-spring-rules) | Ali | Re-evaluate the models against prompt injection and the spring rules | process |
-| S11 | [FIO-06](fiona.md#fio-06-decoys-fake-services-on-their-own-ip-address) | Fiona | Decoys: fake services on their own IP address | design |
-| S11 | [FIO-07](fiona.md#fio-07-per-device-baselines) | Fiona | Per-device baselines | design |
+| S11 | [FIO-06](fiona.md#fio-06-decoys-fake-services-on-their-own-ip-address) | Fiona | Decoys: fake services on their own IP address | code, tested |
+| S11 | [FIO-07](fiona.md#fio-07-per-device-baselines) | Fiona | Per-device baselines | code, tested |
 | S11 | [JAK-10](jakub.md#jak-10-netflow-and-ipfix-input) | Jakub | NetFlow and IPFIX input | design |
 | S12 | [JAK-11](jakub.md#jak-11-host-agent-for-one-computer) | Jakub | Host agent for one computer | design |
 | S13 | [JAI-12](jaiden.md#jai-12-release-v20-rc1-and-v20) | Jaiden | Release v2.0-rc1 and v2.0 | process |

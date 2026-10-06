@@ -152,7 +152,7 @@ built yet.
 | JA4 watchlist rule | `maxguard/rules/ja4.py` | Jakub | spring | tested |
 | Device attribution | `maxguard/sensor/attribution.py` | Jakub | spring | tested |
 | NetFlow adapter and host agent | `maxguard/adapters/netflow.py`, `maxguard/sensor/agent.py` | Jakub | spring | design |
-| Decoys and device baselines | `maxguard/decoy/`, `maxguard/rules/decoy.py`, `baseline.py` | Fiona | spring | design |
+| Decoys and device baselines | `maxguard/decoy/`, `maxguard/rules/decoy.py`, `baseline.py`, `docker/decoy-compose.yaml` | Fiona | spring | tested (unit tests; the decoy in Docker on a bridge network, non-root and read-only, with an intruder container); macvlan on a real LAN not run; rule IDs not registered yet |
 | Signed intel bundles | `maxguard/intel/bundle.py` | Jaiden | spring | tested |
 
 ## 3. Data flow: analyzing an uploaded capture
@@ -485,8 +485,27 @@ object per line, so rules read it with the same helper:
 Rules that need history (device baselines) cannot be a plain
 `Callable[[Path], list[Finding]]`, because the same log folder must always give
 the same answer. They get their history passed in explicitly through a second
-registry (`STATEFUL_RULES`, spring), so `run_all()` and Contract 3 stay exactly
-as they are.
+registry (`STATEFUL_RULES` and `@stateful_rule` in `maxguard/rules/baseline.py`),
+so `run_all()` and Contract 3 stay exactly as they are. A stateful rule takes
+`(log_dir, context)`; for `baseline.new_service` the context is
+`{"baseline": <build_baseline(events) output>, "learning_ends": <Unix seconds>}`,
+and events before `learning_ends` never give a finding. `run_stateful(log_dir,
+context)` runs them in rule-ID order and merges like `run_all()`.
+
+**Open items for review (spring):**
+
+- Nothing calls `run_stateful()` yet. Where the baseline is stored (for example
+  a table in `state.db`), when the learning period ends, and the hook in
+  `pipeline.py` are a decision for Jaiden and Fiona. The registry could also
+  move to `rules/base.py`, so that `@rule` and `@stateful_rule` both refuse an
+  ID the other already has.
+- `decoy.log` has no route to the console yet: the decoy writes it into its
+  own volume, and the normalizer does not read it. Options: the decoy gets a
+  small shipper that sends to `POST /api/ingest` like the sensor, or the sensor
+  shipper collects it.
+- `decoy.contact` and `baseline.new_service` are built but not registered in
+  `maxguard/rules/__init__.py`; they wait for the Security Lead's approval, Home
+  text and mapping rows.
 
 ### Rule IDs
 
@@ -510,8 +529,8 @@ Security Lead's approval. Severities and titles are the ones in the code.
 | `cert.weak_key` | high | Weak RSA key (under 2048 bits) | `rules/certs.py` | FIO-02 |
 | `cert.sha1_signature` | medium | Certificate signed with SHA-1 | `rules/certs.py` | FIO-02 |
 | `tls.ja4_watchlist` | high | Proposed (spring): TLS client on the JA4 watchlist | `rules/ja4.py` | JAK-09 |
-| `decoy.contact` | critical | Proposed (spring): someone contacted a decoy | `rules/decoy.py` | FIO-06 |
-| `baseline.new_service` | medium | Proposed (spring): a device used a service new to it | `rules/baseline.py` | FIO-07 |
+| `decoy.contact` | critical | Someone contacted a decoy (built, waiting for approval) | `rules/decoy.py` | FIO-06 |
+| `baseline.new_service` | medium | Device used a service new to it (built, waiting for approval) | `rules/baseline.py` | FIO-07 |
 
 ## 6. The common event schema
 
