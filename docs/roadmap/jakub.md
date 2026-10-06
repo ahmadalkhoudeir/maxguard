@@ -1578,7 +1578,7 @@ Expected output:
 
 ```text
 ...                                                                                          [100%]
-3 passed in 0.03s
+3 passed in 1.45s
 ```
 
 ```bash
@@ -1589,11 +1589,11 @@ Expected output:
 
 ```text
 ............................................................................................ [ 20%]
-..............................................................................s............. [ 41%]
-............................................................................................ [ 61%]
-............................................................................................ [ 82%]
-..............................................................................               [100%]
-445 passed, 1 skipped, 31 deselected in 9.60s
+........................................................................................s... [ 40%]
+............................................................................................ [ 60%]
+............................................................................................ [ 80%]
+........................................................................................     [100%]
+455 passed, 1 skipped, 31 deselected in 6.94s
 ```
 
 **Step 7.** Add the integration test that proves Suricata now runs next to Zeek, `tests/integration/test_suricata_pipeline.py`. Where Suricata is missing it shows as skipped, with the reason, instead of passing:
@@ -1648,7 +1648,7 @@ Expected output:
 s                                                                        [100%]
 =========================== short test summary info ============================
 SKIPPED [1] tests/integration/test_suricata_pipeline.py:22: suricata is not installed here; the engine image has it
-1 skipped in 0.07s
+1 skipped in 0.08s
 ```
 
 *In planning this ran in `zeek/zeek:9.0.0`, which has no Suricata, so it was skipped as shown. With Zeek and Suricata both available it passed: the Suricata TLS event had a JA4 and the same Community ID as Zeek's. In the engine image you should see `1 passed`.*
@@ -2743,7 +2743,7 @@ class ConfigError(ValueError):
 
 @dataclass(frozen=True)
 class ShipperConfig:
-    console_url: str             # "http://192.168.50.20:8000", no trailing slash
+    console_url: str             # "http://192.168.50.20:8001", no trailing slash
     token: str                   # the console's MAXGUARD_INGEST_TOKEN
     sensor_id: str               # this sensor's name, e.g. "sensor-01"
     ca_file: str | None = None   # only for an https:// console with its own certificate
@@ -3413,19 +3413,19 @@ def test_main_runs_one_round(tmp_path, console):
 
 def test_load_config_reads_the_settings(tmp_path):
     (tmp_path / "shipper.toml").write_text(
-        f'console_url = "http://192.0.2.10:8000/"\ntoken = "{TOKEN}"\nsensor_id = "sensor-01"\n')
+        f'console_url = "http://192.0.2.10:8001/"\ntoken = "{TOKEN}"\nsensor_id = "sensor-01"\n')
     config = load_config(tmp_path / "shipper.toml")
-    assert config.console_url == "http://192.0.2.10:8000"   # trailing slash removed
+    assert config.console_url == "http://192.0.2.10:8001"   # trailing slash removed
     assert (config.token, config.sensor_id, config.ca_file) == (TOKEN, "sensor-01", None)
 
 
 @pytest.mark.parametrize(("line", "message"), [
-    ('console_url = "192.0.2.10:8000"', "console_url must start with"),
+    ('console_url = "192.0.2.10:8001"', "console_url must start with"),
     ('token = ""', "token is empty"),
     ('sensor_id = "../etc"', "sensor_id must be"),
 ])
 def test_load_config_refuses_wrong_settings(tmp_path, line, message):
-    settings = {"console_url": '"http://192.0.2.10:8000"', "token": f'"{TOKEN}"',
+    settings = {"console_url": '"http://192.0.2.10:8001"', "token": f'"{TOKEN}"',
                 "sensor_id": '"sensor-01"'}
     key = line.split(" = ")[0]
     settings[key] = line.split(" = ")[1]
@@ -3482,14 +3482,93 @@ Expected output:
 
 ```text
 ..........................................                                                   [100%]
-42 passed in 1.19s
+42 passed in 1.21s
 ```
 
-**Step 10.** Before the sensor ships anything, put the console's address and token in `/data/shipper.toml` on the sensor (never in the repository) and make it readable only by root:
+**Step 10.** **The console side.** The dashboard listens only on `127.0.0.1`, so nobody on the network can read alerts or approve a block. Sensors get their own door: a second container that serves nothing but `POST /api/ingest` on port 8001 of the console's LAN address (`create_ingest_app()` from JAI-07). Create `docker/compose.lan.yaml`:
+
+```yaml
+# Optional (Jakub, JAK-07): let live sensors and host agents on YOUR network send
+# logs to this console. Without this file nothing on the network can reach MaxGuard.
+#
+# Start:  docker compose -f docker/compose.yaml -f docker/compose.lan.yaml up -d
+#
+# It adds one container, maxguard-ingest: the same image, serving ONLY
+# POST /api/ingest on port 8001 of the console's LAN address. The dashboard and the
+# rest of the API stay on 127.0.0.1:8000, so nobody on the network can read alerts
+# or approve a block. Both containers share the maxguard-data volume.
+#
+# Put these two settings in docker/.env next to this file (never commit that file):
+#   MAXGUARD_LAN_ADDRESS   this console's address on your network, e.g. 192.168.50.20
+#   MAXGUARD_INGEST_TOKEN  at least 32 characters; make one with:
+#                          python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+# Sensors then use console_url = "http://<MAXGUARD_LAN_ADDRESS>:8001" in /data/shipper.toml.
+services:
+  maxguard-ingest:
+    image: maxguard:2.0.0a0
+    command: ["uvicorn", "maxguard.api.app:create_ingest_app", "--factory",
+              "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      # Only on the LAN address you name, never on every interface.
+      - "${MAXGUARD_LAN_ADDRESS:?set MAXGUARD_LAN_ADDRESS in docker/.env}:8001:8001"
+    volumes:
+      - maxguard-data:/data
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      MAXGUARD_OFFLINE: "1"
+      MAXGUARD_INGEST_TOKEN: "${MAXGUARD_INGEST_TOKEN:?set MAXGUARD_INGEST_TOKEN in docker/.env}"
+      # The Host header sensors send: the LAN address (DNS rebinding check, section 10).
+      MAXGUARD_ALLOWED_HOSTS: "${MAXGUARD_LAN_ADDRESS}"
+    networks:
+      - ui
+      - ai
+    depends_on:
+      - ollama
+    restart: unless-stopped
+```
+
+Check both Compose files (the values here are examples; yours go in `docker/.env`, which `.gitignore` already keeps out of git):
+
+```bash
+MAXGUARD_LAN_ADDRESS=192.168.50.20 MAXGUARD_INGEST_TOKEN=example-token-of-32-characters-or-more \
+  docker compose -f docker/compose.yaml -f docker/compose.lan.yaml config --format json | python3 -c "import json, sys; s = json.load(sys.stdin)['services']['maxguard-ingest']; print(s['command'][1], s['ports'][0]['host_ip'], s['ports'][0]['published'])"
+docker compose -f docker/compose.yaml -f docker/compose.lan.yaml config --quiet
+```
+
+Expected output:
+
+```text
+maxguard.api.app:create_ingest_app 192.168.50.20 8001
+error while interpolating services.maxguard-ingest.ports.[]: required variable MAXGUARD_LAN_ADDRESS is missing a value: set MAXGUARD_LAN_ADDRESS in docker/.env
+```
+
+*The first command shows the ingest app published only on the LAN address, port 8001. The second fails on purpose (exit code 1): without the two settings, Compose refuses to start the ingest container.*
+
+**Step 11.** On the console machine (address `192.168.50.20` in the lab), make a token, then create `docker/.env` with your editor (for example `nano docker/.env`):
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+```text
+MAXGUARD_LAN_ADDRESS=192.168.50.20
+MAXGUARD_INGEST_TOKEN=<paste the token here>
+```
+
+Make it readable only by you and start MaxGuard with both files:
+
+```bash
+chmod 600 docker/.env
+docker compose -f docker/compose.yaml -f docker/compose.lan.yaml up -d
+```
+
+Docker Compose reads `docker/.env` by itself because it sits next to the first Compose file.
+
+**Step 12.** Then, on the sensor, put the console's ingest address and the same token in `/data/shipper.toml` (never in the repository) and make it readable only by root:
 
 ```toml
-console_url = "http://192.168.50.20:8000"   # the console's LAN address
-token = "<the console's MAXGUARD_INGEST_TOKEN>"
+console_url = "http://192.168.50.20:8001"   # the console's LAN address, port 8001
+token = "<MAXGUARD_INGEST_TOKEN from docker/.env on the console>"
 sensor_id = "sensor-01"
 ```
 
@@ -3497,9 +3576,7 @@ sensor_id = "sensor-01"
 sudo chmod 600 /data/shipper.toml
 ```
 
-On the console, ingest stays off until `MAXGUARD_INGEST_TOKEN` is set (`docs/ARCHITECTURE.md` section 10).
-
-**Step 11.** Try the whole path on the Pi with 1-minute folders first:
+**Step 13.** Try the whole path on the Pi with 1-minute folders first. The test traffic must cross switch port 1, the only port the sensor watches (`docs/HARDWARE.md` section 1): run the lab service (`docker run -d --rm --name lab-service -p 23:23 -p 8080:8080 lab-server`) on a machine plugged into a LAN port of the router, and connect to it from a device on the mesh Wi-Fi. Stop it afterwards (`docker stop lab-service`): it is insecure on purpose.
 
 ```bash
 # On the sensor: 1-minute folders for this test only
@@ -3548,9 +3625,9 @@ lab-sensor-01 zeek conn.log
 
 *Not run on a Raspberry Pi: verify on hardware. This output is from planning, where Zeek and Suricata listened inside a lab-server container's network namespace instead of on `eth0` (a two-line Compose override), the console ran on the same machine, and `shipper.toml` named `sensor_id = "lab-sensor-01"`. The first Telnet session was at 21:03:09 and its alert reached the console at 21:06:36: the 21:03 folder is complete at 21:06:00 (end of the interval plus two minutes), and the shipper checks once a minute. With 15-minute folders, expect up to about 18 minutes plus the analysis time. Your folder names are your own times.*
 
-**Step 12.** Then start it for real (15-minute folders), run the sensor on the lab for one day, and check that alerts appear on the console within about 20 minutes of the traffic: `docker compose -f docker/sensor-compose.yaml up -d`.
+**Step 14.** Then start it for real (15-minute folders), run the sensor on the lab for one day, and check that alerts appear on the console within about 20 minutes of the traffic: `docker compose -f docker/sensor-compose.yaml up -d`.
 
-**Step 13.** Commit, push, and open the pull request:
+**Step 15.** Commit, push, and open the pull request:
 
 ```bash
 git add -A

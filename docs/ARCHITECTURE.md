@@ -240,7 +240,7 @@ flowchart LR
     SH["Shipper"]
   end
   subgraph console["Console"]
-    IN["POST /api/ingest<br/>bearer token"]
+    IN["maxguard-ingest :8001<br/>POST /api/ingest only<br/>bearer token"]
     PL["pipeline.analyze()<br/>ZeekLogAdapter"]
   end
   CAP --> ZL --> D
@@ -281,11 +281,22 @@ flowchart LR
   `maxguard analyze /data` on the sensor's SSD. It accepts only a folder that
   has `zeek/<YYYY-MM-DD-HHMM>/` folders and no `conn.log` of its own, so it never
   takes a plain Zeek log folder from `ZeekLogAdapter`.
-- `POST /api/ingest` is switched off unless the console sets
-  `MAXGUARD_INGEST_TOKEN`; every request must carry that token. The shipper
-  reads the console's address and the token from `/data/shipper.toml` on the
-  sensor (never from the repository) and never uses a proxy. Publishing the
-  ingest port on the LAN is an explicit, optional choice (CLAUDE.md rule 1).
+- **Where the sensor sends.** The dashboard and the rest of the API listen
+  only on the console's `127.0.0.1`. Sensors reach a second container,
+  `maxguard-ingest` (`docker/compose.lan.yaml`), which runs
+  `create_ingest_app()`: nothing but `POST /api/ingest`, on port 8001 of the
+  console's LAN address. Nobody on the network can read alerts or approve a
+  block. Ingest is off unless the console sets `MAXGUARD_INGEST_TOKEN`, and
+  every request must carry that token. The shipper reads the console's address
+  (`http://<console>:8001`) and the token from `/data/shipper.toml` on the
+  sensor (never from the repository) and never uses a proxy. Starting the
+  console with `compose.lan.yaml` is an explicit, optional choice (CLAUDE.md
+  rule 1).
+- **Which traffic the sensor sees.** Only what crosses switch port 1, the cable
+  to the router (`docs/HARDWARE.md` section 1): every device's traffic to the
+  internet and to the router. Traffic between two devices behind the switch
+  never crosses it. Tests that need lab traffic put the lab service on a LAN
+  port of the router.
 - Retention is 7 days on both machines: the shipper deletes shipped folders
   older than that (a folder that was never shipped is kept), and the console's
   event store prunes whole hour folders (section 9).
@@ -758,9 +769,26 @@ and "Using Standard Headers to Verify Origin" defenses of the OWASP CSRF
 Prevention Cheat Sheet. A request with neither header is allowed, because curl,
 the sensor, the host agent and the tests send neither; every major browser has
 sent `Sec-Fetch-Site` since March 2023. Behind a reverse proxy, the proxy must
-pass the original `Host` header. This does not stop DNS rebinding (a hostile
-page that makes its own domain name point at `127.0.0.1`); checking the `Host`
-header against an allow-list would, and is an open item for review.
+pass the original `Host` header.
+
+**DNS rebinding.** A hostile page can make its own domain name point at
+`127.0.0.1` after it has loaded; the browser then treats the API as part of
+that website, so it may read the API, and the cross-site check cannot tell.
+Every request whose `Host` header is not in `MAXGUARD_ALLOWED_HOSTS` (default
+`localhost,127.0.0.1,[::1]`) is therefore answered `400 Invalid host header`
+before any route runs (Starlette's `TrustedHostMiddleware`). A setting with
+`*`, `http://` or a port stops the app at start-up. FastAPI's `TestClient`
+calls the app `testserver`, so an autouse fixture in `tests/conftest.py` adds
+that name for the tests.
+
+**The ingest-only app.** `create_ingest_app()` builds a second app with the
+same settings, stores and checks but one route, `POST /api/ingest`, and no
+`/docs` page; it refuses to start without `MAXGUARD_INGEST_TOKEN`.
+`docker/compose.lan.yaml` runs it in its own container on the console's LAN
+address, port 8001, with `MAXGUARD_ALLOWED_HOSTS` set to that address. Both
+apps write to the same data folder. The dashboard learns about ingested data
+at its next refresh (within 30 seconds): `GET /api/stream` only hears about
+changes made in its own process.
 
 When the modules exist, the app includes `maxguard.web.routes.router` (the HTML
 pages: alert queue `/`, alert detail `/alerts/{finding_id}`, `/upload`,
@@ -905,12 +933,12 @@ controlled. The main threats and the defenses:
 | Text in traffic attacks the dashboard (XSS) | Jinja2 autoescaping everywhere; AI text and anything from traffic is never marked `\|safe`; the HTML export escapes every value and carries a Content-Security-Policy that allows no scripts | web, `report.py` |
 | Text in traffic attacks a spreadsheet (CSV formula injection) | A CSV cell that starts with `=`, `+`, `-`, `@`, a tab, or a line break gets a leading `'`, as OWASP recommends | `report.py` |
 | Text in traffic attacks the AI (prompt injection) | Evidence is passed as JSON data and the prompt says never to follow it; the model can only fill two text fields; every sentence must cite this finding's records; the rule's severity is always shown; tested with four hostile fields and a model that obeys (section 11) | `ai/`, `tests/unit/test_prompt_injection.py` |
-| The dashboard is reached from the network | Published on `127.0.0.1` only; ingest is off by default and token-protected | `docker/compose.yaml`, API |
+| The dashboard is reached from the network | Published on `127.0.0.1` only. Sensors and agents get a separate ingest-only app (one route, token required, off by default) on the LAN address the user names | `docker/compose.yaml`, `docker/compose.lan.yaml`, API |
 | A sensor leaks or injects traffic | The capture interface has no IP address; Zeek and Suricata only listen; decoys run on their own IP, never on the capture interface | `docs/HARDWARE.md`, CLAUDE.md rule 5 |
 | A block is abused or goes wrong | Typed confirmation, preview, audit log, undo, address validation, only the user's own firewall | response module |
 | A tampered rule or intel update | The archive's member list is read from its headers (regular files only, no duplicates, size limits); the Ed25519 signature over the manifest is checked before the manifest is trusted; only allowed paths (`rules/*.rules`, `intel/ja4_watchlist.yaml`, `mappings/*.yaml`) and only files in the manifest; every hash checked in memory, then again on disk after extracting with the `data` filter; the `current` link is switched in one step; a version that is not newer is refused, so an old signed bundle cannot be replayed (rollback attack) | `intel/bundle.py` |
 | Evidence is altered after the fact | Chain-of-custody log: a JSON Lines file where each entry holds the previous entry's hash and an Ed25519 signature over its own hash; `python -m maxguard.custody.log verify` names the first bad entry. A cut-off end still forms a valid chain, so `verify` prints the head hash, to be recorded elsewhere | `custody/log.py` |
-| Another website makes the user's browser send requests to the console (CSRF) | Changing requests are refused when `Sec-Fetch-Site` is `cross-site` or `same-site`, or `Origin` does not match `Host` (OWASP CSRF Prevention Cheat Sheet); DNS rebinding remains an open item | API |
+| Another website makes the user's browser send requests to the console (CSRF) | Changing requests are refused when `Sec-Fetch-Site` is `cross-site` or `same-site`, or `Origin` does not match `Host` (OWASP CSRF Prevention Cheat Sheet). DNS rebinding: requests for host names outside `MAXGUARD_ALLOWED_HOSTS` are refused | API |
 | Secrets end up in the repository | Keys and API keys live in the data folder; `.gitignore` and `.dockerignore` exclude key files; CLAUDE.md rule 6 is part of every review | repository |
 | A dependency is compromised or changes license | Pinned minimum versions, one vendored front-end file checked by SHA-256, every license in `docs/DEPENDENCIES.md` | repository |
 | Privacy of the people on the network | Uploads deleted after analysis; events kept 7 days; nothing leaves the machine | storage, section 12 |
@@ -949,8 +977,16 @@ Settings (environment variables):
 | `MAXGUARD_OFFLINE` | `1` in Compose | turn the offline guard on |
 | `MAXGUARD_OFFLINE_ALLOW` | empty | extra user-owned hosts, comma-separated |
 | `MAXGUARD_INGEST_TOKEN` | unset (ingest off) | token for sensors and agents; at least 32 characters, or the app refuses to start |
+| `MAXGUARD_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` | the host names and addresses the console answers to (DNS rebinding, section 10); names or addresses only, no `http://`, port or `*` |
 | `MAXGUARD_MAX_UPLOAD_MB` | `1024` | upload limit in MiB (a whole number) |
 | `MAXGUARD_KEEP_UPLOADS` | unset | `1` keeps uploaded files (under their generated names) after analysis, for debugging |
+
+`docker/compose.lan.yaml` (optional, JAK-07) adds a third container,
+`maxguard-ingest`, for live sensors and host agents: the same image running
+`create_ingest_app()` on port 8001 of the console's LAN address (section 10).
+Start it with `docker compose -f docker/compose.yaml -f docker/compose.lan.yaml
+up -d`, after putting `MAXGUARD_LAN_ADDRESS` and `MAXGUARD_INGEST_TOKEN` in
+`docker/.env` (ignored by git); Compose refuses to start it without both.
 
 The offline bundle (JON-05) contains the saved images, the model volume, the
 Compose file, `install.sh`, and a SHA-256 checksum file, split into parts under
@@ -1082,8 +1118,11 @@ each with `verified`.
 
 Write a class that follows Contract 3 (`name`, `accepts()`, `to_zeek_logs()`),
 add it to `ADAPTERS` in `maxguard/pipeline.py`, and make it produce Zeek-shaped
-JSON logs so the existing rules and the normalizer work unchanged. If it needs a
-new event `kind` or key, that is a contract change (section 6).
+JSON logs so the existing rules and the normalizer work unchanged. Its
+`accepts()` must not take an input that another adapter already accepts:
+`LiveSensorAdapter` (`maxguard/adapters/live.py`) is a short example, with tests
+that check both directions. If it needs a new event `kind` or key, that is a
+contract change (section 6).
 
 ### Add a dashboard page
 

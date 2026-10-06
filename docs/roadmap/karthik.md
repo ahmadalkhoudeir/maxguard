@@ -2196,14 +2196,19 @@ If `source .venv/bin/activate` fails, you have not made the virtual environment 
 #!/usr/bin/env bash
 # Live-sensor end-to-end check (Karthik, KAR-06).
 #
-# Run it on a laptop in the lab. It makes one plain-HTTP request (port 80) and
-# one Telnet connection (port 23) to a test service on another lab machine, then
-# asks the MaxGuard console for its alerts every minute, for up to 30 minutes,
+# Run it on the MaxGuard console: its API answers only on 127.0.0.1 (sensors reach
+# a separate ingest-only port). It makes one plain-HTTP request (port 80) and one
+# Telnet connection (port 23) to a test service on another lab machine, then
+# asks the console for its alerts every minute, for up to 30 minutes,
 # until a cleartext.http and a cleartext.telnet alert show traffic seen after the
 # start. It prints how long each alert took.
 #
 # Usage:    bash scripts/live_check.sh <console URL> <lab service IPv4 address>
-# Example:  bash scripts/live_check.sh http://192.168.50.10:8000 192.168.50.30
+# Example:  bash scripts/live_check.sh http://127.0.0.1:8000 192.168.50.30
+#
+# The sensor sees only traffic that crosses the mirrored switch port (the cable to
+# the router, docs/HARDWARE.md section 1). Plug the test service's machine into a
+# LAN port of the router itself for this test, so the probes cross that cable.
 #
 # Settings (environment variables), mainly so a test can finish in seconds:
 #   LIVE_CHECK_POLL_SECONDS     seconds between two looks at the console (default 60)
@@ -2221,7 +2226,7 @@ TIMEOUT_SECONDS="${LIVE_CHECK_TIMEOUT_SECONDS:-1800}"
 
 usage() {
   echo "usage: bash scripts/live_check.sh <console URL> <lab service IPv4 address>" >&2
-  echo "example: bash scripts/live_check.sh http://192.168.50.10:8000 192.168.50.30" >&2
+  echo "example: bash scripts/live_check.sh http://127.0.0.1:8000 192.168.50.30" >&2
   exit 2
 }
 
@@ -2256,7 +2261,7 @@ fetch_alerts() {
 
 # Succeeds when the alert list (JSON on stdin) has an alert for rule $1 whose
 # last_seen is at or after $2. Both are Unix seconds; last_seen is when the sensor
-# saw the traffic, so the sensor's and this laptop's clocks must agree (NTP).
+# saw the traffic, so the sensor's and this machine's clocks must agree (NTP).
 alert_seen_since() {
   python3 -c '
 import json, sys
@@ -2365,7 +2370,7 @@ main() {
 main "$@"
 ```
 
-Three choices to notice. It refuses any address outside the lab ranges, because probing someone else's machine is never acceptable (CLAUDE.md rule 4). It uses `curl` for the Telnet probe too, so no Telnet client is needed. And it compares the alert's `last_seen` (the sensor's clock) with this laptop's clock, so both must keep the right time (NTP); a Raspberry Pi without a clock battery has the wrong time until it reaches a time server.
+Three choices to notice. It refuses any address outside the lab ranges, because probing someone else's machine is never acceptable (CLAUDE.md rule 4). It uses `curl` for the Telnet probe too, so no Telnet client is needed. And it compares the alert's `last_seen` (the sensor's clock) with the console's clock, so both must keep the right time (NTP); a Raspberry Pi without a clock battery has the wrong time until it reaches a time server.
 
 **Step 3.** Check the script with ShellCheck, and see it refuse an address outside the lab before it contacts anything:
 
@@ -2383,12 +2388,12 @@ refused: 100.64.0.1 is not a lab address (allowed: 10.0.0.0/8, 172.16.0.0/12, 19
 
 *The second command exits with 2: `100.64.0.1` is not a lab address.*
 
-**Step 4.** On another lab machine, start a test service with Telnet and HTTP. The lab server from KAR-01 is one: `docker run -d --rm --name lab-service -p 23:23 -p 80:80 lab-server`. It is insecure on purpose: run it only on the lab network, and stop it (`docker stop lab-service`) after the test.
+**Step 4.** On another lab machine, start a test service with Telnet and HTTP. The lab server from KAR-01 is one: `docker run -d --rm --name lab-service -p 23:23 -p 80:80 lab-server`. It is insecure on purpose: run it only on the lab network, and stop it (`docker stop lab-service`) after the test. Plug that machine into a LAN port of the **router** for the test, not into the switch or the mesh Wi-Fi: the sensor sees only traffic that crosses the cable on switch port 1 (`docs/HARDWARE.md` section 1), and traffic between two devices behind the switch never does.
 
-**Step 5.** From a laptop on the lab Wi-Fi, run the check against the console and the lab service:
+**Step 5.** On the console machine (on the mesh Wi-Fi), run the check against the console and the lab service. The console's API answers only on `127.0.0.1`; sensors use the separate ingest port:
 
 ```bash
-bash scripts/live_check.sh http://192.168.50.10:8000 192.168.50.30
+bash scripts/live_check.sh http://127.0.0.1:8000 192.168.50.30
 ```
 
 Expected output (not run in planning):

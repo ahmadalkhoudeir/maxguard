@@ -3319,15 +3319,22 @@ this app. docs/ARCHITECTURE.md section 10 lists the endpoints.
   so two at once on a Raspberry Pi only makes both slower.
 - POST /api/ingest is how sensors and host agents on the LAN send data. It is
   OFF unless MAXGUARD_INGEST_TOKEN is set, and every request must carry that
-  token. The console is published on 127.0.0.1 only; publishing its port on the
-  LAN so sensors can reach it is an explicit, optional choice of the user
-  (CLAUDE.md rule 1: nothing leaves or enters the machine by default).
+  token. The dashboard and the rest of the API are published on 127.0.0.1 only.
+  Sensors reach a second app, create_ingest_app(), which serves nothing but
+  POST /api/ingest on its own port; publishing that port on the LAN is an
+  explicit, optional choice of the user (CLAUDE.md rule 1: nothing leaves or
+  enters the machine by default).
 - Browsers refuse to let other websites read this API, but they do let another
   website *send* a form to it. Requests that change something are therefore
   refused when the browser says they come from another site (cross-site
   request forgery, OWASP CSRF Prevention Cheat Sheet).
+- A website can also make its own name point to 127.0.0.1 after the page has
+  loaded (DNS rebinding); the browser then treats this API as part of that
+  website. The API therefore answers only requests whose Host header names this
+  machine, or an address listed in MAXGUARD_ALLOWED_HOSTS.
 
 Start it with:  uvicorn maxguard.api.app:create_app --factory --port 8000
+Ingest only:    uvicorn maxguard.api.app:create_ingest_app --factory --port 8001
 """
 
 from __future__ import annotations
@@ -3356,6 +3363,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.datastructures import FormData, UploadFile
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from maxguard import __version__, offline
 from maxguard.adapters.pcap import PCAP_MAGIC
@@ -3373,6 +3381,7 @@ MIB = 1024 * 1024
 CHUNK_BYTES = MIB              # copy uploads in 1 MiB blocks: never the whole file in memory
 FORM_OVERHEAD_BYTES = 64 * 1024  # room for the multipart headers around the file
 MIN_TOKEN_LENGTH = 32          # secrets.token_urlsafe(32) gives 43 characters
+DEFAULT_ALLOWED_HOSTS = "localhost,127.0.0.1,[::1]"  # this machine only
 
 DEFAULT_SENSOR_ID = "sensor"
 MAX_FORM_FIELDS = 5             # one file plus a few text fields; Starlette allows 1000
@@ -3398,6 +3407,7 @@ INGEST_FORM = {"requestBody": {"required": True, "content": {"multipart/form-dat
     }}}}}}
 
 router = APIRouter()
+ingest_router = APIRouter()  # also served alone by create_ingest_app()
 
 
 # ---------- the app ----------
@@ -3407,13 +3417,44 @@ def create_app(data_dir: str | Path | None = None, *, explain: bool = True) -> F
 
     data_dir defaults to $MAXGUARD_DATA_DIR, then "data". explain=False skips the AI
     (tests, and machines without Ollama)."""
+    app = new_app(data_dir, explain)
+    app.include_router(router)
+    app.include_router(ingest_router)
+    for module_name in OPTIONAL_ROUTERS:
+        module = optional_module(module_name)
+        if module is not None:
+            app.include_router(module.router)
+    if STATIC_DIR.is_dir():
+        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    return app
+
+
+def create_ingest_app(data_dir: str | Path | None = None, *, explain: bool = True) -> FastAPI:
+    """Only POST /api/ingest: the app for the port that sensors and agents reach over
+    the LAN (docker/compose.lan.yaml). The dashboard and the rest of the API stay on
+    127.0.0.1, so nobody on the LAN can read alerts or approve a block.
+
+    Both apps share the data folder. The dashboard shows ingested data at its next
+    refresh: GET /api/stream only hears about changes made in its own process."""
+    app = new_app(data_dir, explain, docs=False)  # no /docs page on the LAN
+    if app.state.ingest_token is None:
+        raise ValueError("the ingest app needs MAXGUARD_INGEST_TOKEN (at least 32 characters)")
+    app.include_router(ingest_router)
+    return app
+
+
+def new_app(data_dir: str | Path | None, explain: bool, *, docs: bool = True) -> FastAPI:
+    """What both apps share: settings and stores on app.state, and the two checks
+    that run before any route (unknown host names, cross-site changes)."""
     offline.enable_from_env()  # MAXGUARD_OFFLINE=1 (set in docker/compose.yaml)
 
     folder = Path(data_dir or os.environ.get("MAXGUARD_DATA_DIR", "data"))
     folder.mkdir(parents=True, exist_ok=True)
 
+    no_docs = {} if docs else {"docs_url": None, "redoc_url": None, "openapi_url": None}
     app = FastAPI(title="MaxGuard", version=__version__,
-                  description="Offline network security checks. See docs/ARCHITECTURE.md.")
+                  description="Offline network security checks. See docs/ARCHITECTURE.md.",
+                  **no_docs)
     app.state.data_dir = folder
     app.state.state_store = StateStore(folder / "state.db")
     app.state.event_store = EventStore(folder / "events")
@@ -3426,14 +3467,26 @@ def create_app(data_dir: str | Path | None = None, *, explain: bool = True) -> F
     app.state.keepalive_seconds = KEEPALIVE_SECONDS
 
     app.middleware("http")(refuse_cross_site_changes)
-    app.include_router(router)
-    for module_name in OPTIONAL_ROUTERS:
-        module = optional_module(module_name)
-        if module is not None:
-            app.include_router(module.router)
-    if STATIC_DIR.is_dir():
-        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    # Added last, so it runs first: a request for an unknown host name stops here.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts(),
+                       www_redirect=False)
     return app
+
+
+def allowed_hosts() -> list[str]:
+    """MAXGUARD_ALLOWED_HOSTS: the names and addresses this console may be reached by,
+    comma-separated, without http:// or a port. Default: this machine only. Add the
+    console's LAN address (for example 192.168.50.20) when sensors or agents send to it."""
+    text = os.environ.get("MAXGUARD_ALLOWED_HOSTS", DEFAULT_ALLOWED_HOSTS)
+    hosts = [host.strip().lower() for host in text.split(",") if host.strip()]
+    if not hosts:
+        raise ValueError("MAXGUARD_ALLOWED_HOSTS is empty: the console would answer no one")
+    for host in hosts:
+        # "*" would switch the check off; "/" or a port can never match a Host header.
+        if "*" in host or "/" in host or (":" in host and not host.startswith("[")):
+            raise ValueError("MAXGUARD_ALLOWED_HOSTS: write names or addresses only, "
+                             f"without http:// or a port, got {host!r}")
+    return hosts
 
 
 def max_upload_bytes() -> int:
@@ -3508,7 +3561,7 @@ async def upload_analysis(request: Request) -> dict:
         return await run_in_threadpool(receive, request.app, upload, sensor_id=None)
 
 
-@router.post("/api/ingest", openapi_extra=INGEST_FORM)
+@ingest_router.post("/api/ingest", openapi_extra=INGEST_FORM)
 async def ingest(request: Request) -> dict:
     """The same as an upload, for sensors and host agents on the LAN."""
     # Both checks come before the body is read, so a stranger without the token
@@ -3755,10 +3808,22 @@ What to notice, top to bottom:
 - An upload is saved under a random name, and its suffix comes from the file's first bytes, never from the client's file name. The client's name is cleaned and only shown, never used as a path.
 - The size limit is checked twice: from the `Content-Length` header before the body is read, and while copying (a client can leave the header out).
 - `POST /api/ingest` checks the token **before** it reads the body, so a stranger cannot make the console store anything; `hmac.compare_digest` takes the same time however many characters match. A token shorter than 32 characters stops the app at start-up.
+- `create_ingest_app()` builds a second, tiny app with nothing but `POST /api/ingest` (no dashboard, no `/docs` page). JAK-07 publishes it on the console's LAN address, port 8001, for sensors and host agents; the full app stays on `127.0.0.1`, so nobody on the network can read alerts or approve a block. Both apps share the data folder; the dashboard shows ingested data at its next refresh.
 - Browsers let any website *send* a form to `127.0.0.1`. `refuse_cross_site_changes` refuses changing requests that a browser marks as coming from another site (cross-site request forgery). curl, sensors and tests send no `Origin` header and are not affected.
+- A website can also point its own name at `127.0.0.1` after its page has loaded (DNS rebinding). The browser then treats the API as part of that website, and the cross-site check cannot tell. `TrustedHostMiddleware` (from Starlette, which FastAPI is built on) answers `400 Invalid host header` unless the `Host` header names this machine or an address in `MAXGUARD_ALLOWED_HOSTS`. When sensors or agents send to the console over the LAN, add the console's LAN address there.
 - `GET /api/stream` sends one `alerts-changed` at once (a dashboard that reconnects may have missed a change), then one per change, with a `: keep-alive` comment every 15 seconds.
 
-**Step 4.** Create the unit tests `tests/unit/test_api.py`:
+**Step 4.** FastAPI's `TestClient` calls the app `testserver`, a name the host check refuses. Add this fixture at the end of `tests/conftest.py` (`autouse=True` gives it to every test without asking):
+
+```python
+@pytest.fixture(autouse=True)
+def allow_test_client_host(monkeypatch):
+    """The API answers only host names in MAXGUARD_ALLOWED_HOSTS (JAI-07), and FastAPI's
+    TestClient calls the app "testserver". autouse: every test gets it without asking."""
+    monkeypatch.setenv("MAXGUARD_ALLOWED_HOSTS", "testserver,localhost,127.0.0.1,[::1]")
+```
+
+**Step 5.** Create the unit tests `tests/unit/test_api.py`:
 
 ```python
 """Tests for the API (Jaiden, JAI-07).
@@ -3783,6 +3848,7 @@ from fastapi.testclient import TestClient
 from maxguard.api import app as api_app
 from maxguard.api.app import (
     create_app,
+    create_ingest_app,
     display_name,
     notify_change,
     optional_module,
@@ -4023,6 +4089,28 @@ def test_short_ingest_token_is_refused_at_start(monkeypatch, data_dir):
         create_app(data_dir, explain=False)
 
 
+def test_the_ingest_app_serves_only_ingest(monkeypatch, data_dir):
+    # The port published on the LAN (docker/compose.lan.yaml): nothing to read there.
+    monkeypatch.setenv("MAXGUARD_INGEST_TOKEN", TOKEN)
+    lan = TestClient(create_ingest_app(data_dir, explain=False))
+    for path in ("/api/alerts", "/api/events", "/api/audit", "/", "/docs", "/openapi.json"):
+        assert lan.get(path).status_code == 404, path
+    assert list(lan.app.openapi()["paths"]) == ["/api/ingest"]  # its only route
+
+    sent = lan.post("/api/ingest", files={"file": ("2026-10-06-1400.tar.gz", zipped_fixture())},
+                    data={"sensor_id": "lab-sensor"},
+                    headers={"Authorization": f"Bearer {TOKEN}"})
+    assert sent.status_code == 200
+    # The dashboard's app reads the same data folder.
+    console = TestClient(create_app(data_dir, explain=False))
+    assert [a["rule_id"] for a in console.get("/api/alerts").json()] == ["cleartext.telnet"]
+
+
+def test_the_ingest_app_needs_a_token(data_dir):
+    with pytest.raises(ValueError, match="MAXGUARD_INGEST_TOKEN"):
+        create_ingest_app(data_dir, explain=False)
+
+
 # ---------- cross-site requests ----------
 
 def test_another_website_cannot_upload(client):
@@ -4037,6 +4125,40 @@ def test_another_website_cannot_upload(client):
     assert sandboxed.status_code == 403
     same_site = upload(client, data, headers={"Origin": "http://testserver"})
     assert same_site.status_code == 200
+
+
+# ---------- DNS rebinding: only this machine's names ----------
+
+def test_a_request_for_an_unknown_host_name_is_refused(data_dir):
+    # What a DNS-rebinding page sends: its own name, now pointing at 127.0.0.1.
+    client = TestClient(create_app(data_dir, explain=False),
+                        base_url="http://rebind.example:8000")
+    response = client.get("/api/alerts")
+    assert response.status_code == 400
+    assert response.text == "Invalid host header"
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1:8000", "localhost:8000", "[::1]:8000", "localhost"])
+def test_this_machine_is_allowed_by_default(data_dir, monkeypatch, host):
+    monkeypatch.delenv("MAXGUARD_ALLOWED_HOSTS")
+    client = TestClient(create_app(data_dir, explain=False), base_url=f"http://{host}")
+    assert client.get("/api/alerts").status_code == 200
+
+
+def test_the_consoles_lan_address_can_be_added(data_dir, monkeypatch):
+    monkeypatch.setenv("MAXGUARD_ALLOWED_HOSTS", "localhost, 192.168.50.20")
+    app = create_app(data_dir, explain=False)
+    assert TestClient(app, base_url="http://192.168.50.20:8000").get(
+        "/api/alerts").status_code == 200
+    assert TestClient(app, base_url="http://192.168.50.21:8000").get(
+        "/api/alerts").status_code == 400
+
+
+@pytest.mark.parametrize("value", ["http://192.168.50.20", "192.168.50.20:8000", "*", " , "])
+def test_a_wrong_allowed_hosts_setting_stops_the_app(data_dir, monkeypatch, value):
+    monkeypatch.setenv("MAXGUARD_ALLOWED_HOSTS", value)
+    with pytest.raises(ValueError, match="MAXGUARD_ALLOWED_HOSTS"):
+        create_app(data_dir, explain=False)
 
 
 # ---------- live updates ----------
@@ -4104,7 +4226,7 @@ def test_data_dir_defaults_to_the_environment(monkeypatch, tmp_path):
     assert (tmp_path / "from-env" / "state.db").exists()
 ```
 
-**Step 5.** Run them:
+**Step 6.** Run them:
 
 ```bash
 pytest tests/unit/test_api.py -q
@@ -4113,11 +4235,11 @@ pytest tests/unit/test_api.py -q
 Expected output:
 
 ```text
-...........................                                                                  [100%]
-27 passed in 3.65s
+.......................................                                                      [100%]
+39 passed in 3.87s
 ```
 
-**Step 6.** Create the integration test `tests/integration/test_api_upload.py`, which uploads a real capture, so Zeek runs:
+**Step 7.** Create the integration test `tests/integration/test_api_upload.py`, which uploads a real capture, so Zeek runs:
 
 ```python
 """Integration test for the API (Jaiden, JAI-07): a real capture through Zeek.
@@ -4170,12 +4292,12 @@ Expected output:
 
 ```text
 .                                                                        [100%]
-1 passed in 1.57s
+1 passed in 1.54s
 ```
 
 *Run in planning inside `zeek/zeek:9.0.0` with MaxGuard's Python packages added, because the engine image build needs Debian's package servers (see JAI-04). The test output is the same.*
 
-**Step 7.** Start the API and try it with curl. Start the server in one terminal, then run the rest in a second terminal from the repository root (on Windows use Git Bash):
+**Step 8.** Start the API and try it with curl. Start the server in one terminal, then run the rest in a second terminal from the repository root (on Windows use Git Bash):
 
 ```bash
 # terminal 1:
@@ -4190,7 +4312,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -F file=@data/telnet.zip http://127.0.0
 Expected output:
 
 ```text
-{"analysis_id":"4abce1d74c62179f","findings":1}
+{"analysis_id":"0c0036ba63bb7644","findings":1}
 cleartext.telnet high 172.18.0.3 -> 172.18.0.2 23 new
 404
 ```
@@ -4199,7 +4321,7 @@ cleartext.telnet high 172.18.0.3 -> 172.18.0.2 23 new
 
 Open http://127.0.0.1:8000/docs: FastAPI's OpenAPI page lists every endpoint, and it is the API contract for the dashboard. Stop the server with Ctrl+C.
 
-**Step 8.** Commit, push, and open the pull request:
+**Step 9.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
