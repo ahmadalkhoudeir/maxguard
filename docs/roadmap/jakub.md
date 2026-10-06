@@ -15,8 +15,8 @@ This is your part of the MaxGuard v2.0 roadmap. Read [the roadmap overview](READ
 | [JAK-04](#jak-04-asset-inventory) | W1 | Asset inventory | [JAK-03](#jak-03-cleartext-and-rdp-rules-the-rule-set-is-complete), [KAR-02](karthik.md#kar-02-test-fixtures-zeek-and-suricata-output-for-every-capture) | code, tested |
 | [JAK-05](#jak-05-suricata-in-the-pipeline) | W4 | Suricata in the pipeline | [JAK-02](#jak-02-suricata-configuration-community-id-and-ja4), [FIO-01](fiona.md#fio-01-zeek-runner-and-the-two-input-adapters), [JAI-05](jaiden.md#jai-05-the-pipeline-one-function-from-input-to-report), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | code, tested |
 | [JAK-06](#jak-06-build-the-reference-lab-and-prove-the-mirror-works) | W8 | Build the reference lab and prove the mirror works | [JAK-02](#jak-02-suricata-configuration-community-id-and-ja4) | process |
-| [JAK-07](#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) | S4 | Live sensor: capture, rotation, and shipping to the console | [JAK-06](#jak-06-build-the-reference-lab-and-prove-the-mirror-works), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | design |
 | [JAK-08](#jak-08-device-attribution-which-device-is-behind-each-ip-address) | S4 | Device attribution: which device is behind each IP address | [JAK-04](#jak-04-asset-inventory), [KAR-02](karthik.md#kar-02-test-fixtures-zeek-and-suricata-output-for-every-capture) | code, tested |
+| [JAK-07](#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) | S4 | Live sensor: capture, rotation, and shipping to the console | [JAK-06](#jak-06-build-the-reference-lab-and-prove-the-mirror-works), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JAK-08](#jak-08-device-attribution-which-device-is-behind-each-ip-address) | code, tested |
 | [JAK-09](#jak-09-ja4-watchlist-rule) | S8 | JA4 watchlist rule | [JAK-05](#jak-05-suricata-in-the-pipeline) | code, tested |
 | [JAK-10](#jak-10-netflow-and-ipfix-input) | S11 | NetFlow and IPFIX input | [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JAI-03](jaiden.md#jai-03-common-event-schema-the-normalizer-and-record-lookup) | design |
 | [JAK-11](#jak-11-host-agent-for-one-computer) | S12 | Host agent for one computer | [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | design |
@@ -1765,82 +1765,6 @@ Everything in the hardware guide was checked against manuals, not devices, so so
 
 ## Spring 2027: v2.0
 
-### JAK-07: Live sensor: capture, rotation, and shipping to the console
-
-**Due:** Spring S1-S4 (due Fri Feb 12, 2027) · **Milestone:** `S1-S4 Live sensor` · **Needs first:** [JAK-06](#jak-06-build-the-reference-lab-and-prove-the-mirror-works), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) · **Kind:** design
-
-**Issue labels:** `type:task` `phase:spring` `owner:jakub` `area:sensor` `critical-path` `needs-hardware`
-
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
-
-> **Needs hardware.** Steps that use the Raspberry Pi, the switch or other devices were not run during planning; they are marked *not run — verify on hardware*.
-
-#### Goal
-
-Turn the lab into MaxGuard's live sensor (`docs/ARCHITECTURE.md` section 4): Zeek and Suricata run all the time on the capture port, rotate their logs every 15 minutes into one folder per interval on the SSD, and a small shipper sends each completed folder to the console's `POST /api/ingest`. The console analyzes it like an upload, with `sensor_id` set to the sensor's name.
-
-#### Prerequisites
-
-JAK-06 (the lab works) and JAI-07 (the API with `/api/ingest`) are merged.
-
-#### Steps
-
-**Step 1.** Update `main` and create your branch for this task (one branch per task):
-
-```bash
-cd ~/projects/maxguard
-source .venv/bin/activate
-git checkout main && git pull
-git checkout -b jakub/live-sensor
-```
-
-If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
-
-**Step 2.** **Zeek rotation.** Find the Zeek 9 way to rotate logs every 15 minutes without `zeekctl` (look at `Log::default_rotation_interval` and the rotation post-processor in the Zeek 9.0.0 documentation) so that each interval's logs land in `/data/zeek/<YYYY-MM-DD-HHMM>/`. Write it as `maxguard/zeek/scripts/live/rotate.zeek`. Test it on the Pi with a 1-minute interval first.
-
-**Step 3.** **Suricata live settings.** Copy `maxguard/suricata/maxguard-suricata.yaml` to `maxguard/suricata/maxguard-suricata-live.yaml`, add an `af-packet` section for the capture interface, and turn on `eve` file rotation every 15 minutes (find the option for Suricata 8.0 in its user guide). Keep Community ID and JA4 exactly as they are.
-
-**Step 4.** **Compose file.** Write `docker/sensor-compose.yaml` with two services, `zeek/zeek:9.0.0` and `jasonish/suricata:8.0.7`, both with `network_mode: host`, only the capabilities they need (Zeek: `NET_RAW`, `NET_ADMIN`; Suricata: also `SYS_NICE`), `/data` mounted, and `restart: unless-stopped`. **No `-D` for Zeek** (random seeds protect a live sensor).
-
-**Step 5.** **Adapter.** Write `maxguard/adapters/live.py` with `LiveSensorAdapter` (Contract 3, unchanged): `accepts()` is true for a sensor data folder; `to_zeek_logs()` returns the newest *completed* interval folder (never the one still being written) with that interval's `eve.json` merged in.
-
-**Step 6.** **Shipper.** Write `maxguard/sensor/shipper.py`: every minute, find completed interval folders not shipped yet, pack each as `.tar.gz`, `POST` it to `<console>/api/ingest` with `Authorization: Bearer <token>` (console URL and token from a config file in `/data`, never in the repository), and mark it shipped only after a `2xx` answer. Delete shipped folders older than 7 days.
-
-**Step 7.** **Tests** (`tests/unit/test_live_adapter.py`, `tests/unit/test_shipper.py`): the adapter picks the newest completed folder and ignores the current one; the shipper sends the right file with the right header to a fake HTTP server on `127.0.0.1` (`http.server` in a thread), retries after a failure, and never ships a folder twice.
-
-**Step 8.** Run the sensor on the lab for one day and check that alerts appear on the console within about 20 minutes of the traffic.
-
-**Step 9.** Commit, push, and open the pull request:
-
-```bash
-git add -A
-git status          # only this task's files: nothing from .venv/, data/ or lab/captures/
-git commit -m "feat: live sensor with rotation and shipping (JAK-07)"
-git push -u origin HEAD
-```
-
-`HEAD` means "the branch I am on", so you do not have to retype its name. Open the repository on github.com: a yellow bar shows your branch with a **Compare & pull request** button. Click it, keep the title `feat: live sensor with rotation and shipping (JAK-07)`, fill in the template (paste the real output of the commands above under **How I tested it**), write `Closes #<issue number>` (this task's issue), and pick **@flau0306** under **Reviewers**. Click **Create pull request**, then fix anything CI or the reviewer finds with new commits on the same branch.
-
-#### How to test
-
-Both test files pass on your laptop. On the lab, `ls /data/zeek` shows a new folder every 15 minutes, `docker compose -f docker/sensor-compose.yaml ps` shows both containers running after a reboot, and the console's alert queue shows the lab phone's traffic. The capture port still has no IP address (`ip -br addr show eth0`).
-
-#### What you just did and why
-
-Shipping completed folders instead of streaming keeps the design simple: the console already knows how to analyze a folder of logs, and a network hiccup only delays a folder instead of losing events. A 15-minute interval is the trade-off between how quickly an alert appears and how many small Parquet files the console has to manage (each one costs about 3 KB). The sensor never transmits on the capture port; the shipper uses only the management port (CLAUDE.md rule 5).
-
-#### Pull request checklist
-
-- [ ] `ruff check .` prints `All checks passed!`
-- [ ] `pytest -m "not integration" -q` passes on your laptop
-- [ ] The pull request title has the form `type: summary (TASK-ID)` and the body says `Closes #<issue number>`
-- [ ] No secrets, passwords, email addresses, personal data, or captures from a real network (CLAUDE.md rule 6)
-- [ ] Any new dependency has a row in `docs/DEPENDENCIES.md` with its license
-- [ ] CI is green and your reviewer approved
-- [ ] Zeek runs without `-D`
-- [ ] The token and console address are read from `/data`, not from the repository
-- [ ] One full day of live data reached the console
-
 ### JAK-08: Device attribution: which device is behind each IP address
 
 **Due:** Spring S1-S4 (due Fri Feb 12, 2027) · **Milestone:** `S1-S4 Live sensor` · **Needs first:** [JAK-04](#jak-04-asset-inventory), [KAR-02](karthik.md#kar-02-test-fixtures-zeek-and-suricata-output-for-every-capture) · **Kind:** code, tested
@@ -2064,7 +1988,7 @@ Expected output:
 
 ```text
 ........                                                                                     [100%]
-8 passed in 0.05s
+8 passed in 0.08s
 ```
 
 **Step 5.** Build the device table for the hand-made DNS and DHCP fixture:
@@ -2106,6 +2030,1556 @@ IP addresses change when DHCP leases expire, and phones use random Wi-Fi MAC add
 - [ ] No secrets, passwords, email addresses, personal data, or captures from a real network (CLAUDE.md rule 6)
 - [ ] Any new dependency has a row in `docs/DEPENDENCIES.md` with its license
 - [ ] CI is green and your reviewer approved
+
+### JAK-07: Live sensor: capture, rotation, and shipping to the console
+
+**Due:** Spring S1-S4 (due Fri Feb 12, 2027) · **Milestone:** `S1-S4 Live sensor` · **Needs first:** [JAK-06](#jak-06-build-the-reference-lab-and-prove-the-mirror-works), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JAK-08](#jak-08-device-attribution-which-device-is-behind-each-ip-address) · **Kind:** code, tested
+
+**Issue labels:** `type:task` `phase:spring` `owner:jakub` `area:sensor` `critical-path` `needs-hardware`
+
+> **Needs hardware.** Steps that use the Raspberry Pi, the switch or other devices were not run during planning; they are marked *not run — verify on hardware*.
+
+#### Goal
+
+Turn the lab into MaxGuard's live sensor (`docs/ARCHITECTURE.md` section 4): Zeek and Suricata run all the time on the capture port and write their logs into one folder per 15-minute interval on the SSD, and a small shipper sends each completed folder to the console's `POST /api/ingest`. The console analyzes it like an upload, with `sensor_id` set to the sensor's name.
+
+#### Prerequisites
+
+JAK-06 (the lab works), JAI-07 (the API with `/api/ingest`) and JAK-08 (which creates `maxguard/sensor/`) are merged.
+
+#### Steps
+
+**Step 1.** Update `main` and create your branch for this task (one branch per task):
+
+```bash
+cd ~/projects/maxguard
+source .venv/bin/activate
+git checkout main && git pull
+git checkout -b jakub/live-sensor
+```
+
+If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
+
+**Step 2.** **Zeek rotation.** Zeek 9 rotates its own logs, without `zeekctl`, when `Log::default_rotation_interval` is set. `Log::rotation_format_func` decides where each closed file goes. Create `maxguard/zeek/scripts/live/rotate.zeek`:
+
+```zeek
+##! Live sensor log rotation (Jakub, JAK-07).
+##!
+##! Zeek writes the logs of the interval in progress into its working folder
+##! (/data/spool/zeek in docker/sensor-compose.yaml). At the end of every
+##! interval it closes them and moves them into one folder per interval:
+##!
+##!     /data/zeek/2026-10-06-1415/conn.log, dns.log, http.log, ...
+##!
+##! The folder is named after the interval's START, in UTC (the container runs
+##! with TZ=UTC). The files keep their plain names, so a finished folder is an
+##! ordinary Zeek log folder that MaxGuard can analyze or ship as it is.
+##!
+##! No zeekctl is needed: Zeek 9's logging framework rotates by itself when
+##! Log::default_rotation_interval is set, and Log::rotation_format_func decides
+##! where each rotated file goes.
+##!
+##! This file lives in scripts/live/ on purpose: maxguard/zeek/runner.py loads only
+##! scripts/*.zeek, so reading a capture file never rotates anything.
+
+module MaxGuardLive;
+
+export {
+    ## Where the interval folders are created. It must be on the same disk as
+    ## Zeek's working folder: rotation renames files, and a rename cannot move
+    ## a file to another disk.
+    const archive_dir = "/data/zeek" &redef;
+}
+
+# One folder every 15 minutes. The sensor's compose file overrides this from the
+# command line (Log::default_rotation_interval=1min for a quick test). Use a whole
+# number of minutes that divides 60 (1, 5, 15, 30, 60 ...): Zeek rotates at
+# multiples of the interval counted from midnight, and the folder names assume it.
+redef Log::default_rotation_interval = 15 min;
+
+# After a crash or a power cut the logs of the unfinished interval are left in
+# the working folder. Rotate them into their interval folder at the next start.
+redef LogAscii::enable_leftover_log_rotation = T;
+
+## The start of the interval that contains time t, e.g. 14:22:10 -> 14:15:00.
+function interval_start(t: time): time
+    {
+    local seconds = interval_to_double(Log::default_rotation_interval);
+    return double_to_time(floor(time_to_double(t) / seconds) * seconds);
+    }
+
+## Called by Zeek once for every log file it rotates (conn, dns, http, ...).
+function folder_per_interval(ri: Log::RotationFmtInfo): Log::RotationPath
+    {
+    local start = interval_start(ri$open);
+    local dir = fmt("%s/%s", archive_dir, strftime("%Y-%m-%d-%H%M", start));
+    local base = ri$path;  # "conn": Zeek adds ".log"
+
+    # Zeek was restarted during this interval, so the folder already has a
+    # conn.log from before the restart. Keep both: conn.141502.log is read as
+    # conn.log too (maxguard/adapters/zeeklogs.py appends them).
+    if ( file_size(fmt("%s/%s.log", dir, base)) >= 0 )
+        base = fmt("%s.%s", ri$path, strftime("%H%M%S", ri$open));
+
+    return Log::RotationPath($dir=dir, $file_basename=base);
+    }
+
+redef Log::rotation_format_func = folder_per_interval;
+```
+
+The folder is named after the interval's **start** in UTC, and the files keep their plain names, so a finished folder is an ordinary Zeek log folder. The script sits in `scripts/live/` on purpose: `maxguard/zeek/runner.py` loads only `scripts/*.zeek`, so analyzing a capture file never rotates anything.
+
+**Step 3.** **Suricata live settings.** Create `maxguard/suricata/maxguard-suricata-live.yaml`, a copy of `maxguard-suricata.yaml` with three changes (Community ID and JA4 are unchanged):
+
+```yaml
+%YAML 1.1
+---
+# MaxGuard's Suricata settings for the LIVE sensor (Jakub, JAK-07).
+# A copy of maxguard-suricata.yaml (capture files) with three changes:
+#   1. af-packet: listen on the capture port named on the command line
+#      (--af-packet=eth0). Listening only: no copy-mode, so Suricata never sends.
+#   2. eve-log: a new file every minute, eve-YYYY-MM-DD-HHMM.json (UTC), so the
+#      minutes of each interval can be merged into that interval's Zeek folder.
+#   3. unix-command off: nothing on the sensor needs Suricata's control socket.
+# Community ID and JA4 are exactly as in maxguard-suricata.yaml.
+vars:
+  address-groups:
+    HOME_NET: "[10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7]"
+    EXTERNAL_NET: "!$HOME_NET"
+  port-groups:
+    HTTP_PORTS: "80"
+    SHELLCODE_PORTS: "!80"
+    ORACLE_PORTS: 1521
+    SSH_PORTS: 22
+    DNP3_PORTS: 20000
+    MODBUS_PORTS: 502
+    FILE_DATA_PORTS: "[$HTTP_PORTS,110,143]"
+    FTP_PORTS: 21
+    GENEVE_PORTS: 6081
+    VXLAN_PORTS: 4789
+    TEREDO_PORTS: 3544
+
+default-log-dir: /var/log/suricata/
+
+af-packet:
+  # "default" applies to whichever interface the command line names, so the
+  # same file works for eth0 on a Raspberry Pi and enp1s0 on a mini PC.
+  - interface: default
+    # Spread the work over all cores, keeping each connection on one thread.
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+    # Never add copy-mode or copy-iface here: they turn Suricata into an inline
+    # device that sends packets, and a MaxGuard sensor only listens (CLAUDE.md rule 5).
+
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      # A new file each minute, named after the minute it starts in.
+      # rotate-interval "minute" (Suricata 8.0 user guide, "Rotate log file").
+      filename: eve-%Y-%m-%d-%H%M.json
+      rotate-interval: minute
+      community-id: yes
+      community-id-seed: 0
+      types:
+        - alert
+        - dns
+        - http:
+            extended: yes
+        - tls:
+            extended: yes
+            ja4: on
+        - dhcp:
+            enabled: yes
+        - flow
+
+app-layer:
+  protocols:
+    tls:
+      enabled: yes
+      detection-ports:
+        dp: 443
+      ja4-fingerprints: yes
+    http:
+      enabled: yes
+    dns:
+      tcp:
+        enabled: yes
+      udp:
+        enabled: yes
+    dhcp:
+      enabled: yes
+
+unix-command:
+  enabled: no
+
+logging:
+  default-log-level: notice
+  outputs:
+    - console:
+        enabled: yes
+```
+
+Why a file per **minute** and not per 15 minutes: Suricata 8.0's `rotate-interval` accepts `minute`, `hour` and `day`, which start at the next whole minute, hour or day, or a relative value such as `15m`, which counts from the moment Suricata started (user guide, "Rotate log file"; source: `src/util-logopenfile.c`). A relative 15 minutes would not line up with Zeek's folders, so Suricata writes minute files and the adapter merges each interval's minutes into that interval's folder. Never add `copy-mode` to the `af-packet` section: it turns Suricata into an inline device that sends packets (CLAUDE.md rule 5).
+
+**Step 4.** **Compose file.** Create `docker/sensor-compose.yaml`:
+
+```yaml
+# MaxGuard live sensor (Jakub, JAK-07): Zeek and Suricata listen on the capture
+# port, and the shipper sends each finished interval folder to the console.
+#
+# Start:  docker compose -f docker/sensor-compose.yaml up -d
+# Check:  docker compose -f docker/sensor-compose.yaml ps
+# Stop:   docker compose -f docker/sensor-compose.yaml down   (the logs in /data stay)
+#
+# Before the first start (docs/HARDWARE.md sections 8-10): the capture port is up
+# with NO IP address, the SSD is mounted at /data, and /data/shipper.toml holds
+# the console's address and token (never put them in this repository).
+#
+# Settings: export them before "docker compose", or put them in docker/.env.
+#   MAXGUARD_CAPTURE_IFACE     the capture port (default eth0)
+#   MAXGUARD_INTERVAL_MINUTES  minutes per log folder (default 15; 1 for a quick test)
+#   MAXGUARD_SENSOR_DATA       the data folder on the SSD (default /data)
+#
+# Layout on the SSD:
+#   /data/zeek/<YYYY-MM-DD-HHMM>/   one finished folder per interval (UTC start time)
+#   /data/spool/zeek/               Zeek's logs of the interval in progress
+#   /data/spool/suricata/           Suricata's eve-<YYYY-MM-DD-HHMM>.json, one per minute
+#   /data/shipper.toml              where the shipper sends the folders
+#
+# The containers use host networking so they see the real capture port. They
+# only listen: the capture port has no IP address, and nothing here sends
+# packets on it (CLAUDE.md rule 5). The shipper's uploads leave through the
+# management port, the only port with an address.
+name: maxguard-sensor
+
+services:
+  zeek:
+    image: zeek/zeek:9.0.0
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add:
+      - NET_RAW     # read packets from the capture port
+      - NET_ADMIN   # switch the port to promiscuous mode
+    security_opt: [no-new-privileges:true]
+    environment:
+      TZ: UTC       # rotation times and folder names are in UTC
+    # Zeek writes the interval in progress here; rotate.zeek moves each finished
+    # interval to /data/zeek/<YYYY-MM-DD-HHMM>/. Same disk, so moving is a rename.
+    working_dir: /data/spool/zeek
+    volumes:
+      - ${MAXGUARD_SENSOR_DATA:-/data}:/data
+      - ../maxguard:/opt/maxguard/maxguard:ro
+    # The same scripts as maxguard/zeek/runner.py (site.zeek: Zeek's "local" policy
+    # without its DNS lookups), plus live/rotate.zeek.
+    # No -D: a live sensor keeps Zeek's random seeds (docs/ARCHITECTURE.md section 7).
+    command: >-
+      zeek -i ${MAXGUARD_CAPTURE_IFACE:-eth0} -C
+      LogAscii::use_json=T
+      Log::default_rotation_interval=${MAXGUARD_INTERVAL_MINUTES:-15}min
+      /opt/maxguard/maxguard/zeek/site.zeek
+      policy/protocols/conn/community-id-logging
+      /opt/maxguard/maxguard/zeek/scripts/cleartext.zeek
+      /opt/maxguard/maxguard/zeek/scripts/inventory.zeek
+      /opt/maxguard/maxguard/zeek/scripts/live/rotate.zeek
+    restart: unless-stopped
+
+  suricata:
+    image: jasonish/suricata:8.0.7
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add:
+      # What Suricata needs to capture (Suricata user guide, "Packet capture"):
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_NICE
+      # Only for starting up: the image's start script gives /var/log/suricata to
+      # the "suricata" user, and Suricata then switches to that user. From then
+      # on the running process holds only the three capabilities above.
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      - SETPCAP
+    security_opt: [no-new-privileges:true]
+    environment:
+      TZ: UTC       # the minute in each eve-<YYYY-MM-DD-HHMM>.json name is UTC
+    volumes:
+      - ${MAXGUARD_SENSOR_DATA:-/data}/spool/suricata:/var/log/suricata
+      - ../maxguard:/opt/maxguard/maxguard:ro
+    # Only MaxGuard's own rules file: Suricata starts in about a second. A large
+    # rule set takes much longer to load (about 50 s for ET Open on a 4-core x86
+    # machine), and Suricata captures nothing until it has finished.
+    command: >-
+      -c /opt/maxguard/maxguard/suricata/maxguard-suricata-live.yaml
+      --af-packet=${MAXGUARD_CAPTURE_IFACE:-eth0}
+      -S /opt/maxguard/maxguard/suricata/rules/maxguard.rules
+    restart: unless-stopped
+
+  shipper:
+    # Used only for its Python 3.13: the shipper needs nothing but the standard library.
+    image: zeek/zeek:9.0.0
+    network_mode: host   # reaches the console through the management port
+    cap_drop: [ALL]
+    cap_add:
+      - DAC_OVERRIDE     # delete Suricata's minute files, which belong to the "suricata" user
+    security_opt: [no-new-privileges:true]
+    environment:
+      TZ: UTC
+      PYTHONPATH: /opt/maxguard
+      PYTHONDONTWRITEBYTECODE: "1"   # the code folder is mounted read-only
+    volumes:
+      - ${MAXGUARD_SENSOR_DATA:-/data}:/data
+      - ../maxguard:/opt/maxguard/maxguard:ro
+    command: >-
+      python3 -m maxguard.sensor.shipper --data /data
+      --interval-minutes ${MAXGUARD_INTERVAL_MINUTES:-15}
+    restart: unless-stopped
+```
+
+Zeek runs **without `-D`**: random seeds protect a live sensor's tables against deliberate slow-down attacks. Every service drops all capabilities and adds back only what it needs. Suricata needs five more than `NET_ADMIN`, `NET_RAW` and `SYS_NICE` only while it starts: the image's start script hands its folders (such as `/var/log/suricata`) to the `suricata` user, and Suricata then switches to that user. The shipper uses the `zeek/zeek` image only for its Python 3: it needs nothing outside the standard library. Check the file:
+
+```bash
+docker compose -f docker/sensor-compose.yaml config --quiet && echo "compose file OK"
+```
+
+Expected output:
+
+```text
+compose file OK
+```
+
+**Step 5.** **Adapter.** Create `maxguard/adapters/live.py` with `LiveSensorAdapter` (Contract 3, unchanged):
+
+```python
+"""LiveSensorAdapter: the newest finished interval of a live sensor (Jakub, JAK-07).
+
+The live sensor (docker/sensor-compose.yaml) keeps everything in one data
+folder, /data on the sensor's SSD:
+
+    /data/zeek/2026-10-06-1415/   one folder per interval, named after its start
+                                  in UTC (maxguard/zeek/scripts/live/rotate.zeek)
+    /data/spool/zeek/             Zeek's logs of the interval in progress
+    /data/spool/suricata/         Suricata's events, one file per minute:
+                                  eve-2026-10-06-1415.json, eve-2026-10-06-1416.json, ...
+
+An interval folder is *complete* when its interval has ended and SETTLE_SECONDS
+more have passed. By then Zeek has moved every log into it, and Suricata has
+closed the last minute file that belongs to it. merge_eve() then joins that
+interval's minute files into one eve.json inside the folder, so the folder
+holds everything MaxGuard needs, like a folder made from a capture file.
+
+The shipper (maxguard/sensor/shipper.py) uses the same functions before it
+sends a folder to the console. This module uses only Python's standard library,
+because the shipper runs in the zeek/zeek:9.0.0 image with nothing installed.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import shutil
+import tempfile
+import time
+from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
+
+from maxguard.adapters.zeeklogs import ZeekLogAdapter
+
+ZEEK_DIR = Path("zeek")                 # inside the data folder
+EVE_DIR = Path("spool") / "suricata"    # inside the data folder
+FOLDER_FORMAT = "%Y-%m-%d-%H%M"         # 2026-10-06-1415, always UTC
+FOLDER_NAME = re.compile(r"\d{4}-\d{2}-\d{2}-\d{4}")
+EVE_PART_NAME = re.compile(r"eve-(\d{4}-\d{2}-\d{2}-\d{4})\.json")
+DEFAULT_INTERVAL_MINUTES = 15
+# Suricata starts a new minute file with the first event after the minute ends,
+# so the last minute file of an interval can still grow for up to a minute after
+# the interval ends. Two minutes covers that, plus Zeek moving its logs.
+SETTLE_SECONDS = 120
+
+
+class NoCompletedInterval(RuntimeError):
+    """The sensor has not finished any interval yet."""
+
+
+def check_interval(minutes: int) -> int:
+    """The interval must divide an hour evenly, like Zeek's rotation times do."""
+    if minutes < 1 or 60 % minutes != 0:
+        raise ValueError(f"interval must be 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30 or 60 "
+                         f"minutes, got {minutes}")
+    return minutes
+
+
+def interval_minutes_from_env() -> int:
+    """MAXGUARD_INTERVAL_MINUTES (default 15): the same value Zeek rotates with."""
+    text = os.environ.get("MAXGUARD_INTERVAL_MINUTES", str(DEFAULT_INTERVAL_MINUTES))
+    if not text.isdigit():
+        raise ValueError(f"MAXGUARD_INTERVAL_MINUTES must be a whole number, got {text!r}")
+    return check_interval(int(text))
+
+
+def folder_start(name: str) -> float:
+    """'2026-10-06-1415' -> the Unix time of 14:15:00 UTC on that day."""
+    return datetime.strptime(name, FOLDER_FORMAT).replace(tzinfo=UTC).timestamp()
+
+
+def folder_name(start: float) -> str:
+    """The opposite of folder_start(): a Unix time -> '2026-10-06-1415'."""
+    return datetime.fromtimestamp(start, UTC).strftime(FOLDER_FORMAT)
+
+
+def interval_folders(zeek_dir: Path) -> list[Path]:
+    """Every interval folder, oldest first (the names sort in time order)."""
+    if not zeek_dir.is_dir():
+        return []
+    return sorted(p for p in zeek_dir.iterdir() if p.is_dir() and FOLDER_NAME.fullmatch(p.name))
+
+
+def is_complete(folder: Path, now: float, interval_minutes: int) -> bool:
+    """True once the folder's interval ended at least SETTLE_SECONDS before now."""
+    end = folder_start(folder.name) + interval_minutes * 60
+    return now >= end + SETTLE_SECONDS
+
+
+def completed_folders(zeek_dir: Path, now: float, interval_minutes: int) -> list[Path]:
+    """The interval folders that are complete, oldest first."""
+    return [f for f in interval_folders(zeek_dir) if is_complete(f, now, interval_minutes)]
+
+
+def part_start(part: Path) -> float | None:
+    """'eve-2026-10-06-1416.json' -> the Unix time of 14:16 UTC; None for other files."""
+    match = EVE_PART_NAME.fullmatch(part.name)
+    return folder_start(match.group(1)) if match else None
+
+
+def eve_parts(eve_dir: Path, folder: Path, interval_minutes: int) -> list[Path]:
+    """Suricata's minute files whose minute lies inside the folder's interval, in order."""
+    start = folder_start(folder.name)
+    end = start + interval_minutes * 60
+    if not eve_dir.is_dir():
+        return []
+    parts = []
+    for path in sorted(eve_dir.iterdir()):  # the names sort in time order
+        minute = part_start(path)
+        if minute is not None and start <= minute < end:
+            parts.append(path)
+    return parts
+
+
+def merge_eve(folder: Path, eve_dir: Path, interval_minutes: int) -> None:
+    """Join the interval's minute files into folder/eve.json, then delete them.
+
+    Call it only for a complete folder. It is safe to run again after a crash:
+    eve.json appears in one step (written to a hidden file first, then renamed),
+    and once it exists it is never written again, so no event is added twice.
+    """
+    parts = eve_parts(eve_dir, folder, interval_minutes)
+    target = folder / "eve.json"
+    if parts and not target.exists():
+        # Hidden (starts with "."), so nothing reads or ships a half-written file.
+        with tempfile.NamedTemporaryFile(dir=folder, prefix=".eve-", suffix=".partial",
+                                         delete=False) as out:
+            for part in parts:
+                with part.open("rb") as src:
+                    shutil.copyfileobj(src, out)
+        os.chmod(out.name, 0o644)  # readable by every user, like Zeek's own logs
+        Path(out.name).replace(target)  # a rename on one disk is all-or-nothing
+    for part in parts:  # merged now, or on an earlier run that stopped halfway
+        part.unlink(missing_ok=True)
+
+
+class LiveSensorAdapter:
+    """Contract 3 adapter for a live sensor's data folder (for example /data).
+
+    accepts() is true only for a folder that has zeek/<YYYY-MM-DD-HHMM>/ folders
+    inside and no conn.log of its own, so it never takes a plain Zeek log folder
+    away from ZeekLogAdapter (and ZeekLogAdapter never takes a sensor folder).
+    """
+
+    name = "live"
+
+    def __init__(self, interval_minutes: int | None = None,
+                 clock: Callable[[], float] = time.time) -> None:
+        # None: read MAXGUARD_INTERVAL_MINUTES when a folder is analyzed, not here.
+        # pipeline.py makes this adapter at import time, and a wrong setting must
+        # not stop MaxGuard from analyzing uploads.
+        self._interval_minutes = None if interval_minutes is None else check_interval(
+            interval_minutes)
+        self.clock = clock  # tests pass a fixed time; on a sensor it is the real clock
+
+    @property
+    def interval_minutes(self) -> int:
+        if self._interval_minutes is None:
+            return interval_minutes_from_env()
+        return self._interval_minutes
+
+    def accepts(self, path: Path) -> bool:
+        if not path.is_dir() or (path / "conn.log").exists():
+            return False
+        return bool(interval_folders(path / ZEEK_DIR))
+
+    def to_zeek_logs(self, path: Path, workdir: Path) -> Path:
+        """Copy the newest complete interval (never the one still being written)."""
+        done = completed_folders(path / ZEEK_DIR, self.clock(), self.interval_minutes)
+        if not done:
+            raise NoCompletedInterval(
+                f"{path / ZEEK_DIR}: no interval has finished yet; the first one is complete "
+                f"{self.interval_minutes} minutes plus {SETTLE_SECONDS} seconds after the "
+                "sensor starts")
+        newest = done[-1]
+        merge_eve(newest, path / EVE_DIR, self.interval_minutes)
+        # From here on it is an ordinary folder of Zeek logs plus eve.json. ZeekLogAdapter
+        # copies it into workdir and joins conn.log with conn.<time>.log after a restart.
+        return ZeekLogAdapter().to_zeek_logs(newest, workdir)
+```
+
+A folder is *complete* two minutes after its interval ends: by then Zeek has moved every log into it and Suricata has closed the last minute file that belongs to it. `merge_eve()` writes `eve.json` under a hidden name first and renames it, so a crash halfway never leaves a half-merged file. The adapter reads `MAXGUARD_INTERVAL_MINUTES` only when it analyzes a folder, because `pipeline.py` creates it when it is imported, and a wrong setting must not stop MaxGuard from analyzing uploads.
+
+**Step 6.** Add it to `ADAPTERS` in `maxguard/pipeline.py` (two lines change):
+
+```python
+"""The one function the CLI, the API, and the tests all call.
+
+analyze() turns a capture file or a folder of Zeek logs into a report dict
+(schema "maxguard.report/2", see docs/ARCHITECTURE.md). It never reads the
+clock, so the same input always gives the same report.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+from pathlib import Path
+
+import maxguard.rules  # noqa: F401  (importing registers every rule)
+from maxguard.adapters.live import LiveSensorAdapter
+from maxguard.adapters.pcap import PcapAdapter
+from maxguard.adapters.zeeklogs import ZeekLogAdapter
+from maxguard.mapping.loader import ATTACK, apply, load_all
+from maxguard.models import SEVERITIES, Finding
+from maxguard.rules.base import run_all
+
+# Order matters only for clarity: each adapter accepts a different kind of input
+# (a capture file; a folder with conn.log; a sensor folder with zeek/<interval>/).
+ADAPTERS = [PcapAdapter(), ZeekLogAdapter(), LiveSensorAdapter()]
+REPO_MAPPINGS_DIR = Path(__file__).resolve().parent.parent / "mappings"
+
+
+class UnsupportedInput(ValueError):
+    pass
+
+
+class MappingsNotFound(RuntimeError):
+    pass
+
+
+def mappings_dir() -> Path:
+    """Where the mapping YAML files live: $MAXGUARD_MAPPINGS_DIR, else the repo's mappings/.
+
+    The Docker image copies mappings/ to /opt/maxguard/mappings and sets the variable.
+    """
+    folder = Path(os.environ.get("MAXGUARD_MAPPINGS_DIR", REPO_MAPPINGS_DIR))
+    if not any(folder.glob("*.yaml")):
+        raise MappingsNotFound(f"no mapping files (*.yaml) in {folder}; "
+                               "set MAXGUARD_MAPPINGS_DIR to the mappings/ folder")
+    return folder
+
+
+def pick_adapter(path: Path):
+    for adapter in ADAPTERS:
+        if adapter.accepts(path):
+            return adapter
+    raise UnsupportedInput(f"{path.name}: not a pcap/pcapng file or a Zeek log folder/archive")
+
+
+def sha256_of(path: Path) -> str:
+    if path.is_dir():
+        return ""
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def sort_key(f: Finding):
+    return (SEVERITIES.index(f.severity), f.rule_id, f.src_ip, f.dst_ip, f.dst_port)
+
+
+def analyze(path, workdir, frameworks=None, explain=True, mapping_dir=None,
+            sensor_id=None) -> dict:
+    """1) pick adapter  2) get logs  3) run rules  4) apply mappings
+    5) build inventory and events  6) ask the local AI  7) return report dict
+
+    sensor_id names where the data came from in every event: by default "pcap" for
+    a capture and "import" for Zeek logs; the API passes the sensor's name for data
+    a sensor or host agent sent to POST /api/ingest."""
+    path, workdir = Path(path), Path(workdir)
+    adapter = pick_adapter(path)
+    log_dir = adapter.to_zeek_logs(path, workdir)
+
+    findings = sorted(run_all(log_dir), key=sort_key)
+
+    fw_files = load_all(Path(mapping_dir) if mapping_dir else mappings_dir())
+    apply(findings, fw_files, set(frameworks) if frameworks else None)
+
+    from maxguard.events.normalize import normalize
+    from maxguard.inventory import build as build_inventory
+
+    if sensor_id is None:
+        sensor_id = "pcap" if adapter.name == "pcap" else "import"
+    events = normalize(log_dir, sensor_id=sensor_id)
+    assets = build_inventory(log_dir, findings)
+
+    ai = {"status": "disabled", "model": None, "explained": 0, "dropped_sentences": 0,
+          "reason": None}
+    if explain:
+        from maxguard.ai.ollama_client import explain_all
+
+        ai = explain_all(findings, log_dir)
+
+    return {
+        "schema": "maxguard.report/2",
+        "input": {"name": path.name, "sha256": sha256_of(path), "adapter": adapter.name},
+        "tools": {"zeek": adapter.name == "pcap",
+                  "suricata": (log_dir / "eve.json").exists()},
+        "frameworks": [{"framework": fw["framework"], "version": fw["version"],
+                        "source": fw["source"]} for fw in fw_files if fw["framework"] != ATTACK],
+        "findings": [f.to_dict() for f in findings],
+        "assets": assets,
+        "events": events,
+        "ai": ai,
+    }
+```
+
+**Step 7.** Add one line to the docstring of `maxguard/sensor/__init__.py`:
+
+```python
+"""Sensor-side helpers (Jakub).
+
+attribution.py  device table: which MAC / host name / DNS names belong to each IP
+shipper.py      sends each finished interval folder of the live sensor to the console
+"""
+```
+
+**Step 8.** **Shipper.** Create `maxguard/sensor/shipper.py`:
+
+```python
+"""Send each finished interval folder of a live sensor to the console (Jakub, JAK-07).
+
+It runs on the sensor, in its own container (docker/sensor-compose.yaml):
+
+    python3 -m maxguard.sensor.shipper --data /data --interval-minutes 15
+
+Every minute it:
+1. finds the interval folders under /data/zeek that are complete and not shipped
+   yet, oldest first (maxguard/adapters/live.py decides what "complete" means);
+2. merges that interval's Suricata minute files into the folder's eve.json;
+3. packs the folder as a .tar.gz and POSTs it to <console>/api/ingest with the
+   header "Authorization: Bearer <token>" and the form field sensor_id;
+4. marks the folder shipped (a hidden ".shipped" file) only after a 2xx answer.
+   After any failure it stops and tries again on the next round, so a console
+   that is down only delays folders, and a shipped folder is never sent again;
+5. deletes shipped folders whose interval started more than 7 days ago.
+
+The console's address and token come from /data/shipper.toml on the sensor,
+never from the repository (CLAUDE.md rule 6). Shipping is the sensor's only
+network traffic: it goes out of the management port, only to the console the
+user configured, and never through a proxy (CLAUDE.md rules 1 and 5).
+
+Only main() reads the clock; every other function takes `now` (Unix seconds),
+so the tests can say exactly which folders are ready. Like live.py, this module
+uses only Python's standard library.
+"""
+
+from __future__ import annotations
+
+import argparse
+import gzip
+import http.client
+import io
+import logging
+import re
+import secrets
+import shutil
+import ssl
+import tarfile
+import time
+import tomllib
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from pathlib import Path
+
+from maxguard.adapters.live import (
+    EVE_DIR,
+    ZEEK_DIR,
+    check_interval,
+    completed_folders,
+    folder_start,
+    interval_folders,
+    interval_minutes_from_env,
+    merge_eve,
+    part_start,
+)
+
+CONFIG_NAME = "shipper.toml"   # in the data folder, e.g. /data/shipper.toml
+SHIPPED_MARKER = ".shipped"    # hidden, so it is never packed
+KEEP_DAYS = 7                  # ARCHITECTURE.md section 4: 7 days on the sensor
+LOOP_SECONDS = 60
+# The console analyzes the folder before it answers, and explaining the findings
+# with a local AI model can take minutes on a small machine.
+POST_TIMEOUT_SECONDS = 900
+SENSOR_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")  # exactly what POST /api/ingest accepts
+
+log = logging.getLogger("maxguard.shipper")
+
+
+class ConfigError(ValueError):
+    """shipper.toml is missing a setting or has a wrong one."""
+
+
+@dataclass(frozen=True)
+class ShipperConfig:
+    console_url: str             # "http://192.168.50.20:8000", no trailing slash
+    token: str                   # the console's MAXGUARD_INGEST_TOKEN
+    sensor_id: str               # this sensor's name, e.g. "sensor-01"
+    ca_file: str | None = None   # only for an https:// console with its own certificate
+
+
+def load_config(path: Path) -> ShipperConfig:
+    """Read shipper.toml (TOML: one `key = "value"` per line, # starts a comment)."""
+    with path.open("rb") as f:
+        raw = tomllib.load(f)
+    url = str(raw.get("console_url", "")).rstrip("/")
+    if not url.startswith(("http://", "https://")):
+        raise ConfigError(f"{path}: console_url must start with http:// or https://")
+    token = str(raw.get("token", ""))
+    if not token:
+        raise ConfigError(f"{path}: token is empty; copy the console's MAXGUARD_INGEST_TOKEN")
+    sensor_id = str(raw.get("sensor_id", ""))
+    if not SENSOR_ID.fullmatch(sensor_id):
+        raise ConfigError(f"{path}: sensor_id must be 1-64 letters, digits, '.', '_' or '-'")
+    ca_file = raw.get("ca_file")
+    return ShipperConfig(url, token, sensor_id, str(ca_file) if ca_file else None)
+
+
+# ---------- which folders, and remembering what was shipped ----------
+
+def is_shipped(folder: Path) -> bool:
+    return (folder / SHIPPED_MARKER).exists()
+
+
+def mark_shipped(folder: Path, now: float) -> None:
+    """Remember that the console accepted this folder (and when, for people)."""
+    (folder / SHIPPED_MARKER).write_text(f"{now:.0f}\n")
+
+
+def folders_to_ship(data_dir: Path, now: float, interval_minutes: int) -> list[Path]:
+    """Complete folders the console has not accepted yet, oldest first."""
+    done = completed_folders(data_dir / ZEEK_DIR, now, interval_minutes)
+    return [folder for folder in done if not is_shipped(folder)]
+
+
+# ---------- packing and sending ----------
+
+def without_owner(info: tarfile.TarInfo) -> tarfile.TarInfo:
+    """Leave the sensor's user and group names out of the archive."""
+    info.uid = info.gid = 0
+    info.uname = info.gname = ""
+    return info
+
+
+def pack_folder(folder: Path) -> bytes:
+    """The folder as .tar.gz bytes (2026-10-06-1415/conn.log, ...), hidden files left out.
+
+    Packing the same folder twice gives the same bytes (sorted names, no owner,
+    gzip time 0). If the sensor crashes after sending but before writing
+    .shipped, the folder is sent again, and the console sees the same SHA-256
+    and does not count its alerts twice.
+    """
+    buffer = io.BytesIO()
+    with gzip.GzipFile(fileobj=buffer, mode="wb", mtime=0) as gz:
+        with tarfile.open(fileobj=gz, mode="w") as tar:
+            for path in sorted(folder.iterdir()):
+                if path.is_file() and not path.name.startswith("."):
+                    tar.add(path, arcname=f"{folder.name}/{path.name}", filter=without_owner)
+    return buffer.getvalue()
+
+
+def multipart_body(fields: dict[str, str], file_name: str, data: bytes,
+                   boundary: str) -> bytes:
+    """Text fields plus one file as multipart/form-data (RFC 7578), the format a
+    browser uses to upload a file, and the one the console's /api/ingest reads."""
+    text = ""
+    for name, value in fields.items():
+        text += (f"--{boundary}\r\n"
+                 f'Content-Disposition: form-data; name="{name}"\r\n\r\n'
+                 f"{value}\r\n")
+    text += (f"--{boundary}\r\n"
+             f'Content-Disposition: form-data; name="file"; filename="{file_name}"\r\n'
+             "Content-Type: application/gzip\r\n\r\n")
+    return text.encode() + data + f"\r\n--{boundary}--\r\n".encode()
+
+
+def opener(config: ShipperConfig) -> urllib.request.OpenerDirector:
+    """An HTTP client that never uses a proxy: the logs and the token go straight
+    to the console. https:// checks the certificate (with ca_file when given)."""
+    context = ssl.create_default_context(cafile=config.ca_file)
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                                       urllib.request.HTTPSHandler(context=context))
+
+
+def post_archive(config: ShipperConfig, file_name: str, data: bytes,
+                 timeout: float = POST_TIMEOUT_SECONDS) -> int:
+    """POST one archive to <console>/api/ingest and return the HTTP status code.
+
+    A console that cannot be reached raises OSError (connection refused, timeout)."""
+    boundary = secrets.token_hex(16)
+    request = urllib.request.Request(
+        config.console_url + "/api/ingest", method="POST",
+        data=multipart_body({"sensor_id": config.sensor_id}, file_name, data, boundary),
+        headers={"Authorization": f"Bearer {config.token}",
+                 "Content-Type": f"multipart/form-data; boundary={boundary}"})
+    try:
+        with opener(config).open(request, timeout=timeout) as response:
+            return response.status
+    except urllib.error.HTTPError as err:  # the console answered, with 4xx or 5xx
+        err.close()
+        return err.code
+
+
+def ship_folder(folder: Path, data_dir: Path, config: ShipperConfig,
+                interval_minutes: int, now: float) -> bool:
+    """Merge, pack, send and mark one folder. True when the console answered 2xx."""
+    merge_eve(folder, data_dir / EVE_DIR, interval_minutes)
+    data = pack_folder(folder)
+    try:
+        status = post_archive(config, f"{folder.name}.tar.gz", data)
+    except (OSError, http.client.HTTPException) as err:
+        log.warning("%s: console not reachable (%s); will retry", folder.name, err)
+        return False
+    if not 200 <= status < 300:
+        log.warning("%s: console answered HTTP %d; will retry", folder.name, status)
+        return False
+    mark_shipped(folder, now)
+    log.info("%s: shipped (%d bytes, HTTP %d)", folder.name, len(data), status)
+    return True
+
+
+def ship_ready_folders(data_dir: Path, config: ShipperConfig, interval_minutes: int,
+                       now: float) -> list[str]:
+    """Ship every ready folder, oldest first; stop at the first failure."""
+    shipped = []
+    for folder in folders_to_ship(data_dir, now, interval_minutes):
+        if not ship_folder(folder, data_dir, config, interval_minutes, now):
+            break  # the console is down or refusing: keep the order, retry next round
+        shipped.append(folder.name)
+    return shipped
+
+
+# ---------- retention ----------
+
+def prune(data_dir: Path, now: float, keep_days: int = KEEP_DAYS) -> list[str]:
+    """Delete shipped folders, and leftover Suricata minute files, older than keep_days.
+
+    A folder that was never shipped is kept, so a console that was down for a
+    week loses nothing; watch the disk if a sensor has no console."""
+    cutoff = now - keep_days * 86400
+    deleted = []
+    for folder in interval_folders(data_dir / ZEEK_DIR):
+        if is_shipped(folder) and folder_start(folder.name) < cutoff:
+            shutil.rmtree(folder)
+            deleted.append(folder.name)
+    eve_dir = data_dir / EVE_DIR
+    if eve_dir.is_dir():
+        for part in sorted(eve_dir.iterdir()):
+            minute = part_start(part)
+            if minute is not None and minute < cutoff:  # no Zeek folder ever claimed it
+                part.unlink()
+                deleted.append(part.name)
+    return deleted
+
+
+# ---------- one round, and the loop ----------
+
+def run_once(data_dir: Path, interval_minutes: int, now: float) -> dict:
+    """Ship what is ready, then delete what is old. Returns what happened."""
+    shipped: list[str] = []
+    config_path = data_dir / CONFIG_NAME
+    try:
+        config = load_config(config_path)
+    except FileNotFoundError:
+        log.warning("%s not found: folders stay on the sensor until it exists", config_path)
+    except (ConfigError, tomllib.TOMLDecodeError) as err:
+        log.error("%s", err)
+    else:
+        shipped = ship_ready_folders(data_dir, config, interval_minutes, now)
+    return {"shipped": shipped, "deleted": prune(data_dir, now)}
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Send finished interval folders to the MaxGuard console.")
+    parser.add_argument("--data", type=Path, default=Path("/data"),
+                        help="the sensor's data folder (default: /data)")
+    parser.add_argument("--interval-minutes", type=int, default=None,
+                        help="the same interval Zeek rotates with "
+                             "(default: $MAXGUARD_INTERVAL_MINUTES, else 15)")
+    parser.add_argument("--once", action="store_true", help="run one round, then exit")
+    args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+    if args.interval_minutes is None:
+        interval = interval_minutes_from_env()
+    else:
+        interval = check_interval(args.interval_minutes)
+    log.info("shipping complete %d-minute folders from %s", interval, args.data / ZEEK_DIR)
+    while True:
+        run_once(args.data, interval, now=time.time())  # the only place that reads the clock
+        if args.once:
+            return 0
+        time.sleep(LOOP_SECONDS)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+Three choices to notice. It marks a folder shipped only after a `2xx` answer and stops at the first failure, so a console that is down only delays folders. It packs the same folder into the same bytes every time, so if the sensor crashes between sending and marking, the console sees the same SHA-256 and does not count the alerts twice. And it never uses a proxy: the token and the logs go straight to the console the user configured.
+
+**Step 9.** **Tests.** Create `tests/unit/test_live_adapter.py`:
+
+```python
+"""LiveSensorAdapter tests (Jakub, JAK-07): pick the newest finished interval, never
+the one still being written, and merge Suricata's minute files into it.
+
+No Zeek, Suricata or Docker: each test builds a small sensor data folder by hand,
+the way docker/sensor-compose.yaml lays it out, from the plain_http_alt fixture.
+"""
+
+import shutil
+from pathlib import Path
+
+import pytest
+
+from maxguard import pipeline
+from maxguard.adapters.base import read_log
+from maxguard.adapters.live import (
+    SETTLE_SECONDS,
+    LiveSensorAdapter,
+    NoCompletedInterval,
+    check_interval,
+    eve_parts,
+    folder_name,
+    folder_start,
+    interval_minutes_from_env,
+    merge_eve,
+)
+from maxguard.adapters.pcap import PcapAdapter
+from maxguard.adapters.zeeklogs import ZeekLogAdapter
+
+FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "zeek" / "plain_http_alt"
+
+# The sensor below has three 15-minute folders: 14:00, 14:15 and 14:30 (UTC).
+# At NOW the 14:30 interval has ended (14:45) but is still settling until 14:47.
+NOW = folder_start("2026-10-06-1430") + 15 * 60 + 60   # 14:46:00 UTC
+
+
+def write_lines(path: Path, lines: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(line + "\n" for line in lines))
+
+
+def make_sensor(root: Path) -> Path:
+    """A sensor data folder: three interval folders and Suricata minute files."""
+    zeek = root / "zeek"
+    for name in ("2026-10-06-1400", "2026-10-06-1430"):
+        write_lines(zeek / name / "conn.log", [f'{{"note": "conn from {name}"}}'])
+    shutil.copytree(FIXTURE, zeek / "2026-10-06-1415", ignore=shutil.ignore_patterns("eve.json"))
+    # The fixture's two Suricata events, as if written in minutes 14:15 and 14:22.
+    eve_lines = (FIXTURE / "eve.json").read_text().splitlines()
+    spool = root / "spool" / "suricata"
+    write_lines(spool / "eve-2026-10-06-1415.json", eve_lines[:1])
+    write_lines(spool / "eve-2026-10-06-1422.json", eve_lines[1:])
+    write_lines(spool / "eve-2026-10-06-1430.json", ['{"event_type": "flow", "minute": "14:30"}'])
+    write_lines(root / "spool" / "zeek" / "conn.log", ['{"note": "interval in progress"}'])
+    return root
+
+
+def adapter_at(now: float) -> LiveSensorAdapter:
+    return LiveSensorAdapter(interval_minutes=15, clock=lambda: now)
+
+
+# ---- folder names are UTC times -------------------------------------------------
+
+def test_folder_names_are_utc_interval_starts():
+    assert folder_start("2026-10-06-1415") == 1791296100.0   # 14:15:00 UTC
+    assert folder_name(1791296100.0) == "2026-10-06-1415"
+
+
+@pytest.mark.parametrize("minutes", [1, 5, 15, 30, 60])
+def test_intervals_that_divide_an_hour_are_allowed(minutes):
+    assert check_interval(minutes) == minutes
+
+
+@pytest.mark.parametrize("minutes", [0, 7, 45, 90])
+def test_other_intervals_are_refused(minutes):
+    with pytest.raises(ValueError):
+        check_interval(minutes)
+
+
+def test_interval_comes_from_the_environment(monkeypatch):
+    monkeypatch.delenv("MAXGUARD_INTERVAL_MINUTES", raising=False)
+    assert interval_minutes_from_env() == 15
+    monkeypatch.setenv("MAXGUARD_INTERVAL_MINUTES", "1")
+    assert interval_minutes_from_env() == 1
+    assert LiveSensorAdapter().interval_minutes == 1
+
+
+def test_a_wrong_interval_setting_does_not_stop_the_pipeline_from_loading(monkeypatch):
+    # pipeline.py builds the adapter when it is imported; the setting is read later.
+    monkeypatch.setenv("MAXGUARD_INTERVAL_MINUTES", "7")
+    adapter = LiveSensorAdapter()
+    with pytest.raises(ValueError, match="interval must be"):
+        _ = adapter.interval_minutes
+
+
+# ---- accepts(): a sensor folder, and nothing ZeekLogAdapter accepts ------------------
+
+def test_accepts_a_sensor_data_folder(tmp_path):
+    root = make_sensor(tmp_path)
+    assert adapter_at(NOW).accepts(root)
+    assert not ZeekLogAdapter().accepts(root)   # no conn.log at the top
+    assert not PcapAdapter().accepts(root)
+
+
+def test_never_takes_a_plain_zeek_log_folder(tmp_path):
+    assert not adapter_at(NOW).accepts(FIXTURE)          # conn.log at the top
+    root = make_sensor(tmp_path)
+    (root / "conn.log").write_text("{}\n")
+    assert not adapter_at(NOW).accepts(root)             # conn.log wins, even here
+    assert ZeekLogAdapter().accepts(root)
+
+
+def test_refuses_folders_without_interval_folders(tmp_path):
+    (tmp_path / "zeek" / "not-an-interval").mkdir(parents=True)
+    assert not adapter_at(NOW).accepts(tmp_path)
+    assert not adapter_at(NOW).accepts(tmp_path / "missing")
+    assert not adapter_at(NOW).accepts(FIXTURE / "conn.log")   # a file
+
+
+# ---- to_zeek_logs(): newest complete folder, eve.json merged in ----------------------
+
+def test_picks_the_newest_complete_folder_not_the_one_being_written(tmp_path):
+    root = make_sensor(tmp_path)
+    log_dir = adapter_at(NOW).to_zeek_logs(root, tmp_path / "work")
+
+    # 14:15 was picked: its conn.log is the fixture's, not 14:30's or 14:00's.
+    assert list(read_log(log_dir, "conn.log")) == list(read_log(FIXTURE, "conn.log"))
+    assert list(read_log(log_dir, "http.log")) == list(read_log(FIXTURE, "http.log"))
+    # Its two Suricata minutes were merged in, in time order; 14:30's minute was not.
+    assert list(read_log(log_dir, "eve.json")) == list(read_log(FIXTURE, "eve.json"))
+
+
+def test_the_current_folder_is_used_once_it_has_settled(tmp_path):
+    root = make_sensor(tmp_path)
+    settled = folder_start("2026-10-06-1430") + 15 * 60 + SETTLE_SECONDS   # 14:47:00
+    log_dir = adapter_at(settled).to_zeek_logs(root, tmp_path / "work")
+    assert list(read_log(log_dir, "conn.log")) == [{"note": "conn from 2026-10-06-1430"}]
+    assert list(read_log(log_dir, "eve.json")) == [{"event_type": "flow", "minute": "14:30"}]
+
+
+def test_one_second_before_settling_the_folder_is_not_used(tmp_path):
+    root = make_sensor(tmp_path)
+    almost = folder_start("2026-10-06-1430") + 15 * 60 + SETTLE_SECONDS - 1
+    log_dir = adapter_at(almost).to_zeek_logs(root, tmp_path / "work")
+    assert list(read_log(log_dir, "conn.log")) == list(read_log(FIXTURE, "conn.log"))
+
+
+def test_no_complete_folder_yet_is_a_clear_error(tmp_path):
+    root = make_sensor(tmp_path)
+    too_early = folder_start("2026-10-06-1400") + 60
+    with pytest.raises(NoCompletedInterval, match="no interval has finished yet"):
+        adapter_at(too_early).to_zeek_logs(root, tmp_path / "work")
+
+
+def test_logs_from_before_a_zeek_restart_are_kept(tmp_path):
+    root = make_sensor(tmp_path)
+    folder = root / "zeek" / "2026-10-06-1415"
+    write_lines(folder / "conn.141502.log", ['{"note": "after the restart"}'])
+    log_dir = adapter_at(NOW).to_zeek_logs(root, tmp_path / "work")
+    notes = [rec.get("note") for rec in read_log(log_dir, "conn.log")]
+    assert notes.count("after the restart") == 1
+    assert len(notes) == 2   # the fixture's connection plus the one after the restart
+
+
+# ---- merge_eve(): the minute files of one interval ------------------------------------
+
+def test_merge_moves_exactly_the_intervals_minutes(tmp_path):
+    root = make_sensor(tmp_path)
+    folder, spool = root / "zeek" / "2026-10-06-1415", root / "spool" / "suricata"
+    assert [p.name for p in eve_parts(spool, folder, 15)] == [
+        "eve-2026-10-06-1415.json", "eve-2026-10-06-1422.json"]
+
+    merge_eve(folder, spool, 15)
+
+    assert (folder / "eve.json").read_text() == (FIXTURE / "eve.json").read_text()
+    assert sorted(p.name for p in spool.iterdir()) == ["eve-2026-10-06-1430.json"]
+    assert not list(folder.glob(".eve-*"))   # no temporary file left behind
+
+
+def test_merge_twice_adds_nothing(tmp_path):
+    root = make_sensor(tmp_path)
+    folder, spool = root / "zeek" / "2026-10-06-1415", root / "spool" / "suricata"
+    merge_eve(folder, spool, 15)
+    merge_eve(folder, spool, 15)
+    assert (folder / "eve.json").read_text() == (FIXTURE / "eve.json").read_text()
+
+
+def test_merge_after_a_crash_deletes_the_leftovers_without_adding_them_again(tmp_path):
+    root = make_sensor(tmp_path)
+    folder, spool = root / "zeek" / "2026-10-06-1415", root / "spool" / "suricata"
+    merge_eve(folder, spool, 15)
+    # A crash after eve.json was written but before the minute files were deleted:
+    write_lines(spool / "eve-2026-10-06-1415.json", ['{"event_type": "flow"}'])
+    merge_eve(folder, spool, 15)
+    assert (folder / "eve.json").read_text() == (FIXTURE / "eve.json").read_text()
+    assert not (spool / "eve-2026-10-06-1415.json").exists()
+
+
+def test_a_folder_without_suricata_minutes_gets_no_eve_json(tmp_path):
+    root = make_sensor(tmp_path)
+    folder = root / "zeek" / "2026-10-06-1400"
+    merge_eve(folder, root / "spool" / "suricata", 15)
+    assert not (folder / "eve.json").exists()
+
+
+# ---- the whole pipeline on a sensor folder --------------------------------------------
+
+def test_pipeline_analyzes_the_newest_complete_interval(tmp_path, monkeypatch):
+    root = make_sensor(tmp_path)
+    live = adapter_at(NOW)
+    monkeypatch.setattr(pipeline, "ADAPTERS", [PcapAdapter(), ZeekLogAdapter(), live])
+
+    report = pipeline.analyze(root, tmp_path / "work", explain=False, sensor_id="lab-sensor")
+
+    assert report["input"]["adapter"] == "live"
+    assert [f["rule_id"] for f in report["findings"]] == ["cleartext.http_alt"]
+    assert report["events"]
+    assert {e["sensor_id"] for e in report["events"]} == {"lab-sensor"}
+    assert report["tools"]["suricata"] is True   # eve.json was merged in
+```
+
+and `tests/unit/test_shipper.py` (a fake console: `http.server` in a thread on `127.0.0.1`):
+
+```python
+"""Shipper tests (Jakub, JAK-07): the right file with the right header, retries after a
+failure, never twice, and 7-day retention.
+
+The console is faked with Python's http.server in a thread on 127.0.0.1, so the
+shipper's real HTTP code runs, and nothing leaves this computer. Every function
+gets `now` from the test, so which folders are ready is exact.
+"""
+
+import io
+import re
+import socket
+import tarfile
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+import pytest
+
+from maxguard.adapters.live import folder_start
+from maxguard.sensor.shipper import (
+    SHIPPED_MARKER,
+    ConfigError,
+    is_shipped,
+    load_config,
+    main,
+    pack_folder,
+    prune,
+    run_once,
+)
+
+TOKEN = "fake-token-for-tests-0123456789abcdef"   # not a secret: only the fake console knows it
+FOLDERS = ("2026-10-06-1400", "2026-10-06-1415", "2026-10-06-1430")
+# 14:46 UTC: 14:00 and 14:15 are complete; 14:30 ended at 14:45 and is still settling.
+NOW = folder_start("2026-10-06-1430") + 15 * 60 + 60
+DAY = 86400
+
+
+class FakeConsole:
+    """Stands in for the console's POST /api/ingest. Answers with the codes in
+    `statuses` first (one per request), then 200, and records every request."""
+
+    def __init__(self) -> None:
+        self.statuses: list[int] = []
+        self.requests: list[dict] = []
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), self.handler_class())
+        # poll_interval: how often serve_forever() checks for shutdown (fast teardown).
+        self.thread = threading.Thread(target=self.server.serve_forever,
+                                       kwargs={"poll_interval": 0.05}, daemon=True)
+
+    @property
+    def url(self) -> str:
+        return f"http://127.0.0.1:{self.server.server_port}"
+
+    def handler_class(self):
+        console = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = self.rfile.read(int(self.headers["Content-Length"]))
+                console.requests.append({"path": self.path, "headers": self.headers,
+                                         "body": body})
+                status = console.statuses.pop(0) if console.statuses else 200
+                reply = b'{"analysis_id": "test", "findings": 1}'
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(reply)))
+                self.end_headers()
+                self.wfile.write(reply)
+
+            def log_message(self, *args):  # keep the test output quiet
+                pass
+
+        return Handler
+
+
+@pytest.fixture
+def console():
+    fake = FakeConsole()
+    fake.thread.start()
+    yield fake
+    fake.server.shutdown()
+    fake.server.server_close()
+
+
+def unused_port() -> int:
+    """A port on 127.0.0.1 where nothing listens: connecting is refused at once."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def write_config(data_dir: Path, url: str, sensor_id: str = "lab-sensor") -> None:
+    (data_dir / "shipper.toml").write_text(
+        "# test settings\n"
+        f'console_url = "{url}"\n'
+        f'token = "{TOKEN}"\n'
+        f'sensor_id = "{sensor_id}"\n')
+
+
+def make_sensor(data_dir: Path, folders=FOLDERS) -> Path:
+    """Interval folders with one conn.log line each, and one Suricata minute file
+    for the 14:15 interval (written in minute 14:20)."""
+    for name in folders:
+        folder = data_dir / "zeek" / name
+        folder.mkdir(parents=True)
+        (folder / "conn.log").write_text(f'{{"folder": "{name}"}}\n')
+    spool = data_dir / "spool" / "suricata"
+    spool.mkdir(parents=True)
+    (spool / "eve-2026-10-06-1420.json").write_text('{"event_type": "tls"}\n')
+    return data_dir
+
+
+def parse_form(request: dict) -> dict[str, tuple[str | None, bytes]]:
+    """multipart/form-data body -> {field name: (file name or None, value bytes)}."""
+    boundary = request["headers"]["Content-Type"].split("boundary=")[1].encode()
+    fields = {}
+    for part in request["body"].split(b"--" + boundary)[1:-1]:
+        head, _, value = part.removeprefix(b"\r\n").partition(b"\r\n\r\n")
+        disposition = head.decode().splitlines()[0]
+        name = re.search(r'; name="([^"]*)"', disposition).group(1)
+        file_name = re.search(r'; filename="([^"]*)"', disposition)
+        fields[name] = (file_name.group(1) if file_name else None, value.removesuffix(b"\r\n"))
+    return fields
+
+
+def tar_members(data: bytes) -> dict[str, bytes]:
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+        return {m.name: tar.extractfile(m).read() for m in tar.getmembers()}
+
+
+# ---- shipping -------------------------------------------------------------------------
+
+def test_ships_the_right_file_with_the_right_header(tmp_path, console):
+    data = make_sensor(tmp_path, folders=("2026-10-06-1415", "2026-10-06-1430"))
+    write_config(data, console.url)
+
+    result = run_once(data, 15, NOW)
+
+    assert result["shipped"] == ["2026-10-06-1415"]
+    [request] = console.requests
+    assert request["path"] == "/api/ingest"
+    assert request["headers"]["Authorization"] == f"Bearer {TOKEN}"
+    form = parse_form(request)
+    assert form["sensor_id"] == (None, b"lab-sensor")
+    file_name, archive = form["file"]
+    assert file_name == "2026-10-06-1415.tar.gz"
+    assert tar_members(archive) == {
+        "2026-10-06-1415/conn.log": b'{"folder": "2026-10-06-1415"}\n',
+        "2026-10-06-1415/eve.json": b'{"event_type": "tls"}\n',   # merged before shipping
+    }
+    assert is_shipped(data / "zeek" / "2026-10-06-1415")
+
+
+def test_the_folder_still_being_written_is_not_shipped(tmp_path, console):
+    data = make_sensor(tmp_path)
+    write_config(data, console.url)
+    run_once(data, 15, NOW)
+    assert not is_shipped(data / "zeek" / "2026-10-06-1430")
+    # Two minutes later it has settled, and the next round ships it.
+    assert run_once(data, 15, NOW + 120)["shipped"] == ["2026-10-06-1430"]
+
+
+def test_never_ships_a_folder_twice(tmp_path, console):
+    data = make_sensor(tmp_path)
+    write_config(data, console.url)
+    assert run_once(data, 15, NOW)["shipped"] == ["2026-10-06-1400", "2026-10-06-1415"]
+    assert run_once(data, 15, NOW + 30)["shipped"] == []
+    assert len(console.requests) == 2
+
+
+def test_retries_after_the_console_answers_with_an_error(tmp_path, console):
+    data = make_sensor(tmp_path, folders=("2026-10-06-1415",))
+    write_config(data, console.url)
+    console.statuses = [500]
+
+    assert run_once(data, 15, NOW)["shipped"] == []
+    assert not is_shipped(data / "zeek" / "2026-10-06-1415")
+
+    assert run_once(data, 15, NOW + 60)["shipped"] == ["2026-10-06-1415"]
+    assert len(console.requests) == 2
+    # The same folder packs to the same bytes, so the console sees the same upload.
+    assert parse_form(console.requests[0])["file"] == parse_form(console.requests[1])["file"]
+
+
+def test_retries_when_the_console_cannot_be_reached(tmp_path, console):
+    data = make_sensor(tmp_path, folders=("2026-10-06-1415",))
+    write_config(data, f"http://127.0.0.1:{unused_port()}")
+    assert run_once(data, 15, NOW)["shipped"] == []      # refused: no crash, not marked
+
+    write_config(data, console.url)                      # the console is back
+    assert run_once(data, 15, NOW + 60)["shipped"] == ["2026-10-06-1415"]
+
+
+def test_stops_at_the_first_failure_and_keeps_the_order(tmp_path, console):
+    data = make_sensor(tmp_path)
+    write_config(data, console.url)
+    console.statuses = [503]
+    assert run_once(data, 15, NOW)["shipped"] == []
+    assert len(console.requests) == 1                    # 14:15 was not even tried
+    assert run_once(data, 15, NOW + 30)["shipped"] == ["2026-10-06-1400", "2026-10-06-1415"]
+
+
+def test_a_proxy_setting_is_ignored(tmp_path, console, monkeypatch):
+    for name in ("http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY", "all_proxy"):
+        monkeypatch.setenv(name, f"http://127.0.0.1:{unused_port()}")
+    monkeypatch.delenv("no_proxy", raising=False)
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    data = make_sensor(tmp_path, folders=("2026-10-06-1415",))
+    write_config(data, console.url)
+    assert run_once(data, 15, NOW)["shipped"] == ["2026-10-06-1415"]
+
+
+def test_without_a_config_file_nothing_is_shipped(tmp_path, console, caplog):
+    data = make_sensor(tmp_path)
+    assert run_once(data, 15, NOW)["shipped"] == []
+    assert console.requests == []
+    assert "shipper.toml not found" in caplog.text
+
+
+def test_a_bad_config_file_is_reported_not_fatal(tmp_path, console, caplog):
+    data = make_sensor(tmp_path)
+    write_config(data, console.url, sensor_id="lab sensor!")
+    assert run_once(data, 15, NOW)["shipped"] == []
+    assert "sensor_id must be" in caplog.text
+
+
+def test_main_runs_one_round(tmp_path, console):
+    data = make_sensor(tmp_path, folders=("2026-10-06-1415",))
+    write_config(data, console.url)
+    assert main(["--data", str(data), "--interval-minutes", "15", "--once"]) == 0
+    assert len(console.requests) == 1   # the real clock is long past 14:17 on Oct 6, 2026
+
+
+# ---- settings ---------------------------------------------------------------------
+
+def test_load_config_reads_the_settings(tmp_path):
+    (tmp_path / "shipper.toml").write_text(
+        f'console_url = "http://192.0.2.10:8000/"\ntoken = "{TOKEN}"\nsensor_id = "sensor-01"\n')
+    config = load_config(tmp_path / "shipper.toml")
+    assert config.console_url == "http://192.0.2.10:8000"   # trailing slash removed
+    assert (config.token, config.sensor_id, config.ca_file) == (TOKEN, "sensor-01", None)
+
+
+@pytest.mark.parametrize(("line", "message"), [
+    ('console_url = "192.0.2.10:8000"', "console_url must start with"),
+    ('token = ""', "token is empty"),
+    ('sensor_id = "../etc"', "sensor_id must be"),
+])
+def test_load_config_refuses_wrong_settings(tmp_path, line, message):
+    settings = {"console_url": '"http://192.0.2.10:8000"', "token": f'"{TOKEN}"',
+                "sensor_id": '"sensor-01"'}
+    key = line.split(" = ")[0]
+    settings[key] = line.split(" = ")[1]
+    (tmp_path / "shipper.toml").write_text(
+        "".join(f"{k} = {v}\n" for k, v in settings.items()))
+    with pytest.raises(ConfigError, match=message):
+        load_config(tmp_path / "shipper.toml")
+
+
+# ---- packing and retention ------------------------------------------------------------
+
+def test_pack_folder_is_repeatable_and_leaves_out_hidden_files(tmp_path):
+    folder = make_sensor(tmp_path) / "zeek" / "2026-10-06-1415"
+    (folder / SHIPPED_MARKER).write_text("1\n")
+    (folder / ".eve-abc.partial").write_text("half written\n")
+    first = pack_folder(folder)
+    assert pack_folder(folder) == first
+    assert list(tar_members(first)) == ["2026-10-06-1415/conn.log"]
+
+
+def test_prune_deletes_only_shipped_folders_older_than_7_days(tmp_path):
+    data = make_sensor(tmp_path, folders=("2026-09-28-1400", "2026-09-28-1415",
+                                          "2026-10-06-1400"))
+    for name in ("2026-09-28-1400", "2026-10-06-1400"):
+        (data / "zeek" / name / SHIPPED_MARKER).write_text("1\n")
+    old_part = data / "spool" / "suricata" / "eve-2026-09-28-1401.json"
+    old_part.write_text("{}\n")
+
+    deleted = prune(data, now=NOW)
+
+    assert deleted == ["2026-09-28-1400", "eve-2026-09-28-1401.json"]
+    assert sorted(p.name for p in (data / "zeek").iterdir()) == [
+        "2026-09-28-1415",   # never shipped: kept
+        "2026-10-06-1400",   # shipped, but only today
+    ]
+    assert (data / "spool" / "suricata" / "eve-2026-10-06-1420.json").exists()
+
+
+def test_prune_keeps_a_folder_until_it_is_older_than_7_days(tmp_path):
+    data = make_sensor(tmp_path, folders=("2026-10-06-1400",))
+    (data / "zeek" / "2026-10-06-1400" / SHIPPED_MARKER).write_text("1\n")
+    start = folder_start("2026-10-06-1400")
+    assert prune(data, now=start + 7 * DAY) == []
+    assert prune(data, now=start + 7 * DAY + 1) == ["2026-10-06-1400"]
+```
+
+Run them:
+
+```bash
+pytest tests/unit/test_live_adapter.py tests/unit/test_shipper.py -q
+```
+
+Expected output:
+
+```text
+..........................................                                                   [100%]
+42 passed in 1.19s
+```
+
+**Step 10.** Before the sensor ships anything, put the console's address and token in `/data/shipper.toml` on the sensor (never in the repository) and make it readable only by root:
+
+```toml
+console_url = "http://192.168.50.20:8000"   # the console's LAN address
+token = "<the console's MAXGUARD_INGEST_TOKEN>"
+sensor_id = "sensor-01"
+```
+
+```bash
+sudo chmod 600 /data/shipper.toml
+```
+
+On the console, ingest stays off until `MAXGUARD_INGEST_TOKEN` is set (`docs/ARCHITECTURE.md` section 10).
+
+**Step 11.** Try the whole path on the Pi with 1-minute folders first:
+
+```bash
+# On the sensor: 1-minute folders for this test only
+export MAXGUARD_INTERVAL_MINUTES=1
+docker compose -f docker/sensor-compose.yaml up -d
+# use the lab service's HTTP (port 8080) and Telnet from a lab machine, wait 4 minutes
+ls /data/zeek
+ls -A /data/zeek/2026-10-06-2103
+docker compose -f docker/sensor-compose.yaml ps --format '{{.Service}} {{.State}}'
+docker compose -f docker/sensor-compose.yaml logs --no-log-prefix shipper
+# On the console:
+curl -s http://127.0.0.1:8000/api/alerts | python3 -c "import json, sys; [print(a['rule_id'], a['severity'], a['count']) for a in json.load(sys.stdin)]"
+curl -s 'http://127.0.0.1:8000/api/events?limit=1' | python3 -c "import json, sys; e = json.load(sys.stdin)[0]; print(e['sensor_id'], e['source'], e['log'])"
+# Back on the sensor: stop the test
+docker compose -f docker/sensor-compose.yaml down && unset MAXGUARD_INTERVAL_MINUTES
+```
+
+Expected output (not run in planning):
+
+```text
+2026-10-06-2102
+2026-10-06-2103
+2026-10-06-2104
+2026-10-06-2105
+.shipped
+capture_loss.log
+conn.log
+eve.json
+files.log
+http.log
+known_hosts.log
+known_services.log
+maxguard_cleartext.log
+software.log
+shipper running
+suricata running
+zeek running
+2026-10-06 21:02:35,859 INFO shipping complete 1-minute folders from /data/zeek
+2026-10-06 21:05:36,159 INFO 2026-10-06-2102: shipped (5066 bytes, HTTP 200)
+2026-10-06 21:06:36,274 INFO 2026-10-06-2103: shipped (2612 bytes, HTTP 200)
+2026-10-06 21:07:36,351 INFO 2026-10-06-2104: shipped (2218 bytes, HTTP 200)
+cleartext.telnet high 5
+cleartext.http_alt medium 6
+lab-sensor-01 zeek conn.log
+```
+
+*Not run on a Raspberry Pi: verify on hardware. This output is from planning, where Zeek and Suricata listened inside a lab-server container's network namespace instead of on `eth0` (a two-line Compose override), the console ran on the same machine, and `shipper.toml` named `sensor_id = "lab-sensor-01"`. The first Telnet session was at 21:03:09 and its alert reached the console at 21:06:36: the 21:03 folder is complete at 21:06:00 (end of the interval plus two minutes), and the shipper checks once a minute. With 15-minute folders, expect up to about 18 minutes plus the analysis time. Your folder names are your own times.*
+
+**Step 12.** Then start it for real (15-minute folders), run the sensor on the lab for one day, and check that alerts appear on the console within about 20 minutes of the traffic: `docker compose -f docker/sensor-compose.yaml up -d`.
+
+**Step 13.** Commit, push, and open the pull request:
+
+```bash
+git add -A
+git status          # only this task's files: nothing from .venv/, data/ or lab/captures/
+git commit -m "feat: live sensor with rotation and shipping (JAK-07)"
+git push -u origin HEAD
+```
+
+`HEAD` means "the branch I am on", so you do not have to retype its name. Open the repository on github.com: a yellow bar shows your branch with a **Compare & pull request** button. Click it, keep the title `feat: live sensor with rotation and shipping (JAK-07)`, fill in the template (paste the real output of the commands above under **How I tested it**), write `Closes #<issue number>` (this task's issue), and pick **@flau0306** under **Reviewers**. Click **Create pull request**, then fix anything CI or the reviewer finds with new commits on the same branch.
+
+#### How to test
+
+Both test files pass on your laptop. On the lab, `ls /data/zeek` shows a new folder every 15 minutes, `docker compose -f docker/sensor-compose.yaml ps` shows all three containers running after a reboot, and the console's alert queue shows the lab phone's traffic with the sensor's `sensor_id`. The capture port still has no IP address (`ip -br addr show eth0`).
+
+#### What you just did and why
+
+Shipping completed folders instead of streaming keeps the design simple: the console already knows how to analyze a folder of logs, and a network hiccup only delays a folder instead of losing events. A 15-minute interval is the trade-off between how quickly an alert appears and how many small Parquet files the console has to manage (each one costs about 3 KB). The sensor never transmits on the capture port; the shipper uses only the management port (CLAUDE.md rule 5).
+
+#### Pull request checklist
+
+- [ ] `ruff check .` prints `All checks passed!`
+- [ ] `pytest -m "not integration" -q` passes on your laptop
+- [ ] The pull request title has the form `type: summary (TASK-ID)` and the body says `Closes #<issue number>`
+- [ ] No secrets, passwords, email addresses, personal data, or captures from a real network (CLAUDE.md rule 6)
+- [ ] Any new dependency has a row in `docs/DEPENDENCIES.md` with its license
+- [ ] CI is green and your reviewer approved
+- [ ] Zeek runs without `-D`
+- [ ] The token and console address are read from `/data`, not from the repository
+- [ ] One full day of live data reached the console
 
 ### JAK-09: JA4 watchlist rule
 

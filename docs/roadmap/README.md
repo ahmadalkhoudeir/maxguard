@@ -267,8 +267,8 @@ How the team avoids waiting:
 | W8 | [JAI-10](jaiden.md#jai-10-release-v20-alpha) | Jaiden | Release v2.0-alpha | process |
 | W8 | [JAK-06](jakub.md#jak-06-build-the-reference-lab-and-prove-the-mirror-works) | Jakub | Build the reference lab and prove the mirror works | process |
 | W8 | [AHM-05](ahmad.md#ahm-05-alpha-acceptance-test-and-presentation) | Ahmad | Alpha acceptance test and presentation | process |
-| S4 | [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) | Jakub | Live sensor: capture, rotation, and shipping to the console | design |
 | S4 | [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address) | Jakub | Device attribution: which device is behind each IP address | code, tested |
+| S4 | [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) | Jakub | Live sensor: capture, rotation, and shipping to the console | code, tested |
 | S4 | [AMO-05](amory.md#amo-05-chain-of-custody-log) | Amory | Chain-of-custody log | code, tested |
 | S4 | [AHM-06](ahmad.md#ahm-06-ip-timeline-and-device-inventory-pages) | Ahmad | IP timeline and device inventory pages | design |
 | S4 | [KAR-06](karthik.md#kar-06-end-to-end-test-of-the-live-sensor-on-the-lab) | Karthik | End-to-end test of the live sensor on the lab | code, tested |

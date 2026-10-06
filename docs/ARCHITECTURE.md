@@ -148,7 +148,7 @@ built yet.
 | Ed25519 signing | `maxguard/custody/signing.py` | Jaiden | alpha | tested |
 | Chain-of-custody log | `maxguard/custody/log.py` | Amory | spring | tested |
 | Response module | `maxguard/response/` | Ahmad | spring | design |
-| Live sensor adapter, shipper, sensor Compose file | `maxguard/adapters/live.py`, `maxguard/sensor/shipper.py`, `docker/sensor-compose.yaml` | Jakub | spring | design |
+| Live sensor: rotation script, Suricata live settings, Compose file, adapter, shipper | `maxguard/zeek/scripts/live/rotate.zeek`, `maxguard/suricata/maxguard-suricata-live.yaml`, `docker/sensor-compose.yaml`, `maxguard/adapters/live.py`, `maxguard/sensor/shipper.py` | Jakub | spring | tested (unit tests; the three containers shipped 1-minute folders to a console in planning); not run on a Raspberry Pi |
 | JA4 watchlist rule | `maxguard/rules/ja4.py` | Jakub | spring | tested |
 | Device attribution | `maxguard/sensor/attribution.py` | Jakub | spring | tested |
 | NetFlow adapter and host agent | `maxguard/adapters/netflow.py`, `maxguard/sensor/agent.py` | Jakub | spring | design |
@@ -226,7 +226,8 @@ inside the stored report.
 
 ## 4. Data flow: the live sensor
 
-**Design (not yet built; spring S1–S4).** The hardware is in `docs/HARDWARE.md`.
+**Tested in planning with containers; not run on a Raspberry Pi** (spring
+S1–S4, task JAK-07). The hardware is in `docs/HARDWARE.md`.
 
 ```mermaid
 flowchart LR
@@ -252,29 +253,72 @@ flowchart LR
   sensor cannot send on it (CLAUDE.md rule 5). The **management port** (a USB
   Ethernet adapter on the normal network) is how you log in and how logs reach
   the console.
-- Zeek and Suricata run in containers with host networking and the `NET_RAW`
-  and `NET_ADMIN` capabilities they need to capture. Live Zeek does **not** use
-  `-D`: random seeds protect Zeek's tables against deliberate slow-down attacks,
-  and determinism only matters for re-reading capture files.
-- Both tools rotate their logs on a fixed interval (default 15 minutes) into
-  one folder per interval on the SSD. The shipper sends each **completed**
-  folder (Zeek logs plus that interval's `eve.json`) to the console as a
-  `.tar.gz`; `ZeekLogAdapter` already accepts that format, so the console runs
-  the normal pipeline on it with `sensor_id` set to the sensor's name. Alerts
-  therefore arrive within one interval plus the analysis time.
+- `docker/sensor-compose.yaml` runs three containers with host networking.
+  Every one drops all capabilities and adds back only what it needs: Zeek
+  `NET_RAW` and `NET_ADMIN`; Suricata also `SYS_NICE`, plus five that only its
+  start-up script uses (after start-up it runs as the `suricata` user with
+  exactly `NET_ADMIN`, `NET_RAW` and `SYS_NICE`, checked in planning); the
+  shipper only `DAC_OVERRIDE`, to delete Suricata's merged files. Live Zeek does
+  **not** use `-D`: random seeds protect Zeek's tables against deliberate
+  slow-down attacks, and determinism only matters for re-reading capture files.
+- **Layout on the SSD.** Zeek writes the interval in progress into
+  `/data/spool/zeek/`; `maxguard/zeek/scripts/live/rotate.zeek` moves each
+  finished interval into `/data/zeek/<YYYY-MM-DD-HHMM>/` (the interval's start,
+  UTC). Suricata writes one `eve-<YYYY-MM-DD-HHMM>.json` per minute into
+  `/data/spool/suricata/`. The default interval is 15 minutes
+  (`MAXGUARD_INTERVAL_MINUTES`, a whole number of minutes that divides an hour).
+- **When is a folder complete?** Two minutes after its interval ends: by then
+  Zeek has moved every log into it and Suricata has closed the last minute file
+  that belongs to it. The shipper then merges that interval's minute files into
+  the folder's `eve.json`, packs the folder as a `.tar.gz` (the same bytes every
+  time), and sends it to `POST /api/ingest`. It marks the folder shipped only
+  after a `2xx` answer and stops at the first failure, so a console that is down
+  only delays folders. The console runs the normal pipeline on the archive with
+  `sensor_id` set to the sensor's name; alerts therefore arrive within one
+  interval plus about three minutes plus the analysis time.
+- `LiveSensorAdapter` (`maxguard/adapters/live.py`, in `ADAPTERS`) analyzes the
+  newest complete folder of a sensor's data folder directly, for example
+  `maxguard analyze /data` on the sensor's SSD. It accepts only a folder that
+  has `zeek/<YYYY-MM-DD-HHMM>/` folders and no `conn.log` of its own, so it never
+  takes a plain Zeek log folder from `ZeekLogAdapter`.
 - `POST /api/ingest` is switched off unless the console sets
-  `MAXGUARD_INGEST_TOKEN`; every request must carry that token. Publishing the
+  `MAXGUARD_INGEST_TOKEN`; every request must carry that token. The shipper
+  reads the console's address and the token from `/data/shipper.toml` on the
+  sensor (never from the repository) and never uses a proxy. Publishing the
   ingest port on the LAN is an explicit, optional choice (CLAUDE.md rule 1).
-- Retention is 7 days on both machines: the sensor deletes shipped folders
-  older than that, and the console's event store prunes whole hour folders
-  (section 9).
+- Retention is 7 days on both machines: the shipper deletes shipped folders
+  older than that (a folder that was never shipped is kept), and the console's
+  event store prunes whole hour folders (section 9).
 
-Three questions must be answered on real hardware before this design is final
-(JAK-06 builds the lab, JAK-07 the live sensor): the exact Zeek 9 rotation
-settings without `zeekctl`, Suricata 8.0's `eve` rotation option, and why
-Suricata captured zero packets in the planning container test while Zeek in the
-same setup captured 449 (`docs/HARDWARE.md` section 11.3 has the commands;
-**not run — verify on hardware**).
+The three questions this section left open are answered:
+
+1. **Zeek 9 rotation without `zeekctl`:** set `Log::default_rotation_interval`
+   and a `Log::rotation_format_func` that returns the interval folder; Zeek
+   rotates at multiples of the interval, and after a crash
+   `LogAscii::enable_leftover_log_rotation` moves the unfinished logs at the
+   next start. Tested with Zeek 9.0.0 and 1-minute intervals.
+2. **Suricata 8.0's `eve` rotation:** `filename: eve-%Y-%m-%d-%H%M.json` with
+   `rotate-interval: minute`. A relative value such as `15m` counts from the
+   moment Suricata starts (Suricata 8.0.7, `src/util-logopenfile.c`), so it
+   would not line up with Zeek's folders; minute files are merged instead.
+   Suricata opens the next file with the first event after the minute ends, so
+   events from the first seconds of an interval can travel with the previous
+   folder. Nothing is lost or counted twice.
+3. **Why Suricata captured 0 packets in the first planning test:** the
+   `jasonish/suricata:7.0.17` image ships the ET Open rule set (53,021 rules);
+   loading it took about 50 seconds, and Suricata captures nothing until its
+   rules are loaded. `jasonish/suricata:8.0.7` ships no rules, and the sensor
+   loads only MaxGuard's own rules file, so it starts in about a second
+   (`docs/HARDWARE.md` section 11.3).
+
+**What was run in planning.** The three containers ran on an x86-64 machine with
+1-minute folders, listening inside a lab server container instead of on a mirror
+port. Zeek and Suricata filled one folder per minute; the shipper sent each
+complete folder to a console on the same machine (`HTTP 200`); the console
+showed `cleartext.telnet` and `cleartext.http_alt` alerts and events with the
+sensor's `sensor_id`. A Telnet session at 21:03:09 became an alert at 21:06:36.
+The commands and output are in JAK-07. Running it on a Raspberry Pi with a real
+mirror port is **not run — verify on hardware**.
 
 ## 5. The three contracts and their v2.0 extensions
 
@@ -914,10 +958,23 @@ Compose file, `install.sh`, and a SHA-256 checksum file, split into parts under
 
 ### The sensor (spring)
 
-`docker/sensor-compose.yaml` (design) runs live Zeek 9.0.0 and Suricata 8.0.7
-with host networking on the Raspberry Pi 5 (ARM64) or an x86-64 mini PC, plus
-the shipper. Every image MaxGuard uses is published for both `linux/amd64` and
-`linux/arm64` (checked for the pinned tags during planning).
+`docker/sensor-compose.yaml` runs three containers with host networking on the
+Raspberry Pi 5 (ARM64) or an x86-64 mini PC: live Zeek 9.0.0, Suricata 8.0.7,
+and the shipper (the `zeek/zeek:9.0.0` image again, used only for its Python
+3.13: the shipper needs nothing outside the standard library). Every image
+MaxGuard uses is published for both `linux/amd64` and `linux/arm64` (checked
+for the pinned tags during planning). Section 4 has the layout on the SSD.
+
+| Variable (sensor) | Default | Meaning |
+|---|---|---|
+| `MAXGUARD_CAPTURE_IFACE` | `eth0` | the capture port |
+| `MAXGUARD_INTERVAL_MINUTES` | `15` | minutes per log folder; a whole number that divides 60 (`1` for a quick test) |
+| `MAXGUARD_SENSOR_DATA` | `/data` | the data folder on the SSD |
+
+`/data/shipper.toml` on the sensor holds `console_url`, `token` (the console's
+`MAXGUARD_INGEST_TOKEN`), `sensor_id` (1–64 letters, digits, `.`, `_` or `-`) and,
+for an `https://` console with its own certificate, `ca_file`. Make it readable
+only by root.
 
 ## 16. Decisions and the options we rejected
 
@@ -983,12 +1040,13 @@ re-generates the fixtures (when Zeek or Suricata change) and updates
 |---|---|---|---|
 | Zeek | 9.0.0 | `docker/Dockerfile` (`FROM zeek/zeek:9.0.0`), `scripts/make_fixtures.sh` | LTS release; image for amd64 and arm64 |
 | Suricata (engine image) | 7.0.10 | Debian 13 package installed in `docker/Dockerfile` | Fixtures come from `jasonish/suricata:7.0.10`, the same upstream version. OISF ended the 7.0 branch in July 2026 (7.0.17 is the last 7.0 release; the announcement was seen only through search excerpts). Whether Debian 13's package carries the later 7.0 security fixes was not checked (Debian's servers were unreachable in planning). Moving the engine to 8.0 before the v2.0 release is an open decision. |
-| Suricata (live sensor) | 8.0.7 | `docker/sensor-compose.yaml` (spring) | Supported branch for a sensor that parses untrusted traffic all day. JA4 with MaxGuard's settings was checked on 8.0.7, and the normalizer reads Suricata 8's DNS format (tested with a Suricata 8 fixture). |
+| Suricata (live sensor) | 8.0.7 | `docker/sensor-compose.yaml` | Supported branch for a sensor that parses untrusted traffic all day. JA4 with MaxGuard's settings was checked on 8.0.7, and the normalizer reads Suricata 8's DNS format (tested with a Suricata 8 fixture). |
 | Ollama | 0.35.1 | `docker/compose.yaml`, offline bundle | amd64 and arm64 |
 | Python | 3.11 or newer | `pyproject.toml` | Laptops and CI use 3.11; the image has Debian 13's 3.13 |
 | htmx | 2.0.11 | `maxguard/web/static/htmx-2.0.11.min.js` | 0BSD; SHA-256 `d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717` |
-| Python packages | pyyaml 6.0.3, requests 2.34.2, fastapi 0.142.2, uvicorn 0.54.0, jinja2 3.1.6, python-multipart 0.0.32, duckdb 1.5.6, cryptography 50.0.2; dev: pytest 9.1.1, ruff 0.16.10, httpx 0.28.1 | lower bounds in `pyproject.toml` | Tested versions |
+| Python packages | pyyaml 6.0.3, requests 2.34.2, fastapi 0.142.2, uvicorn 0.54.0, jinja2 3.1.6, python-multipart 0.0.32, duckdb 1.5.6, cryptography 50.0.2; dev: pytest 9.1.1, ruff 0.16.10, httpx2 2.13.1 | lower bounds in `pyproject.toml` | Tested versions |
 | Lab images | `python:3.11-slim-bookworm`, `nicolaka/netshoot:v0.15` | `lab/` | Only for making test captures |
+| Development tools | ShellCheck 0.11.0 (`koalaman/shellcheck:v0.11.0`), actionlint 1.7.12 (`actionlint-py==1.7.12.25`) | the guides that use them (KAR-06, JON-05, JAI-09) | Never shipped; licenses in `docs/DEPENDENCIES.md` |
 
 Framework versions (PCI DSS 4.0.1, NIST SP 800-53 Rev. 5 Release 5.2.0, CISA CPG
 2.0, CJIS 6.1, MITRE ATT&CK v19) are locked in `docs/PROJECT_DECISIONS.md`
