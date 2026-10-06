@@ -4562,7 +4562,7 @@ If `source .venv/bin/activate` fails, you have not made the virtual environment 
 
 **Step 2.** Write `release.yml` with `on: push: tags: ["v*"]`, `permissions: contents: write, packages: write`, and the official Docker actions (`docker/setup-qemu-action`, `docker/setup-buildx-action`, `docker/login-action` with `GITHUB_TOKEN`, `docker/build-push-action` with `platforms: linux/amd64,linux/arm64`). On October 6, 2026 the newest major versions were `actions/checkout@v7`, `docker/setup-qemu-action@v4`, `docker/setup-buildx-action@v4`, `docker/login-action@v4` and `docker/build-push-action@v7` (read with `git ls-remote --tags https://github.com/<owner>/<action>`); check again and pin the newest.
 
-**Step 3.** Validate the file with `actionlint` before merging (`pip install actionlint-py` in a throwaway virtual environment).
+**Step 3.** Validate the file with `actionlint` before merging (`pip install actionlint-py==1.7.12.25` in a throwaway virtual environment).
 
 **Step 4.** After merging: write the release notes in `docs/releases/v2.0-alpha-rc1.md` (what works, known limits, how to install offline), then:
 

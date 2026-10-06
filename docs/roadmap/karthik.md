@@ -1985,6 +1985,8 @@ jobs:
         run: |
           docker run --rm --network none maxguard:ci zeek --version
           docker run --rm --network none maxguard:ci suricata -V
+          # MaxGuard needs JA4 (docs/ARCHITECTURE.md section 16): fail if this build lacks it.
+          docker run --rm --network none maxguard:ci sh -c 'suricata --build-info | grep -w HAVE_JA4'
           docker run --rm --network none maxguard:ci maxguard --help
 
       # pytest is already inside the image, so the tests run with no network at all.
@@ -1992,7 +1994,7 @@ jobs:
         run: docker run --rm --network none maxguard:ci-test pytest -m integration -q
 ```
 
-*Written in planning; its first real run is your pull request.* Check the action versions (`actions/checkout`, `actions/setup-python`) against their GitHub releases pages before merging.
+*Written in planning; its first real run is your pull request.* Check the action versions (`actions/checkout`, `actions/setup-python`) against their GitHub releases pages before merging. The `HAVE_JA4` line fails the job if the image's Suricata was built without JA4: Suricata 7.0.10 and 8.0.7 from `jasonish/suricata` list it, but Debian's package could not be checked in planning, so the first CI run answers that question.
 
 **Step 3.** Create `tests/integration/test_determinism.py`. It analyzes every capture twice, into two *different* folders (so a folder path that leaks into the report fails too), and when the reports differ, `differences()` names the exact value, for example `report['events'][0]['uid']: 'CVMEph...' != 'CeUBb0...'`. The small test of that helper is not marked, so it also runs with the unit tests:
 
@@ -2368,7 +2370,7 @@ Three choices to notice. It refuses any address outside the lab ranges, because 
 **Step 3.** Check the script with ShellCheck, and see it refuse an address outside the lab before it contacts anything:
 
 ```bash
-docker run --rm -v "$PWD/scripts:/mnt:ro" koalaman/shellcheck:stable /mnt/live_check.sh && echo "shellcheck: no findings"
+docker run --rm -v "$PWD/scripts:/mnt:ro" koalaman/shellcheck:v0.11.0 /mnt/live_check.sh && echo "shellcheck: no findings"
 bash scripts/live_check.sh http://127.0.0.1:8000 100.64.0.1
 ```
 
