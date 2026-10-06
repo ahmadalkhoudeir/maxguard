@@ -1,6 +1,6 @@
 """Build dns_dhcp.pcap: one DNS lookup and one DHCP lease, fully synthetic.
 
-None of the 13 lab captures contains DNS or DHCP, so this script writes the
+No lab capture contains DHCP (only dns_lookup has DNS), so this script writes the
 packets byte by byte (standard library only). Zeek 9.0.0 and Suricata 7.0.10
 then turn the capture into the dns.log, dhcp.log and eve.json fixtures next to
 this file, so the field names are the real ones, not guesses.

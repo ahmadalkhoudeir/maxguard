@@ -1,29 +1,9 @@
 {
- "FIO-01/tests": {
+ "AHM-08/session": {
   "code": 0,
   "ok": true
  },
- "FIO-01/try": {
-  "code": 0,
-  "ok": true
- },
- "JAK-01/clean": {
-  "code": 0,
-  "ok": true
- },
- "JAK-01/lookups": {
-  "code": 0,
-  "ok": true
- },
- "JAK-01/telnet": {
-  "code": 0,
-  "ok": true
- },
- "KAR-02/again": {
-  "code": 0,
-  "ok": true
- },
- "KAR-02/tests": {
+ "AHM-08/tests": {
   "code": 0,
   "ok": true
  }

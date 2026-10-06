@@ -235,19 +235,19 @@ def test_main_runs_one_round(tmp_path, console):
 
 def test_load_config_reads_the_settings(tmp_path):
     (tmp_path / "shipper.toml").write_text(
-        f'console_url = "http://192.0.2.10:8000/"\ntoken = "{TOKEN}"\nsensor_id = "sensor-01"\n')
+        f'console_url = "http://192.0.2.10:8001/"\ntoken = "{TOKEN}"\nsensor_id = "sensor-01"\n')
     config = load_config(tmp_path / "shipper.toml")
-    assert config.console_url == "http://192.0.2.10:8000"   # trailing slash removed
+    assert config.console_url == "http://192.0.2.10:8001"   # trailing slash removed
     assert (config.token, config.sensor_id, config.ca_file) == (TOKEN, "sensor-01", None)
 
 
 @pytest.mark.parametrize(("line", "message"), [
-    ('console_url = "192.0.2.10:8000"', "console_url must start with"),
+    ('console_url = "192.0.2.10:8001"', "console_url must start with"),
     ('token = ""', "token is empty"),
     ('sensor_id = "../etc"', "sensor_id must be"),
 ])
 def test_load_config_refuses_wrong_settings(tmp_path, line, message):
-    settings = {"console_url": '"http://192.0.2.10:8000"', "token": f'"{TOKEN}"',
+    settings = {"console_url": '"http://192.0.2.10:8001"', "token": f'"{TOKEN}"',
                 "sensor_id": '"sensor-01"'}
     key = line.split(" = ")[0]
     settings[key] = line.split(" = ")[1]

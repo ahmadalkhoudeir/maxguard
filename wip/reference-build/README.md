@@ -1,9 +1,9 @@
-# Save point: MaxGuard v2.0 reference build (October 6, 2026, 16:10 UTC)
+# Save point: MaxGuard v2.0 reference build (October 6, 2026, 21:30 UTC)
 
 **Not for merging.** This folder saves the planning session's scratch workspace
 so the work can continue in a new session or container. The deliverable is the
 documentation in `docs/` on branch `v2-planning` (pull request #3, head
-`2e4bdd8` when this was saved). Work stopped here at the project lead's request;
+`c0e780d` when this was saved). Work stopped here at the project lead's request;
 it continues when the project lead says "GO".
 
 ## What is in this folder
@@ -21,14 +21,17 @@ it continues when the project lead says "GO".
 
 | Task | State |
 |---|---|
-| JAI-07 API | Built, tested (27 unit tests, a real capture through Zeek, curl against uvicorn), in the docs as a tested task |
-| AMO-05 custody log | Built, tested (21 tests), in the docs |
-| JAI-11 signed intel bundles | Built, tested (22 tests), in the docs |
-| JON-06 prompt-injection tests | Built, tested (26 tests, mutation-checked), in the docs; ALI-05 rewritten to use them |
-| KAR-03, KAR-04 step 3, KAR-06 script | Built by a builder: `tests/expected/*.json`, `tests/integration/test_pcaps.py`, `test_determinism.py`, `tests/unit/test_suricata_eve.py`, `scripts/live_check.sh`, `docs-draft/test-results.md`. Integration tests: 30 passed, 1 skipped in the stand-in image. **Not yet reviewed, not yet in the docs.** Its issues for the lead are in `results/karthik-tests-result.json`. |
-| JAK-07 live sensor | Mostly built by a builder that was interrupted: `maxguard/zeek/scripts/live/rotate.zeek`, `maxguard/suricata/maxguard-suricata-live.yaml`, `docker/sensor-compose.yaml`, `maxguard/adapters/live.py` (24 tests pass), `maxguard/sensor/shipper.py` (41 tests pass). Missing: `docs-draft/live-sensor-notes.md`, a final end-to-end run record, the review, the `ADAPTERS` line in `pipeline.py`. |
-| AHM-07/08 response, FIO-06/07 decoys and baselines, JAK-10/11 NetFlow and host agent, JAI-09 + JON-05 release and offline bundle, AHM-02/03/06 dashboard | Not built yet (`maxguard/response/` holds only an empty `__init__.py`) |
-| KAR-06 run, ALI-05 | Hardware tasks: they stay "not run - verify on hardware" |
+| JAI-07 API, AMO-05, JAI-11, JON-06 | Built, tested, in the docs |
+| KAR-03, KAR-04, KAR-06 | Built, tested, in the docs (KAR-06's lab run and ALI-05 stay hardware tasks) |
+| JAK-07 live sensor | Built, tested end to end with containers (1-minute folders shipped, HTTP 200, alerts with the sensor_id), in the docs |
+| AHM-07, AHM-08 response | Built by a builder, reviewed by the lead (one-transaction audit added), in the docs; the adversarial reviewer had not run yet |
+| API changes by the lead | Host allow-list (`MAXGUARD_ALLOWED_HOSTS`, DNS rebinding), `create_ingest_app()` and `docker/compose.lan.yaml` (only `POST /api/ingest` on the LAN, port 8001) |
+| AHM-02/03/06 dashboard | Being built (workflow `maxguard-reference-build-5`); not in this save point's committed `ref/` |
+| FIO-06/07, JAK-10/11, JAI-09 + JON-05 | Not built yet (queued in the same workflow) |
+
+`results/response-builder-result.json` is the response builder's full report.
+`workflows/maxguard-reference-build-5-*.js` runs the remaining builders one at a
+time (a usage cap stopped parallel builders twice).
 
 ## Findings to carry forward
 

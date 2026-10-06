@@ -147,11 +147,18 @@ class LiveSensorAdapter:
 
     def __init__(self, interval_minutes: int | None = None,
                  clock: Callable[[], float] = time.time) -> None:
-        if interval_minutes is None:
-            self.interval_minutes = interval_minutes_from_env()
-        else:
-            self.interval_minutes = check_interval(interval_minutes)
+        # None: read MAXGUARD_INTERVAL_MINUTES when a folder is analyzed, not here.
+        # pipeline.py makes this adapter at import time, and a wrong setting must
+        # not stop MaxGuard from analyzing uploads.
+        self._interval_minutes = None if interval_minutes is None else check_interval(
+            interval_minutes)
         self.clock = clock  # tests pass a fixed time; on a sensor it is the real clock
+
+    @property
+    def interval_minutes(self) -> int:
+        if self._interval_minutes is None:
+            return interval_minutes_from_env()
+        return self._interval_minutes
 
     def accepts(self, path: Path) -> bool:
         if not path.is_dir() or (path / "conn.log").exists():

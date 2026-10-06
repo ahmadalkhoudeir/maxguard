@@ -74,7 +74,7 @@ class ConfigError(ValueError):
 
 @dataclass(frozen=True)
 class ShipperConfig:
-    console_url: str             # "http://192.168.50.20:8000", no trailing slash
+    console_url: str             # "http://192.168.50.20:8001", no trailing slash
     token: str                   # the console's MAXGUARD_INGEST_TOKEN
     sensor_id: str               # this sensor's name, e.g. "sensor-01"
     ca_file: str | None = None   # only for an https:// console with its own certificate

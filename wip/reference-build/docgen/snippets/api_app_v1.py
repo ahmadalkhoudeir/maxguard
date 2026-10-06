@@ -12,15 +12,22 @@ this app. docs/ARCHITECTURE.md section 10 lists the endpoints.
   so two at once on a Raspberry Pi only makes both slower.
 - POST /api/ingest is how sensors and host agents on the LAN send data. It is
   OFF unless MAXGUARD_INGEST_TOKEN is set, and every request must carry that
-  token. The console is published on 127.0.0.1 only; publishing its port on the
-  LAN so sensors can reach it is an explicit, optional choice of the user
-  (CLAUDE.md rule 1: nothing leaves or enters the machine by default).
+  token. The dashboard and the rest of the API are published on 127.0.0.1 only.
+  Sensors reach a second app, create_ingest_app(), which serves nothing but
+  POST /api/ingest on its own port; publishing that port on the LAN is an
+  explicit, optional choice of the user (CLAUDE.md rule 1: nothing leaves or
+  enters the machine by default).
 - Browsers refuse to let other websites read this API, but they do let another
   website *send* a form to it. Requests that change something are therefore
   refused when the browser says they come from another site (cross-site
   request forgery, OWASP CSRF Prevention Cheat Sheet).
+- A website can also make its own name point to 127.0.0.1 after the page has
+  loaded (DNS rebinding); the browser then treats this API as part of that
+  website. The API therefore answers only requests whose Host header names this
+  machine, or an address listed in MAXGUARD_ALLOWED_HOSTS.
 
 Start it with:  uvicorn maxguard.api.app:create_app --factory --port 8000
+Ingest only:    uvicorn maxguard.api.app:create_ingest_app --factory --port 8001
 """
 
 from __future__ import annotations
@@ -49,6 +56,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.datastructures import FormData, UploadFile
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from maxguard import __version__, offline
 from maxguard.adapters.pcap import PCAP_MAGIC
@@ -66,6 +74,7 @@ MIB = 1024 * 1024
 CHUNK_BYTES = MIB              # copy uploads in 1 MiB blocks: never the whole file in memory
 FORM_OVERHEAD_BYTES = 64 * 1024  # room for the multipart headers around the file
 MIN_TOKEN_LENGTH = 32          # secrets.token_urlsafe(32) gives 43 characters
+DEFAULT_ALLOWED_HOSTS = "localhost,127.0.0.1,[::1]"  # this machine only
 
 DEFAULT_SENSOR_ID = "sensor"
 MAX_FORM_FIELDS = 5             # one file plus a few text fields; Starlette allows 1000
@@ -91,6 +100,7 @@ INGEST_FORM = {"requestBody": {"required": True, "content": {"multipart/form-dat
     }}}}}}
 
 router = APIRouter()
+ingest_router = APIRouter()  # also served alone by create_ingest_app()
 
 
 # ---------- the app ----------
@@ -100,13 +110,44 @@ def create_app(data_dir: str | Path | None = None, *, explain: bool = True) -> F
 
     data_dir defaults to $MAXGUARD_DATA_DIR, then "data". explain=False skips the AI
     (tests, and machines without Ollama)."""
+    app = new_app(data_dir, explain)
+    app.include_router(router)
+    app.include_router(ingest_router)
+    for module_name in OPTIONAL_ROUTERS:
+        module = optional_module(module_name)
+        if module is not None:
+            app.include_router(module.router)
+    if STATIC_DIR.is_dir():
+        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    return app
+
+
+def create_ingest_app(data_dir: str | Path | None = None, *, explain: bool = True) -> FastAPI:
+    """Only POST /api/ingest: the app for the port that sensors and agents reach over
+    the LAN (docker/compose.lan.yaml). The dashboard and the rest of the API stay on
+    127.0.0.1, so nobody on the LAN can read alerts or approve a block.
+
+    Both apps share the data folder. The dashboard shows ingested data at its next
+    refresh: GET /api/stream only hears about changes made in its own process."""
+    app = new_app(data_dir, explain, docs=False)  # no /docs page on the LAN
+    if app.state.ingest_token is None:
+        raise ValueError("the ingest app needs MAXGUARD_INGEST_TOKEN (at least 32 characters)")
+    app.include_router(ingest_router)
+    return app
+
+
+def new_app(data_dir: str | Path | None, explain: bool, *, docs: bool = True) -> FastAPI:
+    """What both apps share: settings and stores on app.state, and the two checks
+    that run before any route (unknown host names, cross-site changes)."""
     offline.enable_from_env()  # MAXGUARD_OFFLINE=1 (set in docker/compose.yaml)
 
     folder = Path(data_dir or os.environ.get("MAXGUARD_DATA_DIR", "data"))
     folder.mkdir(parents=True, exist_ok=True)
 
+    no_docs = {} if docs else {"docs_url": None, "redoc_url": None, "openapi_url": None}
     app = FastAPI(title="MaxGuard", version=__version__,
-                  description="Offline network security checks. See docs/ARCHITECTURE.md.")
+                  description="Offline network security checks. See docs/ARCHITECTURE.md.",
+                  **no_docs)
     app.state.data_dir = folder
     app.state.state_store = StateStore(folder / "state.db")
     app.state.event_store = EventStore(folder / "events")
@@ -119,14 +160,26 @@ def create_app(data_dir: str | Path | None = None, *, explain: bool = True) -> F
     app.state.keepalive_seconds = KEEPALIVE_SECONDS
 
     app.middleware("http")(refuse_cross_site_changes)
-    app.include_router(router)
-    for module_name in OPTIONAL_ROUTERS:
-        module = optional_module(module_name)
-        if module is not None:
-            app.include_router(module.router)
-    if STATIC_DIR.is_dir():
-        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    # Added last, so it runs first: a request for an unknown host name stops here.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts(),
+                       www_redirect=False)
     return app
+
+
+def allowed_hosts() -> list[str]:
+    """MAXGUARD_ALLOWED_HOSTS: the names and addresses this console may be reached by,
+    comma-separated, without http:// or a port. Default: this machine only. Add the
+    console's LAN address (for example 192.168.50.20) when sensors or agents send to it."""
+    text = os.environ.get("MAXGUARD_ALLOWED_HOSTS", DEFAULT_ALLOWED_HOSTS)
+    hosts = [host.strip().lower() for host in text.split(",") if host.strip()]
+    if not hosts:
+        raise ValueError("MAXGUARD_ALLOWED_HOSTS is empty: the console would answer no one")
+    for host in hosts:
+        # "*" would switch the check off; "/" or a port can never match a Host header.
+        if "*" in host or "/" in host or (":" in host and not host.startswith("[")):
+            raise ValueError("MAXGUARD_ALLOWED_HOSTS: write names or addresses only, "
+                             f"without http:// or a port, got {host!r}")
+    return hosts
 
 
 def max_upload_bytes() -> int:
@@ -201,7 +254,7 @@ async def upload_analysis(request: Request) -> dict:
         return await run_in_threadpool(receive, request.app, upload, sensor_id=None)
 
 
-@router.post("/api/ingest", openapi_extra=INGEST_FORM)
+@ingest_router.post("/api/ingest", openapi_extra=INGEST_FORM)
 async def ingest(request: Request) -> dict:
     """The same as an upload, for sensors and host agents on the LAN."""
     # Both checks come before the body is read, so a stranger without the token

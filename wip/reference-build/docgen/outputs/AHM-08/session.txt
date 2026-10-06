@@ -1,0 +1,19 @@
+{"analysis_id":"4423386c532f1b46","findings":1}
+400 '1.2.3.4; rm -rf /' does not appear to be an IPv4 or IPv6 address
+200 proposal 1: proposed
+sudo nft 'add element inet maxguard maxguard_block_in_v4 { 172.18.0.3 }'
+sudo nft 'add element inet maxguard maxguard_block_out_v4 { 172.18.0.3 }'
+sudo nft 'delete element inet maxguard maxguard_block_in_v4 { 172.18.0.3 }'
+sudo nft 'delete element inet maxguard maxguard_block_out_v4 { 172.18.0.3 }'
+200 proposal 1: previewed
+preview: 1 connection(s), devices ['172.18.0.2'] ports [23]
+400 the IP address you typed does not match the proposal
+200 proposal 1: approved
+200 proposal 1: applied
+200 proposal 1: reverted
+ahmad response.proposed 1
+ahmad response.previewed 1
+fiona response.approve_refused 1
+fiona response.approved 1
+fiona response.applied 1
+ahmad response.reverted 1

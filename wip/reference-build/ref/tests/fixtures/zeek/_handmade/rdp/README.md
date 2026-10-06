@@ -34,7 +34,7 @@ python $H/make_rdp_pcap.py $H/rdp.pcap
 
 # same options as maxguard/zeek/runner.py
 docker run --rm --network none -v "$PWD":/src -w /src/$H zeek/zeek:9.0.0 \
-  zeek -D -C -r rdp.pcap local LogAscii::use_json=T \
+  zeek -D -C -r rdp.pcap /src/maxguard/zeek/site.zeek LogAscii::use_json=T \
   policy/protocols/conn/community-id-logging \
   /src/maxguard/zeek/scripts/cleartext.zeek /src/maxguard/zeek/scripts/inventory.zeek
 # keep conn.log and rdp.log; delete the other *.log files

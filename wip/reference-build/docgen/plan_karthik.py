@@ -161,44 +161,63 @@ TASKS = [
     {
         "id": "KAR-03", "owner": "karthik", "milestone": "W2",
         "title": "Integration tests: the real pipeline on every capture",
-        "labels": ["area:testing", "critical-path"], "status": "design",
+        "labels": ["area:testing", "critical-path"],
         "depends": ["JAI-05", "JAI-04", "KAR-02"],
         "goal": (
-            "Write expected-result files and an integration test that runs the real pipeline "
-            "(Zeek and Suricata included) on every capture inside the engine image and checks "
-            "that each capture produces exactly the findings it should, and nothing it should not."
+            "Write expected-result files and an integration test that runs the real pipeline on "
+            "every capture inside the engine image and checks that each capture produces exactly "
+            "the findings it should, and nothing it should not. Add fast unit checks of Suricata's "
+            "saved output: a Community ID on every record and a JA4 on every TLS client hello."
         ),
         "prereq": "JAI-05 (pipeline) and JAI-04 (engine image) are merged.",
         "steps": [
             start_step("karthik/integration-tests"),
-            "For each capture write `tests/expected/<capture>.json` in the Fall 2026 format:\n\n"
-            "```json\n{\n  \"capture\": \"telnet.pcap\",\n  \"expected\": [\n"
-            "    {\"rule_id\": \"cleartext.telnet\", \"dst_port\": 23, \"min_count\": 1}\n  ],\n"
-            "  \"must_not_contain\": [\"cleartext.ftp\", \"cleartext.http\"]\n}\n```\n\n"
-            "For `clean_tls13` and `dns_lookup` use `\"expected\": []` and "
-            "`\"expect_no_findings\": true`.",
-            "Write `tests/integration/test_pcaps.py`: mark it `@pytest.mark.integration`, "
-            "parametrize it over the expected files, run "
-            "`maxguard.pipeline.analyze(capture, tmp_path, explain=False)`, and check every "
-            "expected `rule_id` and `dst_port` appears with at least `min_count`, nothing in "
-            "`must_not_contain` appears, and `expect_no_findings` means zero findings. Also check "
-            "`report[\"tools\"]` says both Zeek and Suricata ran.",
-            "Build the test image and run the tests in it with networking off:\n\n"
-            "```bash\ndocker build -f docker/Dockerfile --target test -t maxguard:test .\n"
-            "docker run --rm --network none maxguard:test pytest -m integration -q\n```\n\n"
-            "*Not run in planning (the image needs Debian's package servers to build).* The same "
-            "pipeline was run on every capture in planning with Zeek 9.0.0, and each capture "
-            "produced exactly its rule (`tests/unit/test_rule_registry.py` checks the same thing "
-            "on the fixtures).",
+            "Write one expected-result file per capture in `tests/expected/`, in the Fall 2026 "
+            "format. `expected` names the rule the capture was recorded to trigger, on its port. "
+            "`must_not_contain` lists the other rules of the same family: they read the same logs, "
+            "so they are the likely misfires, and a new rule never forces you to edit every file. "
+            "The two clean captures say `expect_no_findings` instead.\n\n"
+            + "\n\n".join(f"`tests/expected/{name}.json`:\n\n@@FILE tests/expected/{name}.json@@"
+                          for name in ("telnet", "ftp", "pop3", "imap", "plain_http",
+                                       "plain_http_alt", "tls_weak_version", "tls_weak_cipher",
+                                       "cert_expired", "cert_self_signed", "cert_sha1",
+                                       "cert_weak_key", "clean_tls13", "dns_lookup")),
+            "Create `tests/integration/test_pcaps.py`. Besides one test per expected file, "
+            "`test_every_capture_has_an_expected_file` fails when someone adds a capture without "
+            "an answer key, so no capture goes untested:\n\n@@FILE tests/integration/test_pcaps.py@@\n\n"
+            "Whether Suricata ran is checked later, in JAK-05: the pipeline starts running it there.",
+            "Create `tests/unit/test_suricata_eve.py`. It reads the saved `eve.json` fixtures, so it "
+            "runs with the fast unit tests. A record with a server name (SNI) proves Suricata parsed "
+            "the client hello, because the name is only sent there, and that is the message JA4 is "
+            "computed from. Zeek's TLS sessions are a second witness, so the JA4 check cannot pass "
+            "by checking nothing:\n\n@@FILE tests/unit/test_suricata_eve.py@@",
+            "Run it:\n\n@@RUN eve@@",
+            "Build the test image and run the integration tests in it with networking off:\n\n"
+            "@@RUN integration@@",
             pr_step("test: integration tests on every lab capture (KAR-03)", "JWinborne1"),
         ],
-        "files": [], "commands": [],
-        "test": "`pytest -m integration -q` passes inside the test image: 14 tests, one per capture.",
+        "files": ["tests/expected", "tests/integration/test_pcaps.py",
+                  "tests/unit/test_suricata_eve.py"],
+        "commands": [
+            {"id": "eve", "show": "pytest tests/unit/test_suricata_eve.py -q"},
+            {"id": "integration", "env": "zeek",
+             "show": ("docker build -f docker/Dockerfile --target test -t maxguard:test .\n"
+                      "docker run --rm --network none maxguard:test pytest -m integration -q"),
+             "run": "python3 -m pytest -m integration -q -p no:cacheprovider",
+             "note": ("Run in planning inside `zeek/zeek:9.0.0` with MaxGuard's Python packages "
+                      "added, because the engine image build needs Debian's package servers "
+                      "(JAI-04). Zeek ran for real on every capture.")},
+        ],
+        "test": ("`pytest -m integration -q` passes inside the test image (15 tests: one per "
+                 "capture, plus the one that checks every capture has an expected file), and the "
+                 "Suricata checks pass with the unit tests."),
         "why": (
             "Unit tests use saved fixtures, so they cannot notice when the way MaxGuard *runs* Zeek "
             "or Suricata breaks (a missing script, a wrong option, a new tool version). Integration "
-            "tests run the real tools on the real captures, offline, the same way users will. The "
-            "`must_not_contain` lists catch a rule that starts firing where it should not."
+            "tests run the real tools on the real captures, offline, the same way users will. In "
+            "planning, leaving `cleartext.zeek` out of the Zeek command made exactly the Telnet, "
+            "POP3 and IMAP tests fail, and nothing else. The `must_not_contain` lists catch a rule "
+            "that starts firing where it should not."
         ),
         "checklist": checklist(extra=["One expected file per capture",
                                       "The integration tests pass in the test image"]),
@@ -219,16 +238,31 @@ TASKS = [
             "Replace `.github/workflows/ci.yml` with the version that has the second job:\n\n"
             "@@FILE .github/workflows/ci.yml@@\n\n*Written in planning; its first real run is "
             "your pull request.* Check the action versions (`actions/checkout`, "
-            "`actions/setup-python`) against their GitHub releases pages before merging.",
-            "Write `tests/integration/test_determinism.py` (marked `integration`): for each "
-            "capture, run `analyze()` twice into two temporary folders and assert the two report "
-            "dicts are equal. If it ever fails, the difference tells you which value is not "
-            "deterministic.",
+            "`actions/setup-python`) against their GitHub releases pages before merging. The "
+            "`HAVE_JA4` line fails the job if the image's Suricata was built without JA4: "
+            "Suricata 7.0.10 and 8.0.7 from `jasonish/suricata` list it, but Debian's package "
+            "could not be checked in planning, so the first CI run answers that question.",
+            "Create `tests/integration/test_determinism.py`. It analyzes every capture twice, into "
+            "two *different* folders (so a folder path that leaks into the report fails too), and "
+            "when the reports differ, `differences()` names the exact value, for example "
+            "`report['events'][0]['uid']: 'CVMEph...' != 'CeUBb0...'`. The small test of that helper "
+            "is not marked, so it also runs with the unit tests:\n\n"
+            "@@FILE tests/integration/test_determinism.py@@",
+            "Run the integration tests again:\n\n@@RUN integration@@",
             "Open the pull request and watch both jobs. In the `integration` job's log, check "
             "that the tests ran with `--network none`.",
             pr_step("ci: integration job in the engine image, determinism test (KAR-04)", "JWinborne1"),
         ],
-        "files": [".github/workflows/ci.yml"], "commands": [],
+        "files": [".github/workflows/ci.yml", "tests/integration/test_determinism.py"],
+        "commands": [
+            {"id": "integration", "env": "zeek",
+             "show": ("docker build -f docker/Dockerfile --target test -t maxguard:test .\n"
+                      "docker run --rm --network none maxguard:test pytest -m integration -q"),
+             "run": "python3 -m pytest -m integration -q -p no:cacheprovider",
+             "note": ("Run in planning inside `zeek/zeek:9.0.0` with MaxGuard's Python packages "
+                      "added (see KAR-03). Running Zeek without `-D` made the Telnet determinism "
+                      "test fail on the connection IDs, which is the mistake this test exists to catch.")},
+        ],
         "test": "Both CI jobs are green on your pull request. After merging, ask Jaiden to add "
                 "`integration` to the required checks of the `main-protection` ruleset.",
         "why": (
@@ -273,7 +307,7 @@ TASKS = [
     {
         "id": "KAR-06", "owner": "karthik", "milestone": "S4",
         "title": "End-to-end test of the live sensor on the lab",
-        "labels": ["area:testing", "area:sensor"], "status": "design", "hardware": True,
+        "labels": ["area:testing", "area:sensor"], "hardware": True,
         "depends": ["JAK-07"],
         "goal": (
             "Prove the live path works end to end on the reference lab: generate known traffic, "
@@ -283,21 +317,57 @@ TASKS = [
         "prereq": "JAK-07 (live sensor) is merged and running on the lab.",
         "steps": [
             start_step("karthik/live-e2e"),
-            "Write `scripts/live_check.sh`: from a laptop on the lab's Wi-Fi, make one plain-HTTP "
-            "request and one Telnet connection to a test service you run on another lab machine "
-            "(never to the internet), then poll the console's `GET /api/alerts` every minute for "
-            "up to 30 minutes until both alerts appear.",
+            "Create `scripts/live_check.sh`:\n\n@@FILE scripts/live_check.sh@@\n\n"
+            "Three choices to notice. It refuses any address outside the lab ranges, because "
+            "probing someone else's machine is never acceptable (CLAUDE.md rule 4). It uses "
+            "`curl` for the Telnet probe too, so no Telnet client is needed. And it compares the "
+            "alert's `last_seen` (the sensor's clock) with the console's clock, so both must keep "
+            "the right time (NTP); a Raspberry Pi without a clock battery has the wrong time until "
+            "it reaches a time server.",
+            "Check the script with ShellCheck, and see it refuse an address outside the lab "
+            "before it contacts anything:\n\n@@RUN check@@",
+            "On another lab machine, start a test service with Telnet and HTTP. The lab server "
+            "from KAR-01 is one: `docker run -d --rm --name lab-service -p 23:23 -p 80:80 "
+            "lab-server`. It is insecure on purpose: run it only on the lab network, and stop it "
+            "(`docker stop lab-service`) after the test. Plug that machine into a LAN port of "
+            "the **router** for the test, not into the switch or the mesh Wi-Fi: the sensor sees "
+            "only traffic that crosses the cable on switch port 1 (`docs/HARDWARE.md` section 1), "
+            "and traffic between two devices behind the switch never does.",
+            "On the console machine (on the mesh Wi-Fi), run the check against the console and "
+            "the lab service. The console's API answers only on `127.0.0.1`; sensors use the "
+            "separate ingest port:\n\n@@RUN lab@@",
             "Run it three times on different days and record how long each alert took in "
             "`docs/testing/live-sensor.md`.",
             pr_step("test: live-sensor end-to-end check on the lab (KAR-06)", "JWinborne1"),
         ],
-        "files": [], "commands": [],
+        "files": ["scripts/live_check.sh"],
+        "commands": [
+            {"id": "check", "expect_code": 2, "show": (
+                "docker run --rm -v \"$PWD/scripts:/mnt:ro\" koalaman/shellcheck:v0.11.0 "
+                "/mnt/live_check.sh && echo \"shellcheck: no findings\"\n"
+                "bash scripts/live_check.sh http://127.0.0.1:8000 100.64.0.1"),
+             "note": "The second command exits with 2: `100.64.0.1` is not a lab address."},
+            {"id": "lab", "env": "none",
+             "show": "bash scripts/live_check.sh http://127.0.0.1:8000 192.168.50.30",
+             "output": ("sent: plain HTTP request to 172.19.0.2 port 80\n"
+                        "sent: Telnet session to 172.19.0.2 port 23\n"
+                        "waiting for the alerts (checking every 1 s, for up to 0 min 20 s)\n"
+                        "cleartext.telnet alert after 0 min 2 s\n"
+                        "cleartext.http alert after 0 min 4 s\n"
+                        "PASS: both alerts appeared"),
+             "note": ("Not run on the lab: verify on hardware. This output is from planning, "
+                      "where the test service was the lab server in a container (172.19.0.2), a "
+                      "fake console answered `/api/alerts`, and `LIVE_CHECK_POLL_SECONDS=1` and "
+                      "`LIVE_CHECK_TIMEOUT_SECONDS=20` shortened the waits. On the lab, expect "
+                      "up to one 15-minute interval plus the analysis time.")},
+        ],
         "test": "All three runs show both alerts within one shipping interval plus the analysis time.",
         "why": (
             "Each piece of the live path is unit-tested, but the joints between them (rotation, "
             "shipping, ingest, analysis, dashboard) only break on real hardware. A repeatable "
             "end-to-end check catches those breaks before the v2.0 release."
         ),
-        "checklist": checklist(extra=["Only lab machines were contacted"]),
+        "checklist": checklist(extra=["Only lab machines were contacted",
+                                      "The test service was stopped after the test"]),
     },
 ]

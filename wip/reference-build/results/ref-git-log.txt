@@ -1,16 +1,30 @@
-341fcf4 2026-10-06 15:59:05 +0000 package data: zeek/site.zeek and live scripts
-a46f825 2026-10-06 15:58:31 +0000 zeek: site.zeek replaces Zeek's local policy (no DNS lookups: detect-MHR, interesting-hostnames, extend-email); guard test
-d396016 2026-10-06 15:33:38 +0000 api: refuse same-site and null-origin changes (OWASP CSRF); static mount test without dashboard files
-5596ddb 2026-10-06 15:25:10 +0000 lead: custody log (AMO-05), signed intel bundles (JAI-11), prompt-injection set and tests (JON-06)
-850a5b2 2026-10-06 15:15:57 +0000 lead: API (JAI-07), analyze(sensor_id=), spec copies and API contract
-cce3abc 2026-10-06 10:48:51 +0000 duckdb: no extension auto-install; dev: httpx2
-9e58ffe 2026-10-06 10:32:35 +0000 docs wording: task IDs instead of planning jargon
-167d729 2026-10-06 10:29:42 +0000 eval scripts, make_fixtures, suricata runner test
-a2d8a67 2026-10-06 03:18:06 +0000 lead: split tests by task, contract/pipeline/package tests
-aff34b5 2026-10-06 02:59:21 +0000 lead: lint config + fixes
-461b5b0 2026-10-06 02:58:18 +0000 lead: ai reason, repeat uploads, reopen
-185a0d3 2026-10-06 02:50:11 +0000 wave1 + lead fixes
-035910d 2026-10-06 01:44:48 +0000 spec
-647933a 2026-10-06 01:44:37 +0000 zeek+eve fixtures
-d95fe5d 2026-10-06 01:43:14 +0000 ignore venv
-d08f63c 2026-10-06 01:43:09 +0000 reference spine
+d41e393 response: a state change and its audit row in one transaction (insert_audit); rollback test
+cbc1e3c response: OPNsense setup text: LAN source rule too; alias type Host(s)
+5c453f9 response module (AHM-07, AHM-08) from the builder, before review
+82e9ebc spec: Host allow-list, ingest-only app; spec copies at 69db227
+046d504 live_check: the console's clock
+0e3b6bd api: create_ingest_app (only POST /api/ingest) for the LAN port; docker/compose.lan.yaml; live_check runs on the console; console address 192.168.50.20:8001
+55ed1a6 api: answer only allowed Host names (DNS rebinding), MAXGUARD_ALLOWED_HOSTS; conftest fixture for TestClient
+55c00c1 live sensor (JAK-07): adapter reads its interval lazily; LiveSensorAdapter in ADAPTERS; sensor package docstring; end-to-end run recorded
+086bb19 wip: live sensor files from the interrupted builder (JAK-07, not reviewed)
+89c8350 spec copies: docs at 087121e
+c942f24 ci: fail when the engine image's Suricata has no JA4 (HAVE_JA4 in --build-info)
+373b5b8 tests: Suricata-ran check moves to JAK-05 (the pipeline runs Suricata from JAK-05 on)
+433472f tests: expected results, integration and determinism tests, eve checks, live_check.sh (KAR-03, KAR-04, KAR-06; reviewed by the lead)
+2d813df fixtures: rebuild recipes load site.zeek (checked: identical logs); 14 captures, not 13
+341fcf4 package data: zeek/site.zeek and live scripts
+a46f825 zeek: site.zeek replaces Zeek's local policy (no DNS lookups: detect-MHR, interesting-hostnames, extend-email); guard test
+d396016 api: refuse same-site and null-origin changes (OWASP CSRF); static mount test without dashboard files
+5596ddb lead: custody log (AMO-05), signed intel bundles (JAI-11), prompt-injection set and tests (JON-06)
+850a5b2 lead: API (JAI-07), analyze(sensor_id=), spec copies and API contract
+cce3abc duckdb: no extension auto-install; dev: httpx2
+9e58ffe docs wording: task IDs instead of planning jargon
+167d729 eval scripts, make_fixtures, suricata runner test
+a2d8a67 lead: split tests by task, contract/pipeline/package tests
+aff34b5 lead: lint config + fixes
+461b5b0 lead: ai reason, repeat uploads, reopen
+185a0d3 wave1 + lead fixes
+035910d spec
+647933a zeek+eve fixtures
+d95fe5d ignore venv
+d08f63c reference spine

@@ -1,7 +1,7 @@
 # Hand-made fixtures
 
-The 13 lab captures have no DNS or DHCP traffic and no Suricata alert, and all
-their logs are JSON. These small fixtures fill those gaps. The folder name
+No lab capture has DHCP traffic or a Suricata alert (only `dns_lookup`, added
+later, has DNS), and all their logs are JSON. These small fixtures fill those gaps. The folder name
 starts with `_` so tests that loop over "one folder per lab capture" skip it.
 
 All data is synthetic: addresses in 192.168.56.0/24, MAC 02:00:00:aa:bb:cc
@@ -31,7 +31,7 @@ python $H/make_dns_dhcp_pcap.py $H/dns_dhcp/dns_dhcp.pcap
 
 # Zeek JSON logs (same options as maxguard/zeek/runner.py)
 docker run --rm --network none -v "$PWD":/src -w /src/$H/dns_dhcp zeek/zeek:9.0.0 \
-  zeek -D -C -r dns_dhcp.pcap local LogAscii::use_json=T \
+  zeek -D -C -r dns_dhcp.pcap /src/maxguard/zeek/site.zeek LogAscii::use_json=T \
   policy/protocols/conn/community-id-logging \
   /src/maxguard/zeek/scripts/cleartext.zeek /src/maxguard/zeek/scripts/inventory.zeek
 # keep conn.log, dns.log, dhcp.log; delete the other *.log files

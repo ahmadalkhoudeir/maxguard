@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # Live-sensor end-to-end check (Karthik, KAR-06).
 #
-# Run it on a laptop in the lab. It makes one plain-HTTP request (port 80) and
-# one Telnet connection (port 23) to a test service on another lab machine, then
-# asks the MaxGuard console for its alerts every minute, for up to 30 minutes,
+# Run it on the MaxGuard console: its API answers only on 127.0.0.1 (sensors reach
+# a separate ingest-only port). It makes one plain-HTTP request (port 80) and one
+# Telnet connection (port 23) to a test service on another lab machine, then
+# asks the console for its alerts every minute, for up to 30 minutes,
 # until a cleartext.http and a cleartext.telnet alert show traffic seen after the
 # start. It prints how long each alert took.
 #
 # Usage:    bash scripts/live_check.sh <console URL> <lab service IPv4 address>
-# Example:  bash scripts/live_check.sh http://192.168.50.10:8000 192.168.50.30
+# Example:  bash scripts/live_check.sh http://127.0.0.1:8000 192.168.50.30
+#
+# The sensor sees only traffic that crosses the mirrored switch port (the cable to
+# the router, docs/HARDWARE.md section 1). Plug the test service's machine into a
+# LAN port of the router itself for this test, so the probes cross that cable.
 #
 # Settings (environment variables), mainly so a test can finish in seconds:
 #   LIVE_CHECK_POLL_SECONDS     seconds between two looks at the console (default 60)
@@ -26,7 +31,7 @@ TIMEOUT_SECONDS="${LIVE_CHECK_TIMEOUT_SECONDS:-1800}"
 
 usage() {
   echo "usage: bash scripts/live_check.sh <console URL> <lab service IPv4 address>" >&2
-  echo "example: bash scripts/live_check.sh http://192.168.50.10:8000 192.168.50.30" >&2
+  echo "example: bash scripts/live_check.sh http://127.0.0.1:8000 192.168.50.30" >&2
   exit 2
 }
 
@@ -61,7 +66,7 @@ fetch_alerts() {
 
 # Succeeds when the alert list (JSON on stdin) has an alert for rule $1 whose
 # last_seen is at or after $2. Both are Unix seconds; last_seen is when the sensor
-# saw the traffic, so the sensor's and this laptop's clocks must agree (NTP).
+# saw the traffic, so the sensor's and this machine's clocks must agree (NTP).
 alert_seen_since() {
   python3 -c '
 import json, sys

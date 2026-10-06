@@ -250,14 +250,29 @@ TASKS = [
             "`suricata` program on the `PATH`, so they run without the real one:\n\n"
             "@@FILE tests/unit/test_suricata_runner.py@@",
             "Run them, then the whole unit suite:\n\n@@RUN tests@@\n\n@@RUN all@@",
+            "Add the integration test that proves Suricata now runs next to Zeek, "
+            "`tests/integration/test_suricata_pipeline.py`. Where Suricata is missing it shows "
+            "as skipped, with the reason, instead of passing:\n\n"
+            "@@FILE tests/integration/test_suricata_pipeline.py@@\n\n@@RUN integration@@",
             "The real check runs in the engine image, where Suricata is installed:\n\n@@RUN image@@",
             pr_step("feat: run Suricata next to Zeek on captures (JAK-05)", "flau0306"),
         ],
         "files": ["maxguard/suricata/runner.py", "maxguard/adapters/pcap.py",
-                  "maxguard/api/app.py", "tests/unit/test_suricata_runner.py"],
+                  "maxguard/api/app.py", "tests/unit/test_suricata_runner.py",
+                  "tests/integration/test_suricata_pipeline.py"],
         "commands": [
             {"id": "tests", "show": "pytest tests/unit/test_suricata_runner.py -q"},
             {"id": "all", "show": 'pytest -m "not integration" -q'},
+            {"id": "integration", "env": "zeek",
+             "show": ("docker build -f docker/Dockerfile --target test -t maxguard:test .\n"
+                      "docker run --rm --network none maxguard:test "
+                      "pytest -m integration tests/integration/test_suricata_pipeline.py -q -rs"),
+             "run": ("python3 -m pytest -m integration tests/integration/test_suricata_pipeline.py "
+                     "-q -rs -p no:cacheprovider"),
+             "note": ("In planning this ran in `zeek/zeek:9.0.0`, which has no Suricata, so it was "
+                      "skipped as shown. With Zeek and Suricata both available it passed: the "
+                      "Suricata TLS event had a JA4 and the same Community ID as Zeek's. In the "
+                      "engine image you should see `1 passed`.")},
             {"id": "image", "env": "none",
              "show": ("docker run --rm --network none -v \"$PWD/tests/pcaps:/pcaps:ro\" maxguard:dev "
                       "python -c \"import json, tempfile; from pathlib import Path; "
@@ -333,58 +348,143 @@ TASKS = [
     {
         "id": "JAK-07", "owner": "jakub", "milestone": "S4",
         "title": "Live sensor: capture, rotation, and shipping to the console",
-        "labels": ["area:sensor", "critical-path"], "hardware": True, "status": "design",
-        "depends": ["JAK-06", "JAI-07"],
+        "labels": ["area:sensor", "critical-path"], "hardware": True,
+        "depends": ["JAK-06", "JAI-07", "JAK-08"],
         "goal": (
             "Turn the lab into MaxGuard's live sensor (`docs/ARCHITECTURE.md` section 4): Zeek and "
-            "Suricata run all the time on the capture port, rotate their logs every 15 minutes "
-            "into one folder per interval on the SSD, and a small shipper sends each completed "
-            "folder to the console's `POST /api/ingest`. The console analyzes it like an upload, "
-            "with `sensor_id` set to the sensor's name."
+            "Suricata run all the time on the capture port and write their logs into one folder "
+            "per 15-minute interval on the SSD, and a small shipper sends each completed folder "
+            "to the console's `POST /api/ingest`. The console analyzes it like an upload, with "
+            "`sensor_id` set to the sensor's name."
         ),
-        "prereq": "JAK-06 (the lab works) and JAI-07 (the API with `/api/ingest`) are merged.",
+        "prereq": ("JAK-06 (the lab works), JAI-07 (the API with `/api/ingest`) and JAK-08 "
+                   "(which creates `maxguard/sensor/`) are merged."),
         "steps": [
             start_step("jakub/live-sensor"),
-            "**Zeek rotation.** Find the Zeek 9 way to rotate logs every 15 minutes without "
-            "`zeekctl` (look at `Log::default_rotation_interval` and the rotation post-processor "
-            "in the Zeek 9.0.0 documentation) so that each interval's logs land in "
-            "`/data/zeek/<YYYY-MM-DD-HHMM>/`. Write it as `maxguard/zeek/scripts/live/rotate.zeek`. "
-            "Test it on the Pi with a 1-minute interval first.",
-            "**Suricata live settings.** Copy `maxguard/suricata/maxguard-suricata.yaml` to "
-            "`maxguard/suricata/maxguard-suricata-live.yaml`, add an `af-packet` section for the "
-            "capture interface, and turn on `eve` file rotation every 15 minutes (find the option "
-            "for Suricata 8.0 in its user guide). Keep Community ID and JA4 exactly as they are.",
-            "**Compose file.** Write `docker/sensor-compose.yaml` with two services, "
-            "`zeek/zeek:9.0.0` and `jasonish/suricata:8.0.7`, both with `network_mode: host`, "
-            "only the capabilities they need (Zeek: `NET_RAW`, `NET_ADMIN`; Suricata: also "
-            "`SYS_NICE`), `/data` mounted, and `restart: unless-stopped`. **No `-D` for Zeek** "
-            "(random seeds protect a live sensor).",
-            "**Adapter.** Write `maxguard/adapters/live.py` with `LiveSensorAdapter` (Contract 3, "
-            "unchanged): `accepts()` is true for a sensor data folder; `to_zeek_logs()` returns "
-            "the newest *completed* interval folder (never the one still being written) with that "
-            "interval's `eve.json` merged in.",
-            "**Shipper.** Write `maxguard/sensor/shipper.py`: every minute, find completed "
-            "interval folders not shipped yet, pack each as `.tar.gz`, `POST` it to "
-            "`<console>/api/ingest` with `Authorization: Bearer <token>` (console URL and token "
-            "from a config file in `/data`, never in the repository), and mark it shipped only "
-            "after a `2xx` answer. Delete shipped folders older than 7 days.",
-            "**Tests** (`tests/unit/test_live_adapter.py`, `tests/unit/test_shipper.py`): the "
-            "adapter picks the newest completed folder and ignores the current one; the shipper "
-            "sends the right file with the right header to a fake HTTP server on `127.0.0.1` "
-            "(`http.server` in a thread), retries after a failure, and never ships a folder twice.",
-            "Run the sensor on the lab for one day and check that alerts appear on the console "
-            "within about 20 minutes of the traffic.",
+            "**Zeek rotation.** Zeek 9 rotates its own logs, without `zeekctl`, when "
+            "`Log::default_rotation_interval` is set. `Log::rotation_format_func` decides where "
+            "each closed file goes. Create `maxguard/zeek/scripts/live/rotate.zeek`:\n\n"
+            "@@FILE maxguard/zeek/scripts/live/rotate.zeek@@\n\n"
+            "The folder is named after the interval's **start** in UTC, and the files keep their "
+            "plain names, so a finished folder is an ordinary Zeek log folder. The script sits in "
+            "`scripts/live/` on purpose: `maxguard/zeek/runner.py` loads only `scripts/*.zeek`, so "
+            "analyzing a capture file never rotates anything.",
+            "**Suricata live settings.** Create `maxguard/suricata/maxguard-suricata-live.yaml`, "
+            "a copy of `maxguard-suricata.yaml` with three changes (Community ID and JA4 are "
+            "unchanged):\n\n@@FILE maxguard/suricata/maxguard-suricata-live.yaml@@\n\n"
+            "Why a file per **minute** and not per 15 minutes: Suricata 8.0's `rotate-interval` "
+            "accepts `minute`, `hour` and `day`, which start at the next whole minute, hour or "
+            "day, or a relative value such as `15m`, which counts from the moment Suricata "
+            "started (user guide, \"Rotate log file\"; source: `src/util-logopenfile.c`). A "
+            "relative 15 minutes would not line up with Zeek's folders, so Suricata writes "
+            "minute files and the adapter merges each interval's minutes into that interval's "
+            "folder. Never add `copy-mode` to the `af-packet` section: it turns Suricata into an "
+            "inline device that sends packets (CLAUDE.md rule 5).",
+            "**Compose file.** Create `docker/sensor-compose.yaml`:\n\n"
+            "@@FILE docker/sensor-compose.yaml@@\n\n"
+            "Zeek runs **without `-D`**: random seeds protect a live sensor's tables against "
+            "deliberate slow-down attacks. Every service drops all capabilities and adds back "
+            "only what it needs. Suricata needs five more than `NET_ADMIN`, `NET_RAW` and "
+            "`SYS_NICE` only while it starts: the image's start script hands its folders (such as `/var/log/suricata`) "
+            "to the `suricata` user, and Suricata then switches to that user. The shipper uses "
+            "the `zeek/zeek` image only for its Python 3: it needs nothing outside the standard "
+            "library. Check the file:\n\n@@RUN compose@@",
+            "**Adapter.** Create `maxguard/adapters/live.py` with `LiveSensorAdapter` "
+            "(Contract 3, unchanged):\n\n@@FILE maxguard/adapters/live.py@@\n\n"
+            "A folder is *complete* two minutes after its interval ends: by then Zeek has moved "
+            "every log into it and Suricata has closed the last minute file that belongs to it. "
+            "`merge_eve()` writes `eve.json` under a hidden name first and renames it, so a crash "
+            "halfway never leaves a half-merged file. The adapter reads "
+            "`MAXGUARD_INTERVAL_MINUTES` only when it analyzes a folder, because "
+            "`pipeline.py` creates it when it is imported, and a wrong setting must not stop "
+            "MaxGuard from analyzing uploads.",
+            "Add it to `ADAPTERS` in `maxguard/pipeline.py` (two lines change):\n\n"
+            "@@FILE maxguard/pipeline.py@@",
+            "Add one line to the docstring of `maxguard/sensor/__init__.py`:\n\n"
+            "@@FILE maxguard/sensor/__init__.py@@",
+            "**Shipper.** Create `maxguard/sensor/shipper.py`:\n\n"
+            "@@FILE maxguard/sensor/shipper.py@@\n\n"
+            "Three choices to notice. It marks a folder shipped only after a `2xx` answer and "
+            "stops at the first failure, so a console that is down only delays folders. It packs "
+            "the same folder into the same bytes every time, so if the sensor crashes between "
+            "sending and marking, the console sees the same SHA-256 and does not count the "
+            "alerts twice. And it never uses a proxy: the token and the logs go straight to the "
+            "console the user configured.",
+            "**Tests.** Create `tests/unit/test_live_adapter.py`:\n\n"
+            "@@FILE tests/unit/test_live_adapter.py@@\n\n"
+            "and `tests/unit/test_shipper.py` (a fake console: `http.server` in a thread on "
+            "`127.0.0.1`):\n\n@@FILE tests/unit/test_shipper.py@@\n\nRun them:\n\n@@RUN tests@@",
+            "**The console side.** The dashboard listens only on `127.0.0.1`, so nobody on the "
+            "network can read alerts or approve a block. Sensors get their own door: a second "
+            "container that serves nothing but `POST /api/ingest` on port 8001 of the console's "
+            "LAN address (`create_ingest_app()` from JAI-07). Create `docker/compose.lan.yaml`:"
+            "\n\n@@FILE docker/compose.lan.yaml@@\n\n"
+            "Check both Compose files (the values here are examples; yours go in `docker/.env`, "
+            "which `.gitignore` already keeps out of git):\n\n@@RUN lan@@",
+            "On the console machine (address `192.168.50.20` in the lab), make a token, then "
+            "create `docker/.env` with your editor (for example `nano docker/.env`):\n\n"
+            "```bash\npython3 -c \"import secrets; print(secrets.token_urlsafe(32))\"\n```\n\n"
+            "```text\n"
+            "MAXGUARD_LAN_ADDRESS=192.168.50.20\n"
+            "MAXGUARD_INGEST_TOKEN=<paste the token here>\n"
+            "```\n\n"
+            "Make it readable only by you and start MaxGuard with both files:\n\n"
+            "```bash\n"
+            "chmod 600 docker/.env\n"
+            "docker compose -f docker/compose.yaml -f docker/compose.lan.yaml up -d\n"
+            "```\n\n"
+            "Docker Compose reads `docker/.env` by itself because it sits next to the first "
+            "Compose file.",
+            "Then, on the sensor, put the console's ingest address and the same token in "
+            "`/data/shipper.toml` (never in the repository) and make it readable only by root:"
+            "\n\n"
+            "```toml\n"
+            "console_url = \"http://192.168.50.20:8001\"   # the console's LAN address, port 8001\n"
+            "token = \"<MAXGUARD_INGEST_TOKEN from docker/.env on the console>\"\n"
+            "sensor_id = \"sensor-01\"\n"
+            "```\n\n"
+            "```bash\nsudo chmod 600 /data/shipper.toml\n```",
+            "Try the whole path on the Pi with 1-minute folders first. The test traffic must "
+            "cross switch port 1, the only port the sensor watches (`docs/HARDWARE.md` section "
+            "1): run the lab service (`docker run -d --rm --name lab-service -p 23:23 -p 8080:8080 "
+            "lab-server`) on a machine plugged into a LAN port of the router, and connect to it "
+            "from a device on the mesh Wi-Fi. Stop it afterwards (`docker stop lab-service`): it "
+            "is insecure on purpose.\n\n@@RUN lab@@",
+            "Then start it for real (15-minute folders), run the sensor on the lab for one day, "
+            "and check that alerts appear on the console within about 20 minutes of the "
+            "traffic: `docker compose -f docker/sensor-compose.yaml up -d`.",
             pr_step("feat: live sensor with rotation and shipping (JAK-07)", "flau0306"),
         ],
-        "files": [], "commands": [
-            {"id": "tests", "env": "none",
+        "files": ["maxguard/zeek/scripts/live/rotate.zeek",
+                  "maxguard/suricata/maxguard-suricata-live.yaml", "docker/sensor-compose.yaml",
+                  "maxguard/adapters/live.py", ("maxguard/pipeline.py", "snip:pipeline_v3.py"),
+                  "maxguard/sensor/__init__.py", "maxguard/sensor/shipper.py",
+                  "tests/unit/test_live_adapter.py", "tests/unit/test_shipper.py",
+                  "docker/compose.lan.yaml"],
+        "commands": [
+            {"id": "compose", "show": ("docker compose -f docker/sensor-compose.yaml config --quiet "
+                                       "&& echo \"compose file OK\"")},
+            {"id": "tests",
              "show": "pytest tests/unit/test_live_adapter.py tests/unit/test_shipper.py -q"},
+            {"id": "lan", "expect_code": 1, "show": (
+                "MAXGUARD_LAN_ADDRESS=192.168.50.20 MAXGUARD_INGEST_TOKEN=example-token-of-32-characters-or-more \\\n"
+                "  docker compose -f docker/compose.yaml -f docker/compose.lan.yaml config "
+                "--format json | python3 -c \"import json, sys; "
+                "s = json.load(sys.stdin)['services']['maxguard-ingest']; "
+                "print(s['command'][1], s['ports'][0]['host_ip'], s['ports'][0]['published'])\"\n"
+                "docker compose -f docker/compose.yaml -f docker/compose.lan.yaml config --quiet"),
+             "note": ("The first command shows the ingest app published only on the LAN "
+                      "address, port 8001. The second fails on purpose (exit code 1): without "
+                      "the two settings, Compose refuses to start the ingest container.")},
+            {"id": "lab", "env": "none", "show": '# On the sensor: 1-minute folders for this test only\nexport MAXGUARD_INTERVAL_MINUTES=1\ndocker compose -f docker/sensor-compose.yaml up -d\n# use the lab service\'s HTTP (port 8080) and Telnet from a lab machine, wait 4 minutes\nls /data/zeek\nls -A /data/zeek/2026-10-06-2103\ndocker compose -f docker/sensor-compose.yaml ps --format \'{{.Service}} {{.State}}\'\ndocker compose -f docker/sensor-compose.yaml logs --no-log-prefix shipper\n# On the console:\ncurl -s http://127.0.0.1:8000/api/alerts | python3 -c "import json, sys; [print(a[\'rule_id\'], a[\'severity\'], a[\'count\']) for a in json.load(sys.stdin)]"\ncurl -s \'http://127.0.0.1:8000/api/events?limit=1\' | python3 -c "import json, sys; e = json.load(sys.stdin)[0]; print(e[\'sensor_id\'], e[\'source\'], e[\'log\'])"\n# Back on the sensor: stop the test\ndocker compose -f docker/sensor-compose.yaml down && unset MAXGUARD_INTERVAL_MINUTES', "output": '2026-10-06-2102\n2026-10-06-2103\n2026-10-06-2104\n2026-10-06-2105\n.shipped\ncapture_loss.log\nconn.log\neve.json\nfiles.log\nhttp.log\nknown_hosts.log\nknown_services.log\nmaxguard_cleartext.log\nsoftware.log\nshipper running\nsuricata running\nzeek running\n2026-10-06 21:02:35,859 INFO shipping complete 1-minute folders from /data/zeek\n2026-10-06 21:05:36,159 INFO 2026-10-06-2102: shipped (5066 bytes, HTTP 200)\n2026-10-06 21:06:36,274 INFO 2026-10-06-2103: shipped (2612 bytes, HTTP 200)\n2026-10-06 21:07:36,351 INFO 2026-10-06-2104: shipped (2218 bytes, HTTP 200)\ncleartext.telnet high 5\ncleartext.http_alt medium 6\nlab-sensor-01 zeek conn.log',
+             "note": 'Not run on a Raspberry Pi: verify on hardware. This output is from planning, where Zeek and Suricata listened inside a lab-server container\'s network namespace instead of on `eth0` (a two-line Compose override), the console ran on the same machine, and `shipper.toml` named `sensor_id = "lab-sensor-01"`. The first Telnet session was at 21:03:09 and its alert reached the console at 21:06:36: the 21:03 folder is complete at 21:06:00 (end of the interval plus two minutes), and the shipper checks once a minute. With 15-minute folders, expect up to about 18 minutes plus the analysis time. Your folder names are your own times.'},
         ],
         "test": (
             "Both test files pass on your laptop. On the lab, `ls /data/zeek` shows a new folder "
-            "every 15 minutes, `docker compose -f docker/sensor-compose.yaml ps` shows both "
+            "every 15 minutes, `docker compose -f docker/sensor-compose.yaml ps` shows all three "
             "containers running after a reboot, and the console's alert queue shows the lab "
-            "phone's traffic. The capture port still has no IP address (`ip -br addr show eth0`)."
+            "phone's traffic with the sensor's `sensor_id`. The capture port still has no IP "
+            "address (`ip -br addr show eth0`)."
         ),
         "why": (
             "Shipping completed folders instead of streaming keeps the design simple: the console "
@@ -420,7 +520,8 @@ TASKS = [
             "Build the device table for the hand-made DNS and DHCP fixture:\n\n@@RUN try@@",
             pr_step("feat: device attribution from DHCP and DNS logs (JAK-08)", "flau0306"),
         ],
-        "files": ["maxguard/sensor/__init__.py", "maxguard/sensor/attribution.py",
+        "files": [("maxguard/sensor/__init__.py", "snip:sensor_init_v1.py"),
+                  "maxguard/sensor/attribution.py",
                   "tests/unit/test_attribution.py"],
         "commands": [
             {"id": "tests", "show": "pytest tests/unit/test_attribution.py -q"},

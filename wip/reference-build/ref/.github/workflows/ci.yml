@@ -54,6 +54,8 @@ jobs:
         run: |
           docker run --rm --network none maxguard:ci zeek --version
           docker run --rm --network none maxguard:ci suricata -V
+          # MaxGuard needs JA4 (docs/ARCHITECTURE.md section 16): fail if this build lacks it.
+          docker run --rm --network none maxguard:ci sh -c 'suricata --build-info | grep -w HAVE_JA4'
           docker run --rm --network none maxguard:ci maxguard --help
 
       # pytest is already inside the image, so the tests run with no network at all.

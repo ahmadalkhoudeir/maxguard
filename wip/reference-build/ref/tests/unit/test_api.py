@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from maxguard.api import app as api_app
 from maxguard.api.app import (
     create_app,
+    create_ingest_app,
     display_name,
     notify_change,
     optional_module,
@@ -260,6 +261,28 @@ def test_short_ingest_token_is_refused_at_start(monkeypatch, data_dir):
         create_app(data_dir, explain=False)
 
 
+def test_the_ingest_app_serves_only_ingest(monkeypatch, data_dir):
+    # The port published on the LAN (docker/compose.lan.yaml): nothing to read there.
+    monkeypatch.setenv("MAXGUARD_INGEST_TOKEN", TOKEN)
+    lan = TestClient(create_ingest_app(data_dir, explain=False))
+    for path in ("/api/alerts", "/api/events", "/api/audit", "/", "/docs", "/openapi.json"):
+        assert lan.get(path).status_code == 404, path
+    assert list(lan.app.openapi()["paths"]) == ["/api/ingest"]  # its only route
+
+    sent = lan.post("/api/ingest", files={"file": ("2026-10-06-1400.tar.gz", zipped_fixture())},
+                    data={"sensor_id": "lab-sensor"},
+                    headers={"Authorization": f"Bearer {TOKEN}"})
+    assert sent.status_code == 200
+    # The dashboard's app reads the same data folder.
+    console = TestClient(create_app(data_dir, explain=False))
+    assert [a["rule_id"] for a in console.get("/api/alerts").json()] == ["cleartext.telnet"]
+
+
+def test_the_ingest_app_needs_a_token(data_dir):
+    with pytest.raises(ValueError, match="MAXGUARD_INGEST_TOKEN"):
+        create_ingest_app(data_dir, explain=False)
+
+
 # ---------- cross-site requests ----------
 
 def test_another_website_cannot_upload(client):
@@ -274,6 +297,40 @@ def test_another_website_cannot_upload(client):
     assert sandboxed.status_code == 403
     same_site = upload(client, data, headers={"Origin": "http://testserver"})
     assert same_site.status_code == 200
+
+
+# ---------- DNS rebinding: only this machine's names ----------
+
+def test_a_request_for_an_unknown_host_name_is_refused(data_dir):
+    # What a DNS-rebinding page sends: its own name, now pointing at 127.0.0.1.
+    client = TestClient(create_app(data_dir, explain=False),
+                        base_url="http://rebind.example:8000")
+    response = client.get("/api/alerts")
+    assert response.status_code == 400
+    assert response.text == "Invalid host header"
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1:8000", "localhost:8000", "[::1]:8000", "localhost"])
+def test_this_machine_is_allowed_by_default(data_dir, monkeypatch, host):
+    monkeypatch.delenv("MAXGUARD_ALLOWED_HOSTS")
+    client = TestClient(create_app(data_dir, explain=False), base_url=f"http://{host}")
+    assert client.get("/api/alerts").status_code == 200
+
+
+def test_the_consoles_lan_address_can_be_added(data_dir, monkeypatch):
+    monkeypatch.setenv("MAXGUARD_ALLOWED_HOSTS", "localhost, 192.168.50.20")
+    app = create_app(data_dir, explain=False)
+    assert TestClient(app, base_url="http://192.168.50.20:8000").get(
+        "/api/alerts").status_code == 200
+    assert TestClient(app, base_url="http://192.168.50.21:8000").get(
+        "/api/alerts").status_code == 400
+
+
+@pytest.mark.parametrize("value", ["http://192.168.50.20", "192.168.50.20:8000", "*", " , "])
+def test_a_wrong_allowed_hosts_setting_stops_the_app(data_dir, monkeypatch, value):
+    monkeypatch.setenv("MAXGUARD_ALLOWED_HOSTS", value)
+    with pytest.raises(ValueError, match="MAXGUARD_ALLOWED_HOSTS"):
+        create_app(data_dir, explain=False)
 
 
 # ---------- live updates ----------

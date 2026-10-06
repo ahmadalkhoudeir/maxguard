@@ -1,0 +1,2 @@
+shellcheck: no findings
+refused: 100.64.0.1 is not a lab address (allowed: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 and the documentation ranges 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24; IPv4 numbers only)

@@ -1,0 +1,8 @@
+syntax check: ok
+drop rules in input after loading twice: 2
+		elements = { 203.0.113.7 }
+-A INPUT -m conntrack --ctorigsrc 203.0.113.7 -m comment --comment maxguard -j DROP
+-A FORWARD -m conntrack --ctorigdst 203.0.113.7 -m comment --comment maxguard -j DROP
+-A FORWARD -m conntrack --ctorigsrc 203.0.113.7 -m comment --comment maxguard -j DROP
+-A OUTPUT -m conntrack --ctorigdst 203.0.113.7 -m comment --comment maxguard -j DROP
+rules left: 0

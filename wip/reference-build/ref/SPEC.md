@@ -239,7 +239,7 @@ class EventStore:            # maxguard/storage/events.py, hourly Parquet under 
   (static, human-written, not AI).
 
 ## Shared fixtures (already generated, do not regenerate unless needed)
-- tests/pcaps/<capture>.pcap — 13 synthetic lab captures (telnet, ftp, plain_http, plain_http_alt,
+- tests/pcaps/<capture>.pcap — 14 synthetic lab captures (telnet, ftp, plain_http, plain_http_alt,
   pop3, imap, tls_weak_version, tls_weak_cipher, cert_expired, cert_weak_key, cert_sha1,
   cert_self_signed, clean_tls13). Each triggers exactly one rule (clean_tls13: none).
   Verified: Zeek 9.0.0 + rules give the same findings, finding_ids and record_ids on two runs.
@@ -270,7 +270,7 @@ baseline.new_service (Fiona).
   fixtures produced with the jasonish/suricata:7.0.10 container).
 - Containers have NO internet. Do not try apt-get. Docker builds that need pip must
   use ../ccr-build.sh <context> <tag> [Dockerfile] (sandbox-only helper; never document it).
-- Lab captures: lab/captures/*.pcap (13 synthetic captures). Regenerate one with:
+- Lab captures: lab/captures/*.pcap (14 synthetic captures). Regenerate one with:
   `cd lab && CAPTURE=x SCENARIO=x docker compose up --no-build --abort-on-container-exit --exit-code-from client; docker compose down`
 - Never write outside this ref/ folder except your own temp dirs. Never touch
   /home/user/maxguard (the real repo).
@@ -341,3 +341,18 @@ MaxGuard therefore loads `maxguard/zeek/site.zeek` (a copy of local.zeek without
 it used `local`: `maxguard/zeek/runner.py`, `scripts/make_fixtures.sh`, the sensor compose file, and every
 documented command. The fixtures did not change (checked). `tests/unit/test_zeek_site.py` fails if any
 MaxGuard `.zeek` file loads `local` or one of the three scripts. Do not load `local` anywhere.
+
+## API update (October 6, 2026, evening): Host allow-list and the ingest-only app
+
+- The API answers only requests whose Host header is in MAXGUARD_ALLOWED_HOSTS
+  (default "localhost,127.0.0.1,[::1]"); anything else gets 400 "Invalid host
+  header" (Starlette TrustedHostMiddleware, against DNS rebinding).
+  tests/conftest.py has an autouse fixture that adds "testserver", so
+  TestClient(create_app(...)) works in every test. uvicorn on 127.0.0.1 works.
+- create_ingest_app(data_dir=None, *, explain=True) serves only POST /api/ingest
+  (no /docs), for the LAN port (docker/compose.lan.yaml, port 8001). The full
+  app, create_app(), stays on 127.0.0.1 and still includes /api/ingest.
+  The dashboard and the response module are never reachable from the LAN.
+- The dashboard learns about data ingested by the other process at its next
+  refresh (the 30 s fallback), because GET /api/stream counts changes per process.
+- The live sensor (JAK-07) is built: maxguard/adapters/live.py is in ADAPTERS.

@@ -1,0 +1,109 @@
+{
+ "owner": "ahmad-response (Ahmad, AHM-07 + AHM-08)",
+ "files": [
+  "maxguard/response/__init__.py",
+  "maxguard/response/generate.py",
+  "maxguard/response/preview.py",
+  "maxguard/response/approvals.py",
+  "maxguard/response/routes.py",
+  "maxguard/response/enforcers/__init__.py",
+  "maxguard/response/enforcers/base.py",
+  "maxguard/response/enforcers/opnsense.py",
+  "tests/unit/test_response_generate.py",
+  "tests/unit/test_response_preview.py",
+  "tests/unit/test_response_approvals.py",
+  "tests/unit/test_response_routes.py",
+  "tests/unit/test_opnsense.py",
+  "docs-draft/response-notes.md"
+ ],
+ "commands": [
+  {
+   "command": "./.venv/bin/pytest tests/unit/test_response_generate.py tests/unit/test_response_preview.py tests/unit/test_response_approvals.py tests/unit/test_response_routes.py tests/unit/test_opnsense.py -q -p no:cacheprovider",
+   "output": "........................................................................ [ 80%]\n..................                                                       [100%]\n90 passed in 4.20s"
+  },
+  {
+   "command": "./.venv/bin/pytest tests/unit -q -p no:cacheprovider",
+   "output": "728 passed, 1 skipped in 12.71s"
+  },
+  {
+   "command": "docker run --rm --network none --user $(id -u):$(id -g) -e PYTHONDONTWRITEBYTECODE=1 -e HOME=/tmp -v $PWD:/src:ro -w /src maxguard-sandbox:test /opt/venv/bin/python -m pytest <the 5 response test files> -q -p no:cacheprovider",
+   "output": "90 passed in 3.65s (Python 3.13.5)"
+  },
+  {
+   "command": "./.venv/bin/ruff check maxguard/response tests/unit/test_response_*.py tests/unit/test_opnsense.py",
+   "output": "All checks passed!"
+  },
+  {
+   "command": "docker run --rm --network none --cap-add NET_ADMIN --cap-add NET_RAW -v <dir>:/w:ro nicolaka/netshoot:v0.15 sh -c 'nft -c -f /w/maxguard-setup.nft; echo \"check exit=$?\"; nft -f /w/maxguard-setup.nft && nft -f /w/maxguard-setup.nft; echo \"rules in input after loading twice: $(nft list chain inet maxguard input | grep -c drop)\"; bash -e /w/run.sh'   (setup file + commands written by rules_for('203.0.113.7','both'), sudo stripped)",
+   "output": "check exit=0\nrules in input after loading twice: 2\n-A INPUT -m conntrack --ctorigsrc 203.0.113.7 -m comment --comment maxguard -j DROP\n-A FORWARD -m conntrack --ctorigdst 203.0.113.7 -m comment --comment maxguard -j DROP\n-A FORWARD -m conntrack --ctorigsrc 203.0.113.7 -m comment --comment maxguard -j DROP\n-A OUTPUT -m conntrack --ctorigdst 203.0.113.7 -m comment --comment maxguard -j DROP\nrules left: 0"
+  },
+  {
+   "command": "same container, IPv6 2001:db8::7 nft add/list/delete element + ip6tables -I/-S/-D",
+   "output": "elements = { 2001:db8::7 }\n-A INPUT -m conntrack --ctorigsrc 2001:db8::7 -m comment --comment maxguard -j DROP\n... (4 rules)\nrules left: 0"
+  },
+  {
+   "command": "same container, loopback direction demo (nft add element maxguard_block_in_v4/out_v4 { 127.0.0.2 }, ping -I 127.0.0.2 127.0.0.1 / ping 127.0.0.2)",
+   "output": "== inbound block of 127.0.0.2 (connections 127.0.0.2 starts)\n127.0.0.2 starts -> 127.0.0.1: BLOCKED\n127.0.0.1 starts -> 127.0.0.2: ok\n== outbound block of 127.0.0.2 (connections we start toward it)\n127.0.0.2 starts -> 127.0.0.1: ok\n127.0.0.1 starts -> 127.0.0.2: BLOCKED\n== after undo\n127.0.0.2 starts -> 127.0.0.1: ok\n127.0.0.1 starts -> 127.0.0.2: ok"
+  },
+  {
+   "command": "nft --version; iptables --version (in nicolaka/netshoot:v0.15)",
+   "output": "nftables v1.1.6 (Commodore Bullmoose #7)\niptables v1.8.11 (nf_tables)"
+  },
+  {
+   "command": "uvicorn on 127.0.0.1:8765 + curl session: upload telnet fixture logs zip, hostile propose, loopback propose, propose 172.18.0.3 both, preview, approve without confirm_ip, approve, apply, revert, GET /api/audit",
+   "output": "{\"analysis_id\":\"1c17da4707ad3bba\",\"findings\":1}\n{\"detail\":\"'1.2.3.4; rm -rf /' does not appear to be an IPv4 or IPv6 address\"} HTTP 400\n{\"detail\":\"127.0.0.1 is a loopback address (this machine)\"} HTTP 400\nproposal 1 state proposed; sudo nft 'add element inet maxguard maxguard_block_in_v4 { 172.18.0.3 }' ...\npreviewed {'connections': 1, 'devices': ['172.18.0.2'], 'events': 1, 'services': [{'events': 1, 'port': 23, 'proto': 'tcp', 'service': ''}], ...}\n{\"detail\":\"the IP address you typed does not match the proposal\"} HTTP 400\napproved fiona\napplied manual\nreverted\nahmad response.proposed 1 ...\nahmad response.previewed 1 {\"connections\": 1, \"devices\": 1, ...}\nfiona response.approve_refused 1 {\"reason\": \"typed IP does not match\"}\nfiona response.approved 1 {\"ip\": \"172.18.0.3\"}\nfiona response.applied 1 {\"ip\": \"172.18.0.3\", \"method\": \"manual\"}\nahmad response.reverted 1 {\"ip\": \"172.18.0.3\", \"method\": \"manual\"}"
+  },
+  {
+   "command": "python3 -I ipcheck.py (ipaddress behaviour, Python 3.11.15) + check of scope ids",
+   "output": "'1.2.3.4; rm -rf /' -> ValueError\n'2001:db8::1%$(id)' -> 2001:db8::1%$(id) scope_id '$(id)'  (ACCEPTED by ipaddress)\n'2001:db8::1%a;b' -> accepted\nip_address(16909060) -> IPv4Address('1.2.3.4')\n'::ffff:127.0.0.1' -> loopback True; '::ffff:203.0.113.7' -> mapped"
+  },
+  {
+   "command": "docker image inspect nicolaka/netshoot:v0.15 --format '{{index .RepoDigests 0}} {{.Architecture}}'",
+   "output": "nicolaka/netshoot@sha256:47b907d662d139d1e2f22bfe14f4efca1e3f1feed283572f47c970c780c03b61 amd64"
+  },
+  {
+   "command": "git -C ../opnsense-core/core log -1 --format=%H",
+   "output": "1177021c22d6dedb63ff9bffd6300e789a8822e2 (Tue Oct 6 15:29:45 2026 +0200)"
+  }
+ ],
+ "tests_passed": true,
+ "verified_facts": [
+  "nftables syntax of NFT_SETUP verified with `nft -c -f` (exit 0) and loaded for real twice in nicolaka/netshoot:v0.15 (sha256:47b907d6..., nftables 1.1.6, iptables 1.8.11 nf_tables), --network none, caps NET_ADMIN+NET_RAW; loading twice keeps set elements and does not duplicate rules (2 drop rules in input).",
+  "All generated nft add/delete element commands and iptables/ip6tables -I/-D commands ran for real for 203.0.113.7 and 2001:db8::7; undo leaves 0 maxguard rules.",
+  "Direction semantics verified with a loopback ping demo: `ct original ip saddr @set` blocks only connections the address starts; `ct original ip daddr @set` blocks only connections we start toward it; undo restores both.",
+  "nicolaka/netshoot is Apache-2.0: https://raw.githubusercontent.com/nicolaka/netshoot/master/LICENSE",
+  "Python ipaddress accepts IPv6 scope ids containing shell syntax ('2001:db8::1%$(id)' parses, scope_id '$(id)') and accepts ints (16909060 -> 1.2.3.4): parse_ip refuses both (run with Python 3.11.15).",
+  "OPNsense alias_util add/delete: POST with 'address', return {'status':'done'}; add refuses chars outside [0-9a-f:./_] with 'not_an_address' and returns 'failed' for an unknown alias: opnsense/core 1177021c22d6dedb63ff9bffd6300e789a8822e2 src/opnsense/mvc/app/controllers/OPNsense/Firewall/Api/AliasUtilController.php (addAction ~L166, deleteAction ~L119).",
+  "OPNsense alias reconfigure: POST -> {'status':'ok'}: .../Firewall/Api/AliasController.php reconfigureAction (~L328).",
+  "add table action runs `/sbin/pfctl -t %s -T add %s`: src/opnsense/service/conf/actions.d/actions_filter.conf [add.table].",
+  "JSON request bodies are parsed into POST data (application/json): ApiControllerBase.php parseJsonBodyData; an empty JSON body is 'Invalid JSON syntax', so reconfigure is sent with body {}.",
+  "ACL names: 'Diagnostics: PF Table IP addresses' = api/firewall/alias_util/*, 'Firewall: Alias: Edit' = api/firewall/alias/*: src/opnsense/mvc/app/models/OPNsense/Core/ACL/ACL.xml (same commit).",
+  "API key file has key=/secret= lines, used with requests basic auth: https://raw.githubusercontent.com/opnsense/docs/master/source/development/how-tos/api.rst (byte-identical to the saved api.rst).",
+  "Alias UI: Firewall > Aliases, type 'Hosts': opnsense/docs aliases.rst (saved copy).",
+  "The OPNsense enforcer works with the offline guard on when the firewall host is in extra_allowed (= MAXGUARD_OFFLINE_ALLOW); without it the lookup is blocked and nothing reaches the fake firewall (tests/unit/test_opnsense.py).",
+  "TLS verification: a fake firewall whose cert is from an untrusted test CA is refused (CERTIFICATE_VERIFY_FAILED); with ca_file it works.",
+  "All 90 response tests pass on Python 3.11 (.venv) and Python 3.13.5 (maxguard-sandbox:test); full unit suite 728 passed, 1 skipped.",
+  "End-to-end via uvicorn + curl: create_app() includes maxguard.response.routes.router; flow propose/preview/approve/apply/revert works and is audited (output in commands)."
+ ],
+ "not_run": [
+  "OPNsense: no OPNsense VM was available here, so the enforcer never ran against a real OPNsense API. Only the fake HTTPS server from the source code was used. Verify on an OPNsense test VM: the alias setup, the API user with the two ACL privileges, the key download, add/delete/reconfigure, and that pf really blocks. Mark it 'not run - verify on hardware'.",
+  "The menu steps on the OPNsense web pages (Firewall > Aliases / Rules, System > Access > Users, the API key '+' button) come from the docs and were not clicked in a real web page.",
+  "Generated rules on a real Linux router that forwards traffic: the forward chain was loaded, but no routed packets went through it. Only the iptables-nft backend was run; iptables-legacy was not.",
+  "Home-router steps are generic text; no consumer router was used.",
+  "Dashboard UI for proposals: it is not part of these tasks and was not built (see issues_for_lead)."
+ ],
+ "issues_for_lead": [
+  "Spec deviation: the spec says 'a named set maxguard_block'. One nftables set can hold only one address family, and the block has a direction, so there are 4 sets: maxguard_block_in_v4, maxguard_block_in_v6, maxguard_block_out_v4, maxguard_block_out_v6. They live in table inet maxguard and are created once by generate.NFT_SETUP (safe to run again). Block and undo are still one command per set. OPNsense uses 2 aliases: maxguard_block_in and maxguard_block_out (an alias holds both IPv4 and IPv6). Please update AHM-07 step 2 and ARCHITECTURE section 13.",
+  "Direction is defined by who starts the connection (conntrack original direction). inbound = the address starts the connection (src_ip). outbound = our devices start it toward the address (dst_ip). The preview uses the same definition, so its numbers match what the rule stops. Please add this to ARCHITECTURE section 13.",
+  "Routes added beyond AHM-08 step 3: GET /proposals/{id}, POST /proposals/{id}/apply and POST /proposals/{id}/reject. The step-3 list has no way to reach 'applied' (approved -> applied in the diagram) or 'rejected' (in the diagram). Approve is the human decision. Apply then calls OPNsense when MAXGUARD_OPNSENSE_URL is set; otherwise it records that the person ran the commands by hand. Please add both routes to the docs.",
+  "I followed the state machine in ARCHITECTURE section 13, not the shorter list in the task text. Approve is only allowed from 'previewed' (preview before you block). 'rejected' exists. Refused approvals (missing or wrong typed IP) are also audited, as response.approve_refused. Enforcer failures are audited as response.apply_failed / response.revert_failed, the state stays the same, and the API answers 502. Errors: 400 bad input, 404 unknown proposal, 409 wrong state.",
+  "Address checks go beyond the spec. Python's ipaddress.ip_address accepts IPv6 scope ids with shell syntax ('2001:db8::1%$(id)') and accepts ints, so parse_ip also refuses any %scope, non-str input, IPv4-mapped IPv6 and 255.255.255.255. The AHM-07 text 'anything else raises ValueError, so nothing else can reach a command' is only true with these extra checks. The guide should say so.",
+  "Audit atomicity: as the spec asks, each step calls StateStore.add_audit after its UPDATE. These are 2 transactions, so a crash between them could lose one audit row. storage/state.py has insert_audit(conn, ...), which would allow the state change and the audit row in 1 transaction. That needs Jaiden to make it an official interface. Raise it with him if you want it.",
+  "Partial apply with direction 'both' and OPNsense: if the 'in' alias succeeds and the 'out' alias fails, the state stays 'approved' and the address stays in the 'in' alias until apply is retried (alias add is idempotent). This is documented in the code but not in the docs.",
+  "Enforcer config is new: env MAXGUARD_OPNSENSE_URL (https only), optional MAXGUARD_OPNSENSE_CA, key file <data_dir>/opnsense/apikey.txt. The docker compose / Dockerfile docs (Jaiden) need these variables and must add the firewall host to MAXGUARD_OFFLINE_ALLOW. The enforcer sets requests trust_env=False, so HTTPS_PROXY, REQUESTS_CA_BUNDLE and ~/.netrc are ignored on purpose.",
+  "tests/unit/test_response_routes.py imports FakeOPNsense from test_opnsense, which works because tests/unit is on sys.path (pytest's default prepend import mode, no __init__.py). If the team later sets --import-mode=importlib, move FakeOPNsense to a shared helper such as tests/unit/conftest.py, which I do not own.",
+  "No dashboard page for proposals exists. maxguard/web/routes.py (AHM-06/web) would need a 'Propose block' button on the alert/IP pages and a page that shows the commands, the preview, and an approve form with the IP typed again. That is not in AHM-07/08 as written. Decide which task gets it.",
+  "ARCHITECTURE section 13 'Design (not yet built)' can now describe the built module. docs-draft/response-notes.md has the real outputs to paste into the guide."
+ ],
+ "doc_notes": "Why each choice was made (for the guide):\n- generate.py only writes text. It never runs a command and never sends anything toward the address. parse_ip() is the single way an address gets in. ipaddress.ip_address alone is NOT enough: it accepts '2001:db8::1%$(id)' (an IPv6 scope id can hold shell syntax) and integers. That is why parse_ip also refuses scope ids, non-text, IPv4-mapped IPv6, loopback, multicast, unspecified, link-local and 255.255.255.255. Private addresses are allowed, because blocking a compromised device on your own network is legitimate.\n- nft commands are written as ONE quoted argument (sudo nft 'add element inet maxguard maxguard_block_in_v4 { 203.0.113.7 }'), so the shell never reads the braces.\n- NFT_SETUP uses 'add' (does nothing if the object exists) and then 'flush chain' before 'add rule', so it can be run again without doubling rules or losing blocked addresses.\n- The rules use conntrack 'ct original' (iptables: -m conntrack --ctorigsrc/--ctorigdst). An inbound-only block stops connections the address starts, and our own connections to it still work. The preview counts with the same definition.\n- preview() takes window_end from the caller, never from the clock, so tests and repeated previews give the same answer. It counts connections by community_id (else uid, else event_id), so one connection seen in conn.log + ssl.log + eve.json counts once. Every list is sorted. MAX_EVENTS=100000, with a 'truncated' flag.\n- approvals.py keeps its own table (CREATE TABLE IF NOT EXISTS response_proposals in state.db) so storage/state.py does not change. State changes are one UPDATE ... WHERE state IN (...), so two people clicking approve at once cannot both win. confirm_ip is compared as a parsed address, so '2001:DB8::7' matches '2001:db8::7', but '', None, a different IP or hostile text never match.\n- Revert uses the same method as apply. A manual block is undone by hand (the undo commands are always in proposal['rules']). An enforcer block is removed from the firewall, and the revert is refused if the connector is no longer configured.\n- OPNsense client: https only, verify = CA file or system CAs (never False), timeouts (5 s, 20 s), no redirects, trust_env=False (no proxy, no netrc), the address is parsed again before sending, and the alias name must match [A-Za-z0-9_]{1,32}. An OfflineViolation becomes EnforcerError with the hint 'add the firewall to MAXGUARD_OFFLINE_ALLOW', so the API answers 502, not 500.\n- Gotcha for tests: http.server's serve_forever polls every 0.5 s by default, so shutdown took 0.5 s per test. The fake server uses poll_interval 0.05. The fake firewall uses real TLS with a test CA made with cryptography (EC P-256, CA + leaf with SAN DNS:fw.home.arpa and IP:127.0.0.1), so the tests show that verification is on.\n- Gotcha for the offline-guard test: make fw.home.arpa resolve to 127.0.0.1 by monkeypatching socket.getaddrinfo BEFORE offline.enable(), and call offline.disable() before monkeypatch restores it. Loopback is always allowed by the guard, so testing with 127.0.0.1 alone would prove nothing.\n- Gotcha in curl examples: quote --noproxy '*' (unquoted, the shell expands it to file names).\n- The full guide material (commands + real outputs + the OPNsense setup steps marked not run) is in docs-draft/response-notes.md."
+}

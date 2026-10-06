@@ -57,3 +57,10 @@ def fixture_dir() -> Callable[[str], Path]:
 def pcap_file() -> Callable[[str], Path]:
     """Returns a function: pcap_file("telnet") -> Path to tests/pcaps/telnet.pcap."""
     return find_pcap
+
+
+@pytest.fixture(autouse=True)
+def allow_test_client_host(monkeypatch):
+    """The API answers only host names in MAXGUARD_ALLOWED_HOSTS (JAI-07), and FastAPI's
+    TestClient calls the app "testserver". autouse: every test gets it without asking."""
+    monkeypatch.setenv("MAXGUARD_ALLOWED_HOSTS", "testserver,localhost,127.0.0.1,[::1]")

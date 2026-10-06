@@ -84,6 +84,14 @@ def test_interval_comes_from_the_environment(monkeypatch):
     assert LiveSensorAdapter().interval_minutes == 1
 
 
+def test_a_wrong_interval_setting_does_not_stop_the_pipeline_from_loading(monkeypatch):
+    # pipeline.py builds the adapter when it is imported; the setting is read later.
+    monkeypatch.setenv("MAXGUARD_INTERVAL_MINUTES", "7")
+    adapter = LiveSensorAdapter()
+    with pytest.raises(ValueError, match="interval must be"):
+        _ = adapter.interval_minutes
+
+
 # ---- accepts(): a sensor folder, and nothing ZeekLogAdapter accepts ------------------
 
 def test_accepts_a_sensor_data_folder(tmp_path):

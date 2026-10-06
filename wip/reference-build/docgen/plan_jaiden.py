@@ -55,7 +55,7 @@ TASKS = [
         ],
         "files": [
             ("maxguard/__init__.py", "maxguard/__init__.py"), "cli/__init__.py",
-            "pyproject.toml", "tests/conftest.py", "tests/unit/test_package.py",
+            "pyproject.toml", ("tests/conftest.py", "snip:conftest_v1.py"), "tests/unit/test_package.py",
             (".github/workflows/ci.yml", "snip:ci_w0.yml"), (".gitignore", "snip:gitignore"),
         ],
         "commands": [
@@ -409,13 +409,34 @@ TASKS = [
             "cannot make the console store anything; `hmac.compare_digest` takes the same time "
             "however many characters match. A token shorter than 32 characters stops the app at "
             "start-up.\n"
+            "- `create_ingest_app()` builds a second, tiny app with nothing but "
+            "`POST /api/ingest` (no dashboard, no `/docs` page). JAK-07 publishes it on the "
+            "console's LAN address, port 8001, for sensors and host agents; the full app stays "
+            "on `127.0.0.1`, so nobody on the network can read alerts or approve a block. Both "
+            "apps share the data folder; the dashboard shows ingested data at its next refresh.\n"
             "- Browsers let any website *send* a form to `127.0.0.1`. `refuse_cross_site_changes` "
             "refuses changing requests that a browser marks as coming from another site "
             "(cross-site request forgery). curl, sensors and tests send no `Origin` header and "
             "are not affected.\n"
+            "- A website can also point its own name at `127.0.0.1` after its page has loaded "
+            "(DNS rebinding). The browser then treats the API as part of that website, and the "
+            "cross-site check cannot tell. `TrustedHostMiddleware` (from Starlette, which FastAPI "
+            "is built on) answers `400 Invalid host header` unless the `Host` header names this "
+            "machine or an address in `MAXGUARD_ALLOWED_HOSTS`. When sensors or agents send to "
+            "the console over the LAN, add the console's LAN address there.\n"
             "- `GET /api/stream` sends one `alerts-changed` at once (a dashboard that reconnects "
             "may have missed a change), then one per change, with a `: keep-alive` comment every "
             "15 seconds.",
+            "FastAPI's `TestClient` calls the app `testserver`, a name the host check refuses. "
+            "Add this fixture at the end of `tests/conftest.py` (`autouse=True` gives it to "
+            "every test without asking):\n\n"
+            "```python\n"
+            "@pytest.fixture(autouse=True)\n"
+            "def allow_test_client_host(monkeypatch):\n"
+            "    \"\"\"The API answers only host names in MAXGUARD_ALLOWED_HOSTS (JAI-07), and FastAPI's\n"
+            "    TestClient calls the app \"testserver\". autouse: every test gets it without asking.\"\"\"\n"
+            "    monkeypatch.setenv(\"MAXGUARD_ALLOWED_HOSTS\", \"testserver,localhost,127.0.0.1,[::1]\")\n"
+            "```",
             "Create the unit tests `tests/unit/test_api.py`:\n\n@@FILE tests/unit/test_api.py@@",
             "Run them:\n\n@@RUN tests@@",
             "Create the integration test `tests/integration/test_api_upload.py`, which uploads a "
@@ -432,7 +453,7 @@ TASKS = [
         ],
         "files": [("maxguard/pipeline.py", "snip:pipeline_v2.py"), "maxguard/api/__init__.py",
                   ("maxguard/api/app.py", "snip:api_app_v1.py"), "tests/unit/test_api.py",
-                  "tests/integration/test_api_upload.py"],
+                  "tests/integration/test_api_upload.py", "tests/conftest.py"],
         "commands": [
             {"id": "tests", "show": "pytest tests/unit/test_api.py -q"},
             {"id": "integration", "env": "zeek",
@@ -510,7 +531,7 @@ TASKS = [
             "`docker/login-action@v4` and `docker/build-push-action@v7` (read with "
             "`git ls-remote --tags https://github.com/<owner>/<action>`); check again and pin "
             "the newest.",
-            "Validate the file with `actionlint` before merging (`pip install actionlint-py` in a "
+            "Validate the file with `actionlint` before merging (`pip install actionlint-py==1.7.12.25` in a "
             "throwaway virtual environment).",
             "After merging: write the release notes in `docs/releases/v2.0-alpha-rc1.md` (what "
             "works, known limits, how to install offline), then:\n\n```bash\ngit checkout main && git pull\n"

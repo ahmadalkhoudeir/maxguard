@@ -1,0 +1,2 @@
+maxguard.api.app:create_ingest_app 192.168.50.20 8001
+error while interpolating services.maxguard-ingest.ports.[]: required variable MAXGUARD_LAN_ADDRESS is missing a value: set MAXGUARD_LAN_ADDRESS in docker/.env

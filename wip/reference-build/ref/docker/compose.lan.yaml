@@ -1,0 +1,37 @@
+# Optional (Jakub, JAK-07): let live sensors and host agents on YOUR network send
+# logs to this console. Without this file nothing on the network can reach MaxGuard.
+#
+# Start:  docker compose -f docker/compose.yaml -f docker/compose.lan.yaml up -d
+#
+# It adds one container, maxguard-ingest: the same image, serving ONLY
+# POST /api/ingest on port 8001 of the console's LAN address. The dashboard and the
+# rest of the API stay on 127.0.0.1:8000, so nobody on the network can read alerts
+# or approve a block. Both containers share the maxguard-data volume.
+#
+# Put these two settings in docker/.env next to this file (never commit that file):
+#   MAXGUARD_LAN_ADDRESS   this console's address on your network, e.g. 192.168.50.20
+#   MAXGUARD_INGEST_TOKEN  at least 32 characters; make one with:
+#                          python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+# Sensors then use console_url = "http://<MAXGUARD_LAN_ADDRESS>:8001" in /data/shipper.toml.
+services:
+  maxguard-ingest:
+    image: maxguard:2.0.0a0
+    command: ["uvicorn", "maxguard.api.app:create_ingest_app", "--factory",
+              "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      # Only on the LAN address you name, never on every interface.
+      - "${MAXGUARD_LAN_ADDRESS:?set MAXGUARD_LAN_ADDRESS in docker/.env}:8001:8001"
+    volumes:
+      - maxguard-data:/data
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      MAXGUARD_OFFLINE: "1"
+      MAXGUARD_INGEST_TOKEN: "${MAXGUARD_INGEST_TOKEN:?set MAXGUARD_INGEST_TOKEN in docker/.env}"
+      # The Host header sensors send: the LAN address (DNS rebinding check, section 10).
+      MAXGUARD_ALLOWED_HOSTS: "${MAXGUARD_LAN_ADDRESS}"
+    networks:
+      - ui
+      - ai
+    depends_on:
+      - ollama
+    restart: unless-stopped
