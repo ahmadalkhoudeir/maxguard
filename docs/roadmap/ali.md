@@ -1687,7 +1687,7 @@ Expected output:
 
 ```text
 ................................                                                             [100%]
-32 passed in 0.28s
+32 passed in 0.26s
 ```
 
 **Step 5.** Check the error path without Ollama running (the address points at a closed port):

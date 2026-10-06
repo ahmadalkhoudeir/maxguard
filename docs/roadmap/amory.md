@@ -823,7 +823,7 @@ Expected output:
 
 ```text
 ..............................                                                               [100%]
-30 passed in 0.20s
+30 passed in 0.19s
 ```
 
 **Step 7.** Count the NIST rows per rule:

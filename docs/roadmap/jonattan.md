@@ -498,7 +498,7 @@ Expected output:
 
 ```text
 ........                                                                                     [100%]
-8 passed in 0.03s
+8 passed in 0.02s
 ```
 
 **Step 6.** Try it on an answer with one good and one made-up citation:
@@ -1069,7 +1069,7 @@ Expected output:
 
 ```text
 ..............                                                                               [100%]
-14 passed in 0.33s
+14 passed in 0.31s
 ```
 
 **Step 5.** **On your laptop, with a real model** (not run in planning: the model registry was unreachable). Install Ollama from https://ollama.com/download, then:
@@ -1581,7 +1581,7 @@ Expected output:
 
 ```text
 .............                                                                                [100%]
-13 passed in 0.13s
+13 passed in 0.11s
 ```
 
 **Step 5.** See the guard stop a connection before any DNS query is sent:
@@ -1789,7 +1789,7 @@ Expected output:
 
 ```text
 ...............                                                                              [100%]
-15 passed in 0.07s
+15 passed in 0.05s
 ```
 
 **Step 6.** Read one entry the way the dashboard will:

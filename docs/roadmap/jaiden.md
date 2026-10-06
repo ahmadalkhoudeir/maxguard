@@ -426,7 +426,7 @@ dependencies = [
 dev = [
     "pytest>=9.1",
     "ruff>=0.16",
-    "httpx>=0.28",  # FastAPI's TestClient needs it
+    "httpx2>=2.13",  # FastAPI's TestClient (Starlette 1.7 deprecates plain httpx for it)
 ]
 
 [project.scripts]
@@ -1767,7 +1767,7 @@ Expected output:
 
 ```text
 ................................................                                             [100%]
-48 passed in 0.14s
+48 passed in 0.16s
 ```
 
 **Step 6.** Commit, push, and open the pull request:
@@ -2301,7 +2301,7 @@ Expected output:
 
 ```text
 ......                                                                                       [100%]
-6 passed in 0.16s
+6 passed in 0.17s
 ```
 
 **Step 5.** Try it yourself on a fixture folder (Zeek-log input needs no Zeek):
@@ -2710,6 +2710,10 @@ COLUMNS = {
     "device_mac": "VARCHAR", "summary": "VARCHAR", "ja4": "VARCHAR",
 }
 SECONDS_PER_HOUR = 3600
+# DuckDB downloads and loads extensions on its own when a query needs one (both
+# settings default to true). Parquet and JSON support are built in, so MaxGuard
+# never needs a download: switch it off so nothing can go online (CLAUDE.md rule 1).
+DUCKDB_CONFIG = {"autoinstall_known_extensions": False, "autoload_known_extensions": False}
 
 
 def hour_key(ts: float) -> tuple[str, str]:
@@ -2762,7 +2766,7 @@ class EventStore:
             with staging.open("w", encoding="utf-8") as f:
                 for event in events:
                     f.write(json.dumps({name: event[name] for name in COLUMNS}) + "\n")
-            with duckdb.connect() as con:
+            with duckdb.connect(config=DUCKDB_CONFIG) as con:
                 con.execute(
                     "COPY (SELECT * FROM read_json($src, format = 'newline_delimited', "
                     "columns = $columns)) TO $dst (FORMAT parquet, COMPRESSION zstd)",
@@ -2799,7 +2803,7 @@ class EventStore:
             sql += " WHERE " + " AND ".join(where)
         sql += " ORDER BY ts, event_id LIMIT $limit"
         params["limit"] = limit
-        with duckdb.connect() as con:
+        with duckdb.connect(config=DUCKDB_CONFIG) as con:
             rows = con.execute(sql, params).fetchall()
         return [dict(zip(COLUMNS, row, strict=True)) for row in rows]
 
@@ -3089,10 +3093,11 @@ and `tests/unit/test_event_store.py`:
 
 from pathlib import Path
 
+import duckdb
 import pytest
 
 from maxguard.events.normalize import EVENT_KEYS, normalize
-from maxguard.storage.events import COLUMNS, EventStore, hour_key
+from maxguard.storage.events import COLUMNS, DUCKDB_CONFIG, EventStore, hour_key
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "zeek"
 CAPTURES = sorted(p for p in FIXTURES.iterdir() if p.is_dir() and not p.name.startswith("_"))
@@ -3191,6 +3196,14 @@ def test_prune_deletes_only_hours_that_are_completely_older(store):
     assert store.prune(older_than=HOUR_02 + 3600) == 1
     assert store.query() == []
     assert list(store.root.iterdir()) == []  # the empty date folder is removed too
+
+def test_duckdb_never_downloads_extensions():
+    # CLAUDE.md rule 1: a query that needs an extension must fail, not download it.
+    with duckdb.connect(config=DUCKDB_CONFIG) as con:
+        settings = con.execute(
+            "SELECT current_setting('autoinstall_known_extensions'), "
+            "current_setting('autoload_known_extensions')").fetchone()
+    assert settings == (False, False)
 ```
 
 **Step 6.** Run them:
@@ -3202,8 +3215,8 @@ pytest tests/unit/test_state_store.py tests/unit/test_state_store_recurrence.py 
 Expected output:
 
 ```text
-.............................                                                                [100%]
-29 passed in 1.29s
+..............................                                                               [100%]
+30 passed in 1.15s
 ```
 
 **Step 7.** Look inside the event store with DuckDB's own Python API (handy for debugging):
@@ -3590,7 +3603,7 @@ Expected output:
 
 ```text
 ..............                                                                               [100%]
-14 passed in 0.17s
+14 passed in 0.13s
 ```
 
 **Step 5.** Commit, push, and open the pull request:
