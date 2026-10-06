@@ -1184,6 +1184,9 @@ never mark traffic or AI text as safe HTML; add a test with FastAPI's
 ### Add a firewall connector
 
 Implement the `Enforcer` interface in `maxguard/response/enforcers/` (add and
-remove one address, apply), keep its credentials in the data folder, add its host
-to `MAXGUARD_OFFLINE_ALLOW` in the documentation, and test it against a fake
-server, never a real firewall.
+remove one address, apply; raise `EnforcerError` with a clear message), with a
+`from_env()` like `opnsense.py`'s, and return it from `enforcers_for()` in
+`maxguard/response/routes.py`. Keep its credentials in the data folder, verify
+TLS, add its host to `MAXGUARD_OFFLINE_ALLOW` in the documentation, and test it
+against a fake server (`tests/unit/test_opnsense.py` has one with TLS), never a
+real firewall.
