@@ -142,7 +142,7 @@ built yet.
 | CI | `.github/workflows/ci.yml` | Jaiden (integration job: Karthik) | alpha | written (first run on the first pull request) |
 | Traffic lab and test captures | `lab/`, `tests/pcaps/` | Karthik | alpha | tested |
 | Test fixtures (Zeek and Suricata output) | `tests/fixtures/` | Karthik | alpha | tested |
-| Expected results and integration tests | `tests/expected/`, `tests/integration/` | Karthik | alpha | design |
+| Expected results and integration tests | `tests/expected/`, `tests/integration/` | Karthik | alpha | tested with Zeek 9.0.0 on all 14 captures, plus a determinism test; the check that Suricata ran (JAK-05) runs in the engine image |
 | Model evaluation | `scripts/benchmark_models.py`, `scripts/make_eval_set.py` | Ali | alpha | tested with a fake model; the real runs need the models (ALI-04) |
 | Offline bundle | `scripts/build-offline-bundle.sh`, `scripts/install.sh` | Jonattan | alpha | design |
 | Ed25519 signing | `maxguard/custody/signing.py` | Jaiden | alpha | tested |

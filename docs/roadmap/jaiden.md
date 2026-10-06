@@ -3104,8 +3104,8 @@ from maxguard.storage.events import COLUMNS, DUCKDB_CONFIG, EventStore, hour_key
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "zeek"
 CAPTURES = sorted(p for p in FIXTURES.iterdir() if p.is_dir() and not p.name.startswith("_"))
 
-HOUR_01 = 1791248400.0  # 2026-10-06 01:00:00 UTC: the 13 lab captures are in this hour
-HOUR_02 = 1791252000.0  # 2026-10-06 02:00:00 UTC: the handmade DNS/DHCP capture
+HOUR_01 = 1791248400.0  # 2026-10-06 01:00:00 UTC: 13 of the 14 lab captures are in this hour
+HOUR_02 = 1791252000.0  # 2026-10-06 02:00:00 UTC: dns_lookup and the handmade DNS/DHCP capture
 
 
 def fixture_events() -> list[dict]:

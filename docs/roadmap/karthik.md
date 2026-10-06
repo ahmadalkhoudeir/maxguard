@@ -11,10 +11,10 @@ This is your part of the MaxGuard v2.0 roadmap. Read [the roadmap overview](READ
 | [KAR-00](#week-0--onboarding-due-friday-october-9-2026) | W0 | Week 0 onboarding (Karthik) | — | process |
 | [KAR-01](#kar-01-traffic-lab-and-the-14-test-captures) | W0 | Traffic lab and the 14 test captures | — | code, tested |
 | [KAR-02](#kar-02-test-fixtures-zeek-and-suricata-output-for-every-capture) | W1 | Test fixtures: Zeek and Suricata output for every capture | [KAR-01](#kar-01-traffic-lab-and-the-14-test-captures), [JAK-01](jakub.md#jak-01-maxguards-zeek-scripts-cleartext-sessions-and-asset-tracking), [JAK-02](jakub.md#jak-02-suricata-configuration-community-id-and-ja4), [JAI-01](jaiden.md#jai-01-restructure-the-repository-add-packaging-and-ci) | code, tested |
-| [KAR-03](#kar-03-integration-tests-the-real-pipeline-on-every-capture) | W2 | Integration tests: the real pipeline on every capture | [JAI-05](jaiden.md#jai-05-the-pipeline-one-function-from-input-to-report), [JAI-04](jaiden.md#jai-04-the-engine-image-and-the-compose-files), [KAR-02](#kar-02-test-fixtures-zeek-and-suricata-output-for-every-capture) | design |
+| [KAR-03](#kar-03-integration-tests-the-real-pipeline-on-every-capture) | W2 | Integration tests: the real pipeline on every capture | [JAI-05](jaiden.md#jai-05-the-pipeline-one-function-from-input-to-report), [JAI-04](jaiden.md#jai-04-the-engine-image-and-the-compose-files), [KAR-02](#kar-02-test-fixtures-zeek-and-suricata-output-for-every-capture) | code, tested |
 | [KAR-04](#kar-04-ci-runs-the-integration-tests-plus-a-determinism-test) | W3 | CI runs the integration tests, plus a determinism test | [KAR-03](#kar-03-integration-tests-the-real-pipeline-on-every-capture) | code, written |
 | [KAR-05](#kar-05-release-candidate-test-with-an-outside-tester) | W6 | Release-candidate test with an outside tester | [JAI-09](jaiden.md#jai-09-release-workflow-and-v20-alpha-rc1), [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) | process |
-| [KAR-06](#kar-06-end-to-end-test-of-the-live-sensor-on-the-lab) | S4 | End-to-end test of the live sensor on the lab | [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) | design |
+| [KAR-06](#kar-06-end-to-end-test-of-the-live-sensor-on-the-lab) | S4 | End-to-end test of the live sensor on the lab | [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) | code, tested |
 
 **Kind:** *code, tested* — the complete code below was run with its tests during planning; copy it exactly, then improve it in a later pull request if you like. *code, written* — written in planning, but part of it needs a machine planning did not have. *design* — you write the code from the steps. *process* — no code: setup, review, testing or release work.
 
@@ -1027,8 +1027,8 @@ It prints one line per capture with the files it wrote, for example `telnet: con
 ````markdown
 # Hand-made fixtures
 
-The 13 lab captures have no DNS or DHCP traffic and no Suricata alert, and all
-their logs are JSON. These small fixtures fill those gaps. The folder name
+No lab capture has DHCP traffic or a Suricata alert (only `dns_lookup`, added
+later, has DNS), and all their logs are JSON. These small fixtures fill those gaps. The folder name
 starts with `_` so tests that loop over "one folder per lab capture" skip it.
 
 All data is synthetic: addresses in 192.168.56.0/24, MAC 02:00:00:aa:bb:cc
@@ -1058,7 +1058,7 @@ python $H/make_dns_dhcp_pcap.py $H/dns_dhcp/dns_dhcp.pcap
 
 # Zeek JSON logs (same options as maxguard/zeek/runner.py)
 docker run --rm --network none -v "$PWD":/src -w /src/$H/dns_dhcp zeek/zeek:9.0.0 \
-  zeek -D -C -r dns_dhcp.pcap local LogAscii::use_json=T \
+  zeek -D -C -r dns_dhcp.pcap /src/maxguard/zeek/site.zeek LogAscii::use_json=T \
   policy/protocols/conn/community-id-logging \
   /src/maxguard/zeek/scripts/cleartext.zeek /src/maxguard/zeek/scripts/inventory.zeek
 # keep conn.log, dns.log, dhcp.log; delete the other *.log files
@@ -1080,7 +1080,7 @@ the two capture generators (they write the same bytes on every run) `tests/fixtu
 ```python
 """Build dns_dhcp.pcap: one DNS lookup and one DHCP lease, fully synthetic.
 
-None of the 13 lab captures contains DNS or DHCP, so this script writes the
+No lab capture contains DHCP (only dns_lookup has DNS), so this script writes the
 packets byte by byte (standard library only). Zeek 9.0.0 and Suricata 7.0.10
 then turn the capture into the dns.log, dhcp.log and eve.json fixtures next to
 this file, so the field names are the real ones, not guesses.
@@ -1393,7 +1393,7 @@ python $H/make_rdp_pcap.py $H/rdp.pcap
 
 # same options as maxguard/zeek/runner.py
 docker run --rm --network none -v "$PWD":/src -w /src/$H zeek/zeek:9.0.0 \
-  zeek -D -C -r rdp.pcap local LogAscii::use_json=T \
+  zeek -D -C -r rdp.pcap /src/maxguard/zeek/site.zeek LogAscii::use_json=T \
   policy/protocols/conn/community-id-logging \
   /src/maxguard/zeek/scripts/cleartext.zeek /src/maxguard/zeek/scripts/inventory.zeek
 # keep conn.log and rdp.log; delete the other *.log files
@@ -1483,15 +1483,13 @@ Unit tests that need Docker and a capture are slow, so nobody runs them often. R
 
 ### KAR-03: Integration tests: the real pipeline on every capture
 
-**Due:** Week 2 (due Fri Oct 23) · **Milestone:** `W2 First end-to-end demo` · **Needs first:** [JAI-05](jaiden.md#jai-05-the-pipeline-one-function-from-input-to-report), [JAI-04](jaiden.md#jai-04-the-engine-image-and-the-compose-files), [KAR-02](#kar-02-test-fixtures-zeek-and-suricata-output-for-every-capture) · **Kind:** design
+**Due:** Week 2 (due Fri Oct 23) · **Milestone:** `W2 First end-to-end demo` · **Needs first:** [JAI-05](jaiden.md#jai-05-the-pipeline-one-function-from-input-to-report), [JAI-04](jaiden.md#jai-04-the-engine-image-and-the-compose-files), [KAR-02](#kar-02-test-fixtures-zeek-and-suricata-output-for-every-capture) · **Kind:** code, tested
 
 **Issue labels:** `type:task` `phase:alpha` `owner:karthik` `area:testing` `critical-path`
 
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
-
 #### Goal
 
-Write expected-result files and an integration test that runs the real pipeline (Zeek and Suricata included) on every capture inside the engine image and checks that each capture produces exactly the findings it should, and nothing it should not.
+Write expected-result files and an integration test that runs the real pipeline on every capture inside the engine image and checks that each capture produces exactly the findings it should, and nothing it should not. Add fast unit checks of Suricata's saved output: a Community ID on every record and a JA4 on every TLS client hello.
 
 #### Prerequisites
 
@@ -1510,7 +1508,9 @@ git checkout -b karthik/integration-tests
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** For each capture write `tests/expected/<capture>.json` in the Fall 2026 format:
+**Step 2.** Write one expected-result file per capture in `tests/expected/`, in the Fall 2026 format. `expected` names the rule the capture was recorded to trigger, on its port. `must_not_contain` lists the other rules of the same family: they read the same logs, so they are the likely misfires, and a new rule never forces you to edit every file. The two clean captures say `expect_no_findings` instead.
+
+`tests/expected/telnet.json`:
 
 ```json
 {
@@ -1518,24 +1518,356 @@ If `source .venv/bin/activate` fails, you have not made the virtual environment 
   "expected": [
     {"rule_id": "cleartext.telnet", "dst_port": 23, "min_count": 1}
   ],
-  "must_not_contain": ["cleartext.ftp", "cleartext.http"]
+  "must_not_contain": ["cleartext.ftp", "cleartext.http", "cleartext.http_alt", "cleartext.imap", "cleartext.pop3", "rdp.standard_security"]
 }
 ```
 
-For `clean_tls13` and `dns_lookup` use `"expected": []` and `"expect_no_findings": true`.
+`tests/expected/ftp.json`:
 
-**Step 3.** Write `tests/integration/test_pcaps.py`: mark it `@pytest.mark.integration`, parametrize it over the expected files, run `maxguard.pipeline.analyze(capture, tmp_path, explain=False)`, and check every expected `rule_id` and `dst_port` appears with at least `min_count`, nothing in `must_not_contain` appears, and `expect_no_findings` means zero findings. Also check `report["tools"]` says both Zeek and Suricata ran.
+```json
+{
+  "capture": "ftp.pcap",
+  "expected": [
+    {"rule_id": "cleartext.ftp", "dst_port": 21, "min_count": 1}
+  ],
+  "must_not_contain": ["cleartext.http", "cleartext.http_alt", "cleartext.imap", "cleartext.pop3", "cleartext.telnet", "rdp.standard_security"]
+}
+```
 
-**Step 4.** Build the test image and run the tests in it with networking off:
+`tests/expected/pop3.json`:
+
+```json
+{
+  "capture": "pop3.pcap",
+  "expected": [
+    {"rule_id": "cleartext.pop3", "dst_port": 110, "min_count": 1}
+  ],
+  "must_not_contain": ["cleartext.ftp", "cleartext.http", "cleartext.http_alt", "cleartext.imap", "cleartext.telnet", "rdp.standard_security"]
+}
+```
+
+`tests/expected/imap.json`:
+
+```json
+{
+  "capture": "imap.pcap",
+  "expected": [
+    {"rule_id": "cleartext.imap", "dst_port": 143, "min_count": 1}
+  ],
+  "must_not_contain": ["cleartext.ftp", "cleartext.http", "cleartext.http_alt", "cleartext.pop3", "cleartext.telnet", "rdp.standard_security"]
+}
+```
+
+`tests/expected/plain_http.json`:
+
+```json
+{
+  "capture": "plain_http.pcap",
+  "expected": [
+    {"rule_id": "cleartext.http", "dst_port": 80, "min_count": 1}
+  ],
+  "must_not_contain": ["cleartext.ftp", "cleartext.http_alt", "cleartext.imap", "cleartext.pop3", "cleartext.telnet", "rdp.standard_security"]
+}
+```
+
+`tests/expected/plain_http_alt.json`:
+
+```json
+{
+  "capture": "plain_http_alt.pcap",
+  "expected": [
+    {"rule_id": "cleartext.http_alt", "dst_port": 8080, "min_count": 1}
+  ],
+  "must_not_contain": ["cleartext.ftp", "cleartext.http", "cleartext.imap", "cleartext.pop3", "cleartext.telnet", "rdp.standard_security"]
+}
+```
+
+`tests/expected/tls_weak_version.json`:
+
+```json
+{
+  "capture": "tls_weak_version.pcap",
+  "expected": [
+    {"rule_id": "tls.weak_version", "dst_port": 4431, "min_count": 1}
+  ],
+  "must_not_contain": ["cert.expired", "cert.self_signed", "cert.sha1_signature", "cert.weak_key", "tls.weak_cipher"]
+}
+```
+
+`tests/expected/tls_weak_cipher.json`:
+
+```json
+{
+  "capture": "tls_weak_cipher.pcap",
+  "expected": [
+    {"rule_id": "tls.weak_cipher", "dst_port": 4432, "min_count": 1}
+  ],
+  "must_not_contain": ["cert.expired", "cert.self_signed", "cert.sha1_signature", "cert.weak_key", "tls.weak_version"]
+}
+```
+
+`tests/expected/cert_expired.json`:
+
+```json
+{
+  "capture": "cert_expired.pcap",
+  "expected": [
+    {"rule_id": "cert.expired", "dst_port": 4433, "min_count": 1}
+  ],
+  "must_not_contain": ["cert.self_signed", "cert.sha1_signature", "cert.weak_key", "tls.weak_cipher", "tls.weak_version"]
+}
+```
+
+`tests/expected/cert_self_signed.json`:
+
+```json
+{
+  "capture": "cert_self_signed.pcap",
+  "expected": [
+    {"rule_id": "cert.self_signed", "dst_port": 4437, "min_count": 1}
+  ],
+  "must_not_contain": ["cert.expired", "cert.sha1_signature", "cert.weak_key", "tls.weak_cipher", "tls.weak_version"]
+}
+```
+
+`tests/expected/cert_sha1.json`:
+
+```json
+{
+  "capture": "cert_sha1.pcap",
+  "expected": [
+    {"rule_id": "cert.sha1_signature", "dst_port": 4435, "min_count": 1}
+  ],
+  "must_not_contain": ["cert.expired", "cert.self_signed", "cert.weak_key", "tls.weak_cipher", "tls.weak_version"]
+}
+```
+
+`tests/expected/cert_weak_key.json`:
+
+```json
+{
+  "capture": "cert_weak_key.pcap",
+  "expected": [
+    {"rule_id": "cert.weak_key", "dst_port": 4434, "min_count": 1}
+  ],
+  "must_not_contain": ["cert.expired", "cert.self_signed", "cert.sha1_signature", "tls.weak_cipher", "tls.weak_version"]
+}
+```
+
+`tests/expected/clean_tls13.json`:
+
+```json
+{
+  "capture": "clean_tls13.pcap",
+  "expected": [],
+  "expect_no_findings": true
+}
+```
+
+`tests/expected/dns_lookup.json`:
+
+```json
+{
+  "capture": "dns_lookup.pcap",
+  "expected": [],
+  "expect_no_findings": true
+}
+```
+
+**Step 3.** Create `tests/integration/test_pcaps.py`. Besides one test per expected file, `test_every_capture_has_an_expected_file` fails when someone adds a capture without an answer key, so no capture goes untested:
+
+```python
+"""Integration tests (Karthik, KAR-03): the real pipeline on every lab capture.
+
+Each tests/expected/<capture>.json says which findings its capture must give.
+The test runs maxguard.pipeline.analyze() on the capture with the real tools and
+compares. Unit tests use saved logs, so only these tests notice when the way
+MaxGuard *runs* the tools breaks. (That Suricata runs too is checked by
+tests/integration/test_suricata_pipeline.py, added with JAK-05.)
+
+They need Zeek, so they run inside the engine test image:
+    docker run --rm --network none maxguard:test pytest -m integration -q
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from maxguard.pipeline import analyze
+
+TESTS = Path(__file__).resolve().parents[1]
+PCAPS = TESTS / "pcaps"
+EXPECTED_FILES = sorted((TESTS / "expected").glob("*.json"))
+
+
+def load(expected_file: Path) -> dict:
+    return json.loads(expected_file.read_text())
+
+
+def count_by_rule_and_port(findings: list[dict]) -> dict[tuple[str, int], int]:
+    """(rule_id, dst_port) -> total count. Adds up counts in case several findings
+    (for example from different client addresses) share a rule and a port."""
+    counts: dict[tuple[str, int], int] = {}
+    for finding in findings:
+        key = (finding["rule_id"], finding["dst_port"])
+        counts[key] = counts.get(key, 0) + finding["count"]
+    return counts
+
+
+@pytest.mark.integration
+def test_every_capture_has_an_expected_file():
+    # A capture without an expected file would never be tested.
+    captures = sorted(p.name for p in PCAPS.glob("*.pcap"))
+    assert captures == sorted(load(f)["capture"] for f in EXPECTED_FILES)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("expected_file", EXPECTED_FILES, ids=lambda p: p.stem)
+def test_capture_gives_the_expected_findings(expected_file, tmp_path):
+    spec = load(expected_file)
+    report = analyze(PCAPS / spec["capture"], tmp_path, explain=False)
+
+    assert report["tools"]["zeek"] is True  # a capture always goes through Zeek
+    counts = count_by_rule_and_port(report["findings"])
+    for want in spec["expected"]:
+        got = counts.get((want["rule_id"], want["dst_port"]), 0)
+        assert got >= want["min_count"], f"missing {want}; found {counts}"
+    found_rules = {rule_id for rule_id, _port in counts}
+    for rule_id in spec.get("must_not_contain", []):
+        assert rule_id not in found_rules, f"{rule_id} fired on {spec['capture']}"
+    if spec.get("expect_no_findings", False):
+        assert report["findings"] == []
+```
+
+Whether Suricata ran is checked later, in JAK-05: the pipeline starts running it there.
+
+**Step 4.** Create `tests/unit/test_suricata_eve.py`. It reads the saved `eve.json` fixtures, so it runs with the fast unit tests. A record with a server name (SNI) proves Suricata parsed the client hello, because the name is only sent there, and that is the message JA4 is computed from. Zeek's TLS sessions are a second witness, so the JA4 check cannot pass by checking nothing:
+
+```python
+"""Suricata eve.json checks (Karthik, KAR-03): Community ID and JA4 for every capture.
+
+The eve.json in each tests/fixtures/zeek/<capture>/ folder was written by
+Suricata 7.0.10 with MaxGuard's settings (scripts/make_fixtures.sh). For each one:
+1. every record has a Community ID, the key that links it to Zeek's records;
+2. Zeek's conn.log has the same Community IDs (both tools must use seed 0);
+3. every TLS record whose client hello Suricata saw has a JA4;
+4. maxguard.events.normalize copies that JA4 onto the normalized event.
+
+These read saved files only, so they run with the unit tests. To check fresh
+output the same way, write it to another folder and point FIXTURES_DIR there
+(the same variable scripts/make_fixtures.sh uses):
+    FIXTURES_DIR=/tmp/fresh bash scripts/make_fixtures.sh
+    FIXTURES_DIR=/tmp/fresh pytest tests/unit/test_suricata_eve.py -q
+"""
+
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+
+import pytest
+
+from maxguard.adapters.base import read_log
+from maxguard.events.normalize import normalize
+from maxguard.ids import record_id
+
+DEFAULT_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "zeek"
+FIXTURES = Path(os.environ.get("FIXTURES_DIR", DEFAULT_FIXTURES))
+# One folder per lab capture. _handmade/ has no eve.json directly inside, so it is left out.
+EVE_FOLDERS = sorted(p.parent for p in FIXTURES.glob("*/eve.json"))
+
+# Community ID version 1: "1:" and the base64 text of a 20-byte SHA-1 hash (28 characters).
+COMMUNITY_ID = re.compile(r"^1:[A-Za-z0-9+/]{27}=$")
+# JA4 as Suricata writes it: 10 characters (protocol, TLS version, domain or IP,
+# number of ciphers, number of extensions, first ALPN), then two 12-character hashes.
+JA4 = re.compile(r"^[a-zA-Z0-9]{10}_[0-9a-f]{12}_[0-9a-f]{12}$")
+
+
+def eve_records(folder: Path) -> list[dict]:
+    return list(read_log(folder, "eve.json"))
+
+
+def client_hellos(folder: Path) -> list[dict]:
+    """The eve "tls" records whose client hello Suricata parsed. The server name (SNI)
+    is sent only in the client hello, so a record with an "sni" proves Suricata saw it."""
+    return [rec for rec in eve_records(folder)
+            if rec["event_type"] == "tls" and rec["tls"].get("sni")]
+
+
+def test_there_are_eve_files_to_check():
+    assert EVE_FOLDERS, f"no <capture>/eve.json under {FIXTURES}"
+
+
+@pytest.mark.parametrize("folder", EVE_FOLDERS, ids=lambda p: p.name)
+def test_every_record_has_a_community_id(folder):
+    for rec in eve_records(folder):
+        assert COMMUNITY_ID.match(rec.get("community_id", "")), rec["event_type"]
+
+
+@pytest.mark.parametrize("folder", EVE_FOLDERS, ids=lambda p: p.name)
+def test_zeek_logged_the_same_community_ids(folder):
+    zeek_ids = {rec.get("community_id") for rec in read_log(folder, "conn.log")}
+    for rec in eve_records(folder):
+        assert rec["community_id"] in zeek_ids, rec["event_type"]
+
+
+@pytest.mark.parametrize("folder", EVE_FOLDERS, ids=lambda p: p.name)
+def test_every_client_hello_has_a_ja4(folder):
+    hellos = client_hellos(folder)
+    for rec in hellos:
+        assert JA4.match(rec["tls"].get("ja4", "")), rec["tls"]
+    # Zeek is a second witness, so this test cannot pass by checking nothing: every
+    # TLS session in Zeek's ssl.log must be one of the client hellos above (every
+    # lab client sends a server name). normalize() gives Zeek's TLS events the
+    # Community ID of their connection.
+    zeek_sessions = {e["community_id"] for e in normalize(folder, sensor_id="pcap")
+                     if e["source"] == "zeek" and e["kind"] == "tls"}
+    assert zeek_sessions == {rec["community_id"] for rec in hellos}
+
+
+@pytest.mark.parametrize("folder", EVE_FOLDERS, ids=lambda p: p.name)
+def test_normalize_puts_the_ja4_on_the_event(folder):
+    events = {e["event_id"]: e for e in normalize(folder, sensor_id="pcap")}
+    for rec in client_hellos(folder):
+        event = events[record_id("eve.json", rec)]  # event_id is the record's ID
+        assert event["kind"] == "tls"
+        assert event["ja4"] == rec["tls"].get("ja4", "")  # a missing JA4 fails the test above
+```
+
+**Step 5.** Run it:
+
+```bash
+pytest tests/unit/test_suricata_eve.py -q
+```
+
+Expected output:
+
+```text
+.........................................................                                    [100%]
+57 passed in 0.08s
+```
+
+**Step 6.** Build the test image and run the integration tests in it with networking off:
 
 ```bash
 docker build -f docker/Dockerfile --target test -t maxguard:test .
 docker run --rm --network none maxguard:test pytest -m integration -q
 ```
 
-*Not run in planning (the image needs Debian's package servers to build).* The same pipeline was run on every capture in planning with Zeek 9.0.0, and each capture produced exactly its rule (`tests/unit/test_rule_registry.py` checks the same thing on the fixtures).
+Expected output:
 
-**Step 5.** Commit, push, and open the pull request:
+```text
+...............                                                          [100%]
+15 passed, 340 deselected in 8.57s
+```
+
+*Run in planning inside `zeek/zeek:9.0.0` with MaxGuard's Python packages added, because the engine image build needs Debian's package servers (JAI-04). Zeek ran for real on every capture.*
+
+**Step 7.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -1548,11 +1880,11 @@ git push -u origin HEAD
 
 #### How to test
 
-`pytest -m integration -q` passes inside the test image: 14 tests, one per capture.
+`pytest -m integration -q` passes inside the test image (15 tests: one per capture, plus the one that checks every capture has an expected file), and the Suricata checks pass with the unit tests.
 
 #### What you just did and why
 
-Unit tests use saved fixtures, so they cannot notice when the way MaxGuard *runs* Zeek or Suricata breaks (a missing script, a wrong option, a new tool version). Integration tests run the real tools on the real captures, offline, the same way users will. The `must_not_contain` lists catch a rule that starts firing where it should not.
+Unit tests use saved fixtures, so they cannot notice when the way MaxGuard *runs* Zeek or Suricata breaks (a missing script, a wrong option, a new tool version). Integration tests run the real tools on the real captures, offline, the same way users will. In planning, leaving `cleartext.zeek` out of the Zeek command made exactly the Telnet, POP3 and IMAP tests fail, and nothing else. The `must_not_contain` lists catch a rule that starts firing where it should not.
 
 #### Pull request checklist
 
@@ -1662,11 +1994,87 @@ jobs:
 
 *Written in planning; its first real run is your pull request.* Check the action versions (`actions/checkout`, `actions/setup-python`) against their GitHub releases pages before merging.
 
-**Step 3.** Write `tests/integration/test_determinism.py` (marked `integration`): for each capture, run `analyze()` twice into two temporary folders and assert the two report dicts are equal. If it ever fails, the difference tells you which value is not deterministic.
+**Step 3.** Create `tests/integration/test_determinism.py`. It analyzes every capture twice, into two *different* folders (so a folder path that leaks into the report fails too), and when the reports differ, `differences()` names the exact value, for example `report['events'][0]['uid']: 'CVMEph...' != 'CeUBb0...'`. The small test of that helper is not marked, so it also runs with the unit tests:
 
-**Step 4.** Open the pull request and watch both jobs. In the `integration` job's log, check that the tests ran with `--network none`.
+```python
+"""Determinism test (Karthik, KAR-04): the same capture always gives the same report.
 
-**Step 5.** Commit, push, and open the pull request:
+CLAUDE.md rule 2 with the real tools: analyze() runs twice on every capture, in
+two different temporary folders, and the two report dicts must be equal. The
+folders differ on purpose, so a folder path that leaks into the report fails too.
+Zeek's -D option and record IDs that ignore Suricata's random flow_id are what
+make this pass (docs/ARCHITECTURE.md section 7).
+
+The determinism test needs Zeek, so it runs inside the engine test image
+(pytest -m integration). The small test of the differences() helper needs
+nothing, so it is not marked and also runs with the unit tests.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from maxguard.pipeline import analyze
+
+PCAPS = sorted((Path(__file__).resolve().parents[1] / "pcaps").glob("*.pcap"))
+
+
+def differences(first: object, second: object, where: str = "report") -> list[str]:
+    """Every place where two reports differ, for example
+    report['events'][3]['uid']: 'CAbc' != 'CXyz'. An empty list means identical."""
+    if isinstance(first, dict) and isinstance(second, dict):
+        found = []
+        for key in sorted(set(first) | set(second)):
+            found += differences(first.get(key), second.get(key), f"{where}[{key!r}]")
+        return found
+    if isinstance(first, list) and isinstance(second, list) and len(first) == len(second):
+        found = []
+        for index, (a, b) in enumerate(zip(first, second, strict=True)):
+            found += differences(a, b, f"{where}[{index}]")
+        return found
+    return [] if first == second else [f"{where}: {first!r} != {second!r}"]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("pcap", PCAPS, ids=lambda p: p.stem)
+def test_two_runs_give_the_same_report(pcap, tmp_path):
+    first = analyze(pcap, tmp_path / "first", explain=False)
+    second = analyze(pcap, tmp_path / "second", explain=False)
+
+    # Show at most 10 differences: the first one usually names the culprit.
+    assert first == second, "\n".join(differences(first, second)[:10])
+
+
+def test_differences_names_the_value_that_changed():
+    # A plain unit test of the helper above, so its messages can be trusted.
+    first = {"events": [{"uid": "CAbc", "ts": 1.0}], "tools": {"zeek": True}}
+    second = {"events": [{"uid": "CXyz", "ts": 1.0}], "tools": {"zeek": True}}
+    assert differences(first, first) == []
+    assert differences(first, second) == ["report['events'][0]['uid']: 'CAbc' != 'CXyz'"]
+    assert differences({"a": [1]}, {"a": [1, 2]}) == ["report['a']: [1] != [1, 2]"]
+```
+
+**Step 4.** Run the integration tests again:
+
+```bash
+docker build -f docker/Dockerfile --target test -t maxguard:test .
+docker run --rm --network none maxguard:test pytest -m integration -q
+```
+
+Expected output:
+
+```text
+..............................                                           [100%]
+30 passed, 443 deselected in 29.33s
+```
+
+*Run in planning inside `zeek/zeek:9.0.0` with MaxGuard's Python packages added (see KAR-03). Running Zeek without `-D` made the Telnet determinism test fail on the connection IDs, which is the mistake this test exists to catch.*
+
+**Step 5.** Open the pull request and watch both jobs. In the `integration` job's log, check that the tests ran with `--network none`.
+
+**Step 6.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -1753,11 +2161,9 @@ The team knows MaxGuard too well to notice what is confusing. An outside tester 
 
 ### KAR-06: End-to-end test of the live sensor on the lab
 
-**Due:** Spring S1-S4 (due Fri Feb 12, 2027) · **Milestone:** `S1-S4 Live sensor` · **Needs first:** [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) · **Kind:** design
+**Due:** Spring S1-S4 (due Fri Feb 12, 2027) · **Milestone:** `S1-S4 Live sensor` · **Needs first:** [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) · **Kind:** code, tested
 
 **Issue labels:** `type:task` `phase:spring` `owner:karthik` `area:testing` `area:sensor` `needs-hardware`
-
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
 
 > **Needs hardware.** Steps that use the Raspberry Pi, the switch or other devices were not run during planning; they are marked *not run — verify on hardware*.
 
@@ -1782,11 +2188,223 @@ git checkout -b karthik/live-e2e
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** Write `scripts/live_check.sh`: from a laptop on the lab's Wi-Fi, make one plain-HTTP request and one Telnet connection to a test service you run on another lab machine (never to the internet), then poll the console's `GET /api/alerts` every minute for up to 30 minutes until both alerts appear.
+**Step 2.** Create `scripts/live_check.sh`:
 
-**Step 3.** Run it three times on different days and record how long each alert took in `docs/testing/live-sensor.md`.
+```bash
+#!/usr/bin/env bash
+# Live-sensor end-to-end check (Karthik, KAR-06).
+#
+# Run it on a laptop in the lab. It makes one plain-HTTP request (port 80) and
+# one Telnet connection (port 23) to a test service on another lab machine, then
+# asks the MaxGuard console for its alerts every minute, for up to 30 minutes,
+# until a cleartext.http and a cleartext.telnet alert show traffic seen after the
+# start. It prints how long each alert took.
+#
+# Usage:    bash scripts/live_check.sh <console URL> <lab service IPv4 address>
+# Example:  bash scripts/live_check.sh http://192.168.50.10:8000 192.168.50.30
+#
+# Settings (environment variables), mainly so a test can finish in seconds:
+#   LIVE_CHECK_POLL_SECONDS     seconds between two looks at the console (default 60)
+#   LIVE_CHECK_TIMEOUT_SECONDS  give up after this many seconds (default 1800 = 30 minutes)
+#
+# Exit codes: 0 both alerts appeared; 1 a probe or the console failed, or an
+# alert did not appear in time; 2 wrong arguments or an address outside the lab.
+#
+# Needs: bash, python3, and curl with Telnet support ("curl --version" lists
+# telnet under Protocols).
+set -euo pipefail
 
-**Step 4.** Commit, push, and open the pull request:
+POLL_SECONDS="${LIVE_CHECK_POLL_SECONDS:-60}"
+TIMEOUT_SECONDS="${LIVE_CHECK_TIMEOUT_SECONDS:-1800}"
+
+usage() {
+  echo "usage: bash scripts/live_check.sh <console URL> <lab service IPv4 address>" >&2
+  echo "example: bash scripts/live_check.sh http://192.168.50.10:8000 192.168.50.30" >&2
+  exit 2
+}
+
+# Only lab machines may be probed (CLAUDE.md rule 4: never touch hosts you do not
+# own). Allowed: the private ranges of RFC 1918, which home and office networks
+# use (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), and the documentation ranges
+# of RFC 5737 (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24), which are never
+# routed on the internet and are the example addresses in MaxGuard's docs. Any
+# other address could be someone else's computer. Host names are refused because
+# a name can point anywhere; leading zeros are refused because some programs
+# read "010" as octal (8).
+is_lab_address() {
+  local octet='(0|[1-9][0-9]{0,2})'
+  [[ "$1" =~ ^$octet\.$octet\.$octet\.$octet$ ]] || return 1
+  local a="${BASH_REMATCH[1]}" b="${BASH_REMATCH[2]}" c="${BASH_REMATCH[3]}" d="${BASH_REMATCH[4]}"
+  (( a <= 255 && b <= 255 && c <= 255 && d <= 255 )) || return 1
+  (( a == 10 )) && return 0
+  (( a == 172 && b >= 16 && b <= 31 )) && return 0
+  (( a == 192 && b == 168 )) && return 0
+  (( a == 192 && b == 0 && c == 2 )) && return 0
+  (( a == 198 && b == 51 && c == 100 )) && return 0
+  (( a == 203 && b == 0 && c == 113 )) && return 0
+  return 1
+}
+
+# Every curl call uses --noproxy '*': with a web proxy set (http_proxy), curl
+# would send the request to the proxy, so the sensor would see traffic to the
+# proxy instead of the lab service, and the console might not be reachable.
+fetch_alerts() {
+  curl --silent --show-error --fail --max-time 30 --noproxy '*' "$1/api/alerts?limit=1000"
+}
+
+# Succeeds when the alert list (JSON on stdin) has an alert for rule $1 whose
+# last_seen is at or after $2. Both are Unix seconds; last_seen is when the sensor
+# saw the traffic, so the sensor's and this laptop's clocks must agree (NTP).
+alert_seen_since() {
+  python3 -c '
+import json, sys
+rule, start = sys.argv[1], float(sys.argv[2])
+alerts = json.load(sys.stdin)
+sys.exit(0 if any(a["rule_id"] == rule and a["last_seen"] >= start for a in alerts) else 1)
+' "$1" "$2"
+}
+
+check_console() {
+  local alerts
+  if ! alerts="$(fetch_alerts "$1")"; then
+    echo "error: cannot read $1/api/alerts: is the console running?" >&2
+    exit 1
+  fi
+  if ! python3 -c 'import json, sys; assert isinstance(json.load(sys.stdin), list)' \
+      <<< "$alerts" 2> /dev/null; then
+    echo "error: $1/api/alerts did not return a JSON list: is this a MaxGuard console?" >&2
+    exit 1
+  fi
+}
+
+probe_http() {
+  # Any HTTP answer is fine (even 404): what matters is the unencrypted request.
+  if ! curl --silent --show-error --max-time 10 --noproxy '*' --output /dev/null "http://$1/"; then
+    echo "error: no HTTP answer from $1 port 80: is the test service running?" >&2
+    exit 1
+  fi
+  echo "sent: plain HTTP request to $1 port 80"
+}
+
+probe_telnet() {
+  # curl speaks Telnet too: type the lab user name, then "exit" so the service hangs up.
+  local reply status=0
+  reply="$(printf 'labuser\r\nexit\r\n' \
+    | curl --silent --max-time 10 --noproxy '*' "telnet://$1:23")" || status=$?
+  # A service that keeps asking for a password stops only at curl's time limit
+  # (exit code 28); that is fine. What counts is that the service answered:
+  # MaxGuard only reports a Telnet session in which the server sent something.
+  if [[ -z "$reply" ]]; then
+    echo "error: no Telnet answer from $1 port 23 (curl exit code $status):" \
+      "is the test service running?" >&2
+    exit 1
+  fi
+  echo "sent: Telnet session to $1 port 23"
+}
+
+minutes_and_seconds() {
+  echo "$(( $1 / 60 )) min $(( $1 % 60 )) s"
+}
+
+main() {
+  [[ $# -eq 2 ]] || usage
+  local console="${1%/}" service="$2"
+  [[ "$console" =~ ^https?:// ]] || usage
+  if ! [[ "$POLL_SECONDS" =~ ^[1-9][0-9]*$ && "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "error: LIVE_CHECK_POLL_SECONDS and LIVE_CHECK_TIMEOUT_SECONDS must be" \
+      "whole numbers above 0" >&2
+    exit 2
+  fi
+  if ! is_lab_address "$service"; then
+    echo "refused: $service is not a lab address (allowed: 10.0.0.0/8, 172.16.0.0/12," \
+      "192.168.0.0/16 and the documentation ranges 192.0.2.0/24, 198.51.100.0/24," \
+      "203.0.113.0/24; IPv4 numbers only)" >&2
+    exit 2
+  fi
+
+  check_console "$console"  # fail now, not after 30 minutes of waiting
+  local start
+  start="$(date +%s)"
+  probe_http "$service"
+  probe_telnet "$service"
+  echo "waiting for the alerts (checking every ${POLL_SECONDS} s, for up to" \
+    "$(minutes_and_seconds "$TIMEOUT_SECONDS"))"
+
+  local http_took="" telnet_took="" alerts now
+  while true; do
+    now="$(date +%s)"
+    # A console that is busy or restarting is not a failure: try again next time.
+    if alerts="$(fetch_alerts "$console")"; then
+      if [[ -z "$http_took" ]] && alert_seen_since cleartext.http "$start" <<< "$alerts"; then
+        http_took=$(( now - start ))
+        echo "cleartext.http alert after $(minutes_and_seconds "$http_took")"
+      fi
+      if [[ -z "$telnet_took" ]] && alert_seen_since cleartext.telnet "$start" <<< "$alerts"; then
+        telnet_took=$(( now - start ))
+        echo "cleartext.telnet alert after $(minutes_and_seconds "$telnet_took")"
+      fi
+    else
+      echo "warning: could not read the alerts this time; trying again" >&2
+    fi
+    if [[ -n "$http_took" && -n "$telnet_took" ]]; then
+      echo "PASS: both alerts appeared"
+      exit 0
+    fi
+    if (( now - start >= TIMEOUT_SECONDS )); then
+      [[ -n "$http_took" ]] || echo "FAIL: no cleartext.http alert" >&2
+      [[ -n "$telnet_took" ]] || echo "FAIL: no cleartext.telnet alert" >&2
+      echo "after $(minutes_and_seconds "$TIMEOUT_SECONDS")" >&2
+      exit 1
+    fi
+    sleep "$POLL_SECONDS"
+  done
+}
+
+main "$@"
+```
+
+Three choices to notice. It refuses any address outside the lab ranges, because probing someone else's machine is never acceptable (CLAUDE.md rule 4). It uses `curl` for the Telnet probe too, so no Telnet client is needed. And it compares the alert's `last_seen` (the sensor's clock) with this laptop's clock, so both must keep the right time (NTP); a Raspberry Pi without a clock battery has the wrong time until it reaches a time server.
+
+**Step 3.** Check the script with ShellCheck, and see it refuse an address outside the lab before it contacts anything:
+
+```bash
+docker run --rm -v "$PWD/scripts:/mnt:ro" koalaman/shellcheck:stable /mnt/live_check.sh && echo "shellcheck: no findings"
+bash scripts/live_check.sh http://127.0.0.1:8000 100.64.0.1
+```
+
+Expected output:
+
+```text
+shellcheck: no findings
+refused: 100.64.0.1 is not a lab address (allowed: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 and the documentation ranges 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24; IPv4 numbers only)
+```
+
+*The second command exits with 2: `100.64.0.1` is not a lab address.*
+
+**Step 4.** On another lab machine, start a test service with Telnet and HTTP. The lab server from KAR-01 is one: `docker run -d --rm --name lab-service -p 23:23 -p 80:80 lab-server`. It is insecure on purpose: run it only on the lab network, and stop it (`docker stop lab-service`) after the test.
+
+**Step 5.** From a laptop on the lab Wi-Fi, run the check against the console and the lab service:
+
+```bash
+bash scripts/live_check.sh http://192.168.50.10:8000 192.168.50.30
+```
+
+Expected output (not run in planning):
+
+```text
+sent: plain HTTP request to 172.19.0.2 port 80
+sent: Telnet session to 172.19.0.2 port 23
+waiting for the alerts (checking every 1 s, for up to 0 min 20 s)
+cleartext.telnet alert after 0 min 2 s
+cleartext.http alert after 0 min 4 s
+PASS: both alerts appeared
+```
+
+*Not run on the lab: verify on hardware. This output is from planning, where the test service was the lab server in a container (172.19.0.2), a fake console answered `/api/alerts`, and `LIVE_CHECK_POLL_SECONDS=1` and `LIVE_CHECK_TIMEOUT_SECONDS=20` shortened the waits. On the lab, expect up to one 15-minute interval plus the analysis time.*
+
+**Step 6.** Run it three times on different days and record how long each alert took in `docs/testing/live-sensor.md`.
+
+**Step 7.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -1814,3 +2432,4 @@ Each piece of the live path is unit-tested, but the joints between them (rotatio
 - [ ] Any new dependency has a row in `docs/DEPENDENCIES.md` with its license
 - [ ] CI is green and your reviewer approved
 - [ ] Only lab machines were contacted
+- [ ] The test service was stopped after the test

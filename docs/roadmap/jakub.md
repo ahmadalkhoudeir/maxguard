@@ -1578,7 +1578,7 @@ Expected output:
 
 ```text
 ...                                                                                          [100%]
-3 passed in 0.06s
+3 passed in 0.03s
 ```
 
 ```bash
@@ -1588,15 +1588,72 @@ pytest -m "not integration" -q
 Expected output:
 
 ```text
-............................................................................................ [ 23%]
-.............................................................................s.............. [ 47%]
-............................................................................................ [ 71%]
-............................................................................................ [ 95%]
-.................                                                                            [100%]
-384 passed, 1 skipped, 1 deselected in 7.00s
+............................................................................................ [ 20%]
+..............................................................................s............. [ 41%]
+............................................................................................ [ 61%]
+............................................................................................ [ 82%]
+..............................................................................               [100%]
+445 passed, 1 skipped, 31 deselected in 9.60s
 ```
 
-**Step 7.** The real check runs in the engine image, where Suricata is installed:
+**Step 7.** Add the integration test that proves Suricata now runs next to Zeek, `tests/integration/test_suricata_pipeline.py`. Where Suricata is missing it shows as skipped, with the reason, instead of passing:
+
+```python
+"""Suricata runs next to Zeek in the pipeline (Jakub, JAK-05).
+
+Once JAK-05 is merged, analyze() runs Suricata on every capture whenever Suricata
+is installed. The engine image has it, so CI runs this test. Where Suricata is
+missing (a laptop, or the Zeek-only image used in planning) the test shows as
+"skipped" with the reason, never silently passed, and CI's "suricata -V" step
+fails if the engine image ever loses Suricata.
+"""
+
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+
+import pytest
+
+from maxguard.pipeline import analyze
+
+PCAPS = Path(__file__).resolve().parents[1] / "pcaps"
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(shutil.which("suricata") is None,
+                    reason="suricata is not installed here; the engine image has it")
+def test_zeek_and_suricata_both_ran(tmp_path):
+    report = analyze(PCAPS / "tls_weak_version.pcap", tmp_path, explain=False)
+
+    assert report["tools"] == {"zeek": True, "suricata": True}
+    # Suricata ran with MaxGuard's settings: its TLS event carries a JA4, and the
+    # same Community ID as Zeek's event for that connection, so the two can be joined.
+    [suricata_tls] = [e for e in report["events"]
+                      if e["source"] == "suricata" and e["kind"] == "tls"]
+    [zeek_tls] = [e for e in report["events"] if e["source"] == "zeek" and e["kind"] == "tls"]
+    assert suricata_tls["ja4"] != ""
+    assert zeek_tls["community_id"] != ""
+    assert suricata_tls["community_id"] == zeek_tls["community_id"]
+```
+
+```bash
+docker build -f docker/Dockerfile --target test -t maxguard:test .
+docker run --rm --network none maxguard:test pytest -m integration tests/integration/test_suricata_pipeline.py -q -rs
+```
+
+Expected output:
+
+```text
+s                                                                        [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/integration/test_suricata_pipeline.py:22: suricata is not installed here; the engine image has it
+1 skipped in 0.07s
+```
+
+*In planning this ran in `zeek/zeek:9.0.0`, which has no Suricata, so it was skipped as shown. With Zeek and Suricata both available it passed: the Suricata TLS event had a JA4 and the same Community ID as Zeek's. In the engine image you should see `1 passed`.*
+
+**Step 8.** The real check runs in the engine image, where Suricata is installed:
 
 ```bash
 docker run --rm --network none -v "$PWD/tests/pcaps:/pcaps:ro" maxguard:dev python -c "import json, tempfile; from pathlib import Path; from maxguard.pipeline import analyze; r = analyze(Path('/pcaps/tls_weak_version.pcap'), Path(tempfile.mkdtemp()), explain=False); print(r['tools']); print(sorted({e['source'] for e in r['events']})); print([e['ja4'] for e in r['events'] if e['ja4']])"
@@ -1612,7 +1669,7 @@ Expected output (not run in planning):
 
 *Not run in planning: the engine image needs Debian's package servers to build. The expected output is what the same pipeline gives on this capture's fixture (its JA4 came from Suricata 7.0.10 with MaxGuard's settings).*
 
-**Step 8.** Commit, push, and open the pull request:
+**Step 9.** Commit, push, and open the pull request:
 
 ```bash
 git add -A

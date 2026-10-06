@@ -244,7 +244,7 @@ How the team avoids waiting:
 | W2 | [FIO-04](fiona.md#fio-04-the-maxguard-command-first-version-json-reports) | Fiona | The maxguard command, first version (JSON reports) | code, tested |
 | W2 | [JON-02](jonattan.md#jon-02-ollama-client-one-evidence-citing-explanation-per-finding) | Jonattan | Ollama client: one evidence-citing explanation per finding | code, tested |
 | W2 | [ALI-02](ali.md#ali-02-evaluation-set-the-same-13-questions-for-every-model) | Ali | Evaluation set: the same 13 questions for every model | code, tested |
-| W2 | [KAR-03](karthik.md#kar-03-integration-tests-the-real-pipeline-on-every-capture) | Karthik | Integration tests: the real pipeline on every capture | design |
+| W2 | [KAR-03](karthik.md#kar-03-integration-tests-the-real-pipeline-on-every-capture) | Karthik | Integration tests: the real pipeline on every capture | code, tested |
 | W3 | [JAI-06](jaiden.md#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files) | Jaiden | Storage: alerts in SQLite, events in hourly Parquet files | code, tested |
 | W3 | [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly) | Jonattan | Offline guard: make accidental network access fail loudly | code, tested |
 | W3 | [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | Jaiden | The API: uploads, alerts, events, live updates, sensor ingest | code, tested |
@@ -271,7 +271,7 @@ How the team avoids waiting:
 | S4 | [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address) | Jakub | Device attribution: which device is behind each IP address | code, tested |
 | S4 | [AMO-05](amory.md#amo-05-chain-of-custody-log) | Amory | Chain-of-custody log | code, tested |
 | S4 | [AHM-06](ahmad.md#ahm-06-ip-timeline-and-device-inventory-pages) | Ahmad | IP timeline and device inventory pages | design |
-| S4 | [KAR-06](karthik.md#kar-06-end-to-end-test-of-the-live-sensor-on-the-lab) | Karthik | End-to-end test of the live sensor on the lab | design |
+| S4 | [KAR-06](karthik.md#kar-06-end-to-end-test-of-the-live-sensor-on-the-lab) | Karthik | End-to-end test of the live sensor on the lab | code, tested |
 | S8 | [JAK-09](jakub.md#jak-09-ja4-watchlist-rule) | Jakub | JA4 watchlist rule | code, tested |
 | S8 | [JAI-11](jaiden.md#jai-11-signed-offline-intel-bundles) | Jaiden | Signed offline intel bundles | code, tested |
 | S8 | [AHM-07](ahmad.md#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block) | Ahmad | Response: block proposals, generated rules, and preview before you block | design |
