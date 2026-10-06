@@ -1869,7 +1869,7 @@ maxguard: 1 finding(s), report written to /tmp/r.json
 ok
 ```
 
-*Recorded by running the same command inside `zeek/zeek:9.0.0` with MaxGuard's Python packages added, because building the image needs Debian's package servers, which the planning environment could not reach. Your output from the real image must match.*
+*Recorded by running the same command inside `zeek/zeek:9.0.0` with MaxGuard's Python packages added, because building the image needs Debian's package servers, which the planning environment could not reach. That image has no Suricata, so only Zeek ran; the real image runs both and must report the same one finding.*
 
 **Step 7.** Commit, push, and open the pull request:
 

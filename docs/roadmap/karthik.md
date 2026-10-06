@@ -347,16 +347,13 @@ Week 0 sections 0.1 to 0.8 are done (Docker works). This task does not need JAI-
 
 #### Steps
 
-**Step 1.** Update `main` and create your branch for this task (one branch per task):
+**Step 1.** Update `main` and create your branch (this task needs no Python environment, so there is nothing to activate yet):
 
 ```bash
 cd ~/projects/maxguard
-source .venv/bin/activate
 git checkout main && git pull
 git checkout -b karthik/traffic-lab
 ```
-
-If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
 **Step 2.** Create the lab's Compose file `lab/compose.yaml`:
 

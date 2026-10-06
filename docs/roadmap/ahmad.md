@@ -354,7 +354,7 @@ The planning pull request (it adds `scripts/create_issues.sh` and the templates)
 
 **Step 2.** **Discussions.** **Settings → General → Features**: tick **Discussions**. GitHub creates the categories the team uses (*Announcements*, *Q&A*, *Ideas*, *General*). Then open **Discussions → New discussion → General**, title `Week 0 check-in`, body: "Reply with the output of `git --version`, `python3.11 --version`, `docker --version`, and the first line of your `http.log` from Week 0 step 0.8." Open it and click **Pin discussion**.
 
-**Step 3.** **Security reports.** **Settings → Security → Private vulnerability reporting**: **Enable**, so outsiders can report a problem without a public issue.
+**Step 3.** **Security reports.** In **Settings**, open the page in the *Security* part of the sidebar (named *Code security* or *Advanced Security*, depending on the account) and **Enable** **Private vulnerability reporting**, so outsiders can report a problem without a public issue. *Not run in planning — verify on github.com.*
 
 **Step 4.** **Labels, milestones, issues, and the project.** The GitHub CLI needs the `project` permission for the board:
 
