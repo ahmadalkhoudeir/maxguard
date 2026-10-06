@@ -1,3 +1,12 @@
+> **Archived — superseded in part (October 6, 2026).** This is the original Fall
+> 2026 roadmap, kept for history. Its three contracts and conventions still
+> apply, as extended in `docs/ARCHITECTURE.md`. Where this file disagrees with
+> `docs/PROJECT_DECISIONS.md` or `docs/roadmap/`, those files win. The main
+> differences: live capture and the switch lab are now in scope; Streamlit is
+> replaced by FastAPI + HTMX; owners changed (dashboard to Ahmad, report export
+> to Amory, sensor work to Jakub); and the dates were re-baselined. Follow
+> `docs/roadmap/README.md` for current tasks.
+
 # Max-Guard v2.0 — Team Roadmap (Fall 2026)
 
 Sep 22, 2026 · @Ahmad
