@@ -432,6 +432,31 @@ the same answer. They get their history passed in explicitly through a second
 registry (`STATEFUL_RULES`, spring), so `run_all()` and Contract 3 stay exactly
 as they are.
 
+### Rule IDs
+
+A `rule_id` ties a finding to its mapping rows, its Home text, its tests, and
+its alert history, so it never changes once merged. A new rule ID needs the
+Security Lead's approval. Severities and titles are the ones in the code.
+
+| Rule ID | Severity | Finding title | Module | Task |
+|---|---|---|---|---|
+| `cleartext.ftp` | high | FTP login and data sent unencrypted | `rules/cleartext.py` | JAK-03 |
+| `cleartext.telnet` | high | Telnet session in cleartext | `rules/cleartext.py` | JAK-03 |
+| `cleartext.http` | medium | Unencrypted HTTP | `rules/cleartext.py` | JAK-03 |
+| `cleartext.http_alt` | medium | Unencrypted HTTP on port 8080 | `rules/cleartext.py` | JAK-03 |
+| `cleartext.pop3` | high | POP3 mail retrieval in cleartext | `rules/cleartext.py` | JAK-03 |
+| `cleartext.imap` | high | IMAP mail access in cleartext | `rules/cleartext.py` | JAK-03 |
+| `rdp.standard_security` | high | RDP using legacy Standard RDP Security | `rules/cleartext.py` | JAK-03 |
+| `tls.weak_version` | high | Outdated protocol (SSL 2/3, TLS 1.0/1.1) | `rules/tls.py` | FIO-02 |
+| `tls.weak_cipher` | high | Weak cipher (NULL, export, RC4, DES, 3DES, anonymous) | `rules/tls.py` | FIO-02 |
+| `cert.expired` | high | Expired certificate | `rules/certs.py` | FIO-02 |
+| `cert.self_signed` | medium | Self-signed certificate | `rules/certs.py` | FIO-02 |
+| `cert.weak_key` | high | Weak RSA key (under 2048 bits) | `rules/certs.py` | FIO-02 |
+| `cert.sha1_signature` | medium | Certificate signed with SHA-1 | `rules/certs.py` | FIO-02 |
+| `tls.ja4_watchlist` | high | Proposed (spring): TLS client on the JA4 watchlist | `rules/ja4.py` | JAK-09 |
+| `decoy.contact` | critical | Proposed (spring): someone contacted a decoy | `rules/decoy.py` | FIO-06 |
+| `baseline.new_service` | medium | Proposed (spring): a device used a service new to it | `rules/baseline.py` | FIO-07 |
+
 ## 6. The common event schema
 
 **Contract** (`maxguard/events/normalize.py`, `EVENT_KEYS`). Zeek and Suricata
