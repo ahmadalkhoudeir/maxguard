@@ -10,11 +10,11 @@ This is your part of the MaxGuard v2.0 roadmap. Read [the roadmap overview](READ
 |---|---|---|---|---|
 | [AHM-00](#week-0--onboarding-due-friday-october-9-2026) | W0 | Week 0 onboarding (Ahmad) | — | process |
 | [AHM-01](#ahm-01-set-up-github-for-the-team-access-discussions-labels-milestones-issues) | W0 | Set up GitHub for the team: access, Discussions, labels, milestones, issues | — | process |
-| [AHM-02](#ahm-02-dashboard-layout-alert-queue-and-upload-page) | W3 | Dashboard: layout, alert queue, and upload page | [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | design |
-| [AHM-03](#ahm-03-alert-detail-page-with-analyst-and-home-modes) | W4 | Alert detail page with Analyst and Home modes | [AHM-02](#ahm-02-dashboard-layout-alert-queue-and-upload-page), [JON-02](jonattan.md#jon-02-ollama-client-one-evidence-citing-explanation-per-finding), [JON-04](jonattan.md#jon-04-home-mode-text-for-every-rule) | design |
+| [AHM-02](#ahm-02-dashboard-layout-alert-queue-and-upload-page) | W3 | Dashboard: layout, alert queue, and upload page | [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | code, tested |
+| [AHM-03](#ahm-03-alert-detail-page-with-analyst-and-home-modes) | W4 | Alert detail page with Analyst and Home modes | [AHM-02](#ahm-02-dashboard-layout-alert-queue-and-upload-page), [JON-02](jonattan.md#jon-02-ollama-client-one-evidence-citing-explanation-per-finding), [JON-04](jonattan.md#jon-04-home-mode-text-for-every-rule) | code, tested |
 | [AHM-04](#ahm-04-security-review-of-the-alpha) | W5 | Security review of the alpha | [AHM-03](#ahm-03-alert-detail-page-with-analyst-and-home-modes), [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly), [AMO-03](amory.md#amo-03-report-export-json-csv-and-html) | process |
 | [AHM-05](#ahm-05-alpha-acceptance-test-and-presentation) | W8 | Alpha acceptance test and presentation | [JAI-10](jaiden.md#jai-10-release-v20-alpha), [KAR-05](karthik.md#kar-05-release-candidate-test-with-an-outside-tester) | process |
-| [AHM-06](#ahm-06-ip-timeline-and-device-inventory-pages) | S4 | IP timeline and device inventory pages | [AHM-03](#ahm-03-alert-detail-page-with-analyst-and-home-modes), [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | design |
+| [AHM-06](#ahm-06-ip-timeline-and-device-inventory-pages) | S4 | IP timeline and device inventory pages | [AHM-03](#ahm-03-alert-detail-page-with-analyst-and-home-modes), [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) | code, tested |
 | [AHM-07](#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block) | S8 | Response: block proposals, generated rules, and preview before you block | [JAI-06](jaiden.md#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | code, tested |
 | [AHM-08](#ahm-08-response-approvals-audit-revert-and-the-opnsense-connector) | S8 | Response: approvals, audit, revert, and the OPNsense connector | [AHM-07](#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block), [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly) | code, tested |
 | [AHM-09](#ahm-09-v20-acceptance-test) | S14 | v2.0 acceptance test | [JAI-12](jaiden.md#jai-12-release-v20-rc1-and-v20) | process |
@@ -427,11 +427,9 @@ Issues, labels, and milestones made by a script are consistent and complete; mad
 
 ### AHM-02: Dashboard: layout, alert queue, and upload page
 
-**Due:** Week 3 (due Fri Oct 30) · **Milestone:** `W3 API and alert queue` · **Needs first:** [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) · **Kind:** design
+**Due:** Week 3 (due Fri Oct 30) · **Milestone:** `W3 API and alert queue` · **Needs first:** [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) · **Kind:** code, tested
 
 **Issue labels:** `type:task` `phase:alpha` `owner:ahmad` `area:ui` `critical-path`
-
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
 
 #### Goal
 
@@ -469,23 +467,760 @@ Expected output:
 d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717  maxguard/web/static/htmx-2.0.11.min.js
 ```
 
-On macOS use `shasum -a 256` instead of `sha256sum`. Add a row for htmx to `docs/DEPENDENCIES.md` if it is not there.
+On macOS use `shasum -a 256` instead of `sha256sum`. htmx already has a row in `docs/DEPENDENCIES.md`.
 
-**Step 3.** Create `maxguard/web/__init__.py` (empty) and `maxguard/web/routes.py` with `router = APIRouter()`. `create_app()` already includes this router when the module exists. Read stores only through `request.app.state.state_store` and `request.app.state.event_store`; templates come from `maxguard/web/templates/` with `Jinja2Templates` (autoescaping is on by default for `.html`).
+**Step 3.** Create `maxguard/web/__init__.py` (one line):
 
-**Step 4.** `templates/base.html`: a `<nav>` (Alerts, Upload; Timeline and Devices come in AHM-06), the line **"Your data never leaves this computer."**, the Analyst/Home switch stored in a cookie `mg_mode`, `<script src="/static/htmx-2.0.11.min.js">` (never a CDN), and `/static/app.css`.
+```python
 
-**Step 5.** `GET /` → `templates/queue.html`: the alert table from `state_store.list_alerts(status=..., severity=...)`; the two filters are `<select>`s with `hx-get="/" hx-target="#alerts" hx-select="#alerts"`. Severity is shown as text *and* color, never color alone.
+```
 
-**Step 6.** Live refresh: `static/app.js` opens `new EventSource("/api/stream")` and on each `alerts-changed` message calls `htmx.trigger("#alerts", "refresh")`; the table also has `hx-trigger="refresh, every 30s"` as a fallback.
+and `maxguard/web/routes.py`:
 
-**Step 7.** `GET /upload` → a form that posts the file to `/api/analyses` (`hx-post`, `hx-encoding="multipart/form-data"`) and then links to the queue.
+```python
+"""The dashboard's HTML pages (Ahmad, AHM-02).
 
-**Step 8.** Tests `tests/unit/test_web.py` with `TestClient(create_app(tmp_path, explain=False))` and alerts saved through `StateStore.save_analysis()` from a fixture report: the pages return 200, the queue lists the Telnet alert, the filters work, a value with `<script>` in it is shown escaped, and no page loads anything from outside (no `http://` or `https://` in any `src` or `href` except links in text).
+create_app() in maxguard/api/app.py includes this router when it imports.
 
-**Step 9.** Check the pages on a 375-pixel-wide window and with the keyboard only.
+    GET   /                             alert queue (filters: ?status=&severity=)
+    GET   /upload                       upload form (posts to /api/analyses)
+    POST  /mode                         Analyst/Home switch (cookie mg_mode)
 
-**Step 10.** Commit, push, and open the pull request:
+The pages read the stores only through request.app.state. Jinja2 escapes every
+value; nothing from traffic or from the AI is ever marked |safe, because an
+attacker writes the traffic (docs/ARCHITECTURE.md section 14).
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from pathlib import Path
+
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.templating import Jinja2Templates
+
+from maxguard.models import SEVERITIES
+from maxguard.storage.state import ALERT_STATUSES
+
+router = APIRouter()
+TEMPLATES = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
+
+MODES = ("analyst", "home")
+YEAR_SECONDS = 365 * 24 * 3600
+
+# Home mode: the severity in plain words (no jargon), and color is never the only signal.
+SEVERITY_WORDS = {
+    "critical": "Critical: fix this today",
+    "high": "High: fix this week",
+    "medium": "Medium: fix this month",
+    "low": "Low: fix when you can",
+    "info": "Info: nothing to fix, good to know",
+}
+STATUS_LABELS = {"new": "New", "investigating": "Investigating", "resolved": "Resolved",
+                 "false_positive": "False positive"}
+
+# Sent with every page. The dashboard needs nothing from outside this computer, so the
+# browser is told to refuse anything else, even if some text ever slipped past escaping.
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; "
+        "connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; "
+        "frame-ancestors 'none'"),
+    "X-Content-Type-Options": "nosniff",
+    # "same-origin", not "no-referrer": with no-referrer, Chrome sends "Origin: null" on
+    # form posts, and the API's cross-site check (rightly) refuses those.
+    "Referrer-Policy": "same-origin",
+}
+
+
+# ---------- small helpers ----------
+
+def utc_time(ts: float | None) -> str:
+    """Unix seconds -> "2026-10-06 14:03:22 UTC" (the same on every machine)."""
+    if ts is None:
+        return ""
+    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+TEMPLATES.env.filters["utc_time"] = utc_time
+
+
+def mode_of(request: Request) -> str:
+    """"home" or "analyst" (the default) from the mg_mode cookie."""
+    return "home" if request.cookies.get("mg_mode") == "home" else "analyst"
+
+
+def render(request: Request, name: str, context: dict, status_code: int = 200) -> HTMLResponse:
+    """Render a template with the values every page needs, plus the security headers."""
+    full = {"mode": mode_of(request), "severities": SEVERITIES,
+            "severity_words": SEVERITY_WORDS, "status_labels": STATUS_LABELS, **context}
+    response = TEMPLATES.TemplateResponse(request, name, full, status_code=status_code)
+    response.headers.update(SECURITY_HEADERS)
+    return response
+
+
+def error_page(request: Request, status_code: int, message: str) -> HTMLResponse:
+    return render(request, "error.html", {"message": message}, status_code=status_code)
+
+
+def empty_to_none(value: str | None) -> str | None:
+    """A filter <select> sends "" for "All"."""
+    return value or None
+
+
+def safe_next(path: str) -> str:
+    """Only a path on this site: "//evil.example" or "https://..." would be an open redirect."""
+    if path.startswith("/") and not path.startswith("//") and "\\" not in path:
+        return path
+    return "/"
+
+
+# ---------- AHM-02: queue, upload, mode switch ----------
+
+@router.get("/", response_class=HTMLResponse)
+def queue(request: Request, status: str | None = None, severity: str | None = None):
+    status, severity = empty_to_none(status), empty_to_none(severity)
+    try:
+        alerts = request.app.state.state_store.list_alerts(status=status, severity=severity)
+    except ValueError as err:  # unknown status or severity in the URL
+        return error_page(request, 400, str(err))
+    return render(request, "queue.html", {
+        "alerts": alerts, "status": status or "", "severity": severity or "",
+        "statuses": ALERT_STATUSES,
+    })
+
+
+@router.get("/upload", response_class=HTMLResponse)
+def upload_page(request: Request):
+    return render(request, "upload.html", {})
+
+
+@router.post("/mode")
+async def switch_mode(request: Request):
+    """The Analyst/Home switch: a plain form, so it works with the keyboard and without
+    JavaScript. The cookie is only a display preference, not a security setting."""
+    form = await request.form()
+    mode = form.get("mode")
+    response = RedirectResponse(safe_next(str(form.get("next", "/"))), status_code=303)
+    if mode in MODES:
+        response.set_cookie("mg_mode", mode, max_age=YEAR_SECONDS, path="/",
+                            samesite="lax", httponly=True)
+    return response
+
+
+@router.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    """Browsers ask for this on every page; answer "nothing" instead of a 404 log line."""
+    return Response(status_code=204)
+```
+
+`create_app()` includes this router as soon as the module exists. What to notice: `render()` adds three headers to every page. The **Content-Security-Policy** tells the browser to load and run nothing that does not come from this computer, a second wall in case some text ever slipped past escaping. **Referrer-Policy** is `same-origin`, not `no-referrer`: with `no-referrer`, Chrome sends `Origin: null` on form posts, and the API's cross-site check refuses those (found in a real browser, not by a unit test). The Analyst/Home switch is a small `POST` form, so it works with the keyboard and without JavaScript, and `safe_next()` keeps its redirect on this site.
+
+**Step 4.** Create the templates in `maxguard/web/templates/`. The layout, `base.html` (the `htmx-config` tag keeps htmx inside the CSP: no inline styles, no `eval`, no scripts from responses, only this site):
+
+```html
+<!doctype html>
+{# The layout every page extends (Ahmad, AHM-02). Everything is served by this
+   computer: no CDN, no web fonts. Jinja2 escapes every {{ value }}. #}
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {# htmx settings: no inline <style> (our CSP blocks it), never run scripts or eval
+     from a response, only talk to this site, and show 400 answers (form errors). #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "400", "swap": true, "error": false}, {"code": "[45]..", "swap": false, "error": true}]}'>
+  <title>{% block title %}MaxGuard{% endblock %} · MaxGuard</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx-2.0.11.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body class="mode-{{ mode }}">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="top">
+    <div class="brand">MaxGuard</div>
+    <nav aria-label="Main">
+      <a href="/">Alerts</a>
+      <a href="/upload">Upload</a>
+    </nav>
+    <form class="mode-switch" method="post" action="/mode">
+      <input type="hidden" name="next" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+      <span id="mode-label">View:</span>
+      <button type="submit" name="mode" value="analyst" aria-describedby="mode-label"
+              aria-pressed="{{ 'true' if mode == 'analyst' else 'false' }}">Analyst</button>
+      <button type="submit" name="mode" value="home" aria-describedby="mode-label"
+              aria-pressed="{{ 'true' if mode == 'home' else 'false' }}">Home</button>
+    </form>
+  </header>
+  <p class="privacy">Your data never leaves this computer.</p>
+  <main id="main" tabindex="-1">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
+```
+
+The severity badge `_severity.html` (the word *and* a color, never color alone) and the error page `error.html`:
+
+```html
+{# Severity as text AND color (Ahmad, AHM-02): never color alone. In Home mode the
+   words say what to do ("High: fix this week"). Expects "severity" in the context. #}
+<span class="sev sev-{{ severity }}">{% if mode == "home" %}{{ severity_words[severity] }}{% else %}{{ severity | capitalize }}{% endif %}</span>
+```
+
+```html
+{% extends "base.html" %}
+{# Error page (Ahmad, AHM-03): 404 for an unknown alert, 400 for a bad filter or address. #}
+{% block title %}Error{% endblock %}
+{% block content %}
+<h1>Sorry</h1>
+<p class="error">{{ message }}</p>
+<p><a href="/">Back to the alert queue</a></p>
+{% endblock %}
+```
+
+The queue, `queue.html`:
+
+```html
+{% extends "base.html" %}
+{# The alert queue (Ahmad, AHM-02). The filters swap only the #alerts table; the
+   table also reloads itself on "refresh" (sent by app.js when the server says
+   alerts changed) and every 30 seconds in case the live stream is down. #}
+{% block title %}Alerts{% endblock %}
+{% block content %}
+<h1>Alerts</h1>
+
+<form id="filters" class="filters" method="get" action="/">
+  <label for="status">Status</label>
+  <select id="status" name="status"
+          hx-get="/" hx-target="#alerts" hx-select="#alerts" hx-swap="outerHTML"
+          hx-include="#filters" hx-push-url="true">
+    <option value="">All</option>
+    {% for value in statuses %}
+    <option value="{{ value }}" {% if value == status %}selected{% endif %}>{{ status_labels[value] }}</option>
+    {% endfor %}
+  </select>
+  <label for="severity">Severity</label>
+  <select id="severity" name="severity"
+          hx-get="/" hx-target="#alerts" hx-select="#alerts" hx-swap="outerHTML"
+          hx-include="#filters" hx-push-url="true">
+    <option value="">All</option>
+    {% for value in severities %}
+    <option value="{{ value }}" {% if value == severity %}selected{% endif %}>{{ value | capitalize }}</option>
+    {% endfor %}
+  </select>
+  {# Without JavaScript the selects do nothing on their own; this button still works. #}
+  <button type="submit" class="secondary">Apply</button>
+</form>
+
+<div id="alerts" hx-get="/?status={{ status | urlencode }}&amp;severity={{ severity | urlencode }}"
+     hx-trigger="refresh, every 30s" hx-select="#alerts" hx-swap="outerHTML" aria-live="polite">
+  {% if alerts %}
+  <table class="stack">
+    <caption>{{ alerts | length }} alert{{ "" if alerts | length == 1 else "s" }}, most severe first</caption>
+    <thead>
+      <tr>
+        <th scope="col">Severity</th>
+        <th scope="col">Alert</th>
+        <th scope="col">Source → destination:port</th>
+        <th scope="col">Count</th>
+        <th scope="col">Status</th>
+        <th scope="col">Assignee</th>
+        <th scope="col">Last seen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for alert in alerts %}
+      <tr>
+        <td data-label="Severity">{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %}</td>
+        <td data-label="Alert"><a href="/alerts/{{ alert.finding_id }}">{{ alert.title }}</a></td>
+        <td data-label="Source → destination" class="mono">{{ alert.src_ip }} → {{ alert.dst_ip }}:{{ alert.dst_port }}</td>
+        <td data-label="Count">{{ alert.count }}</td>
+        <td data-label="Status">{{ status_labels.get(alert.status, alert.status) }}</td>
+        <td data-label="Assignee">{{ alert.assignee or "—" }}</td>
+        <td data-label="Last seen">{{ alert.last_seen | utc_time }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No alerts{% if status or severity %} match these filters{% endif %}.
+    <a href="/upload">Upload a capture</a> to check it.</p>
+  {% endif %}
+</div>
+{% endblock %}
+```
+
+and the upload page, `upload.html`:
+
+```html
+{% extends "base.html" %}
+{# Upload page (Ahmad, AHM-02). The form posts to the JSON API; app.js shows the
+   answer as plain text. The request waits for the whole analysis, AI included. #}
+{% block title %}Upload{% endblock %}
+{% block content %}
+<h1>Upload a capture</h1>
+<p>Choose a <code>.pcap</code> or <code>.pcapng</code> capture, or a <code>.zip</code> or
+  <code>.tar.gz</code> of Zeek logs. It is analyzed on this computer and then deleted.</p>
+
+<form id="upload-form" class="card" method="post" action="/api/analyses"
+      enctype="multipart/form-data"
+      hx-post="/api/analyses" hx-encoding="multipart/form-data" hx-swap="none"
+      hx-indicator="#upload-busy" hx-disabled-elt="find button">
+  <label for="file">Capture or log archive</label>
+  <input id="file" name="file" type="file" required
+         accept=".pcap,.pcapng,.cap,.zip,.tar.gz,.tgz">
+  <button type="submit">Analyze</button>
+  <p id="upload-busy" class="htmx-indicator" role="status">Analyzing… this can take a few minutes.</p>
+</form>
+
+<p id="upload-result" role="status" aria-live="polite"></p>
+<p><a href="/">Go to the alert queue</a></p>
+{% endblock %}
+```
+
+No template uses `|safe`: titles, addresses and names come from network traffic, which an attacker writes. The queue links each alert to its detail page, which arrives in AHM-03.
+
+**Step 5.** Create `maxguard/web/static/app.css` (it already holds the styles for the pages of AHM-03 and AHM-06):
+
+```css
+/* MaxGuard dashboard styles (Ahmad, AHM-02). System fonts only: nothing is
+   downloaded. Colors meet WCAG AA contrast; severity is always text + color. */
+
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #1b1f24;
+  --muted: #57606a;
+  --line: #d0d7de;
+  --accent: #0b5cad;
+  --focus: #e36209;
+  --critical: #82071e;
+  --high: #b42318;
+  --medium: #8a5300;
+  --low: #0b5cad;
+  --info: #57606a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 16px; top: 8px; background: var(--panel); padding: 8px; z-index: 1; }
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  padding: 12px 16px;
+  background: #0d1b2a;
+  color: #ffffff;
+}
+.brand { font-weight: 700; font-size: 1.2rem; }
+.top nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.top nav a { color: #ffffff; text-decoration: none; padding: 4px 0; }
+.top nav a:hover { text-decoration: underline; }
+.mode-switch { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.mode-switch button { background: transparent; color: #ffffff; border: 1px solid #8fa3b8; }
+.mode-switch button[aria-pressed="true"] { background: #ffffff; color: #0d1b2a; font-weight: 700; }
+
+.privacy {
+  margin: 0;
+  padding: 6px 16px;
+  background: #dff3e4;
+  color: #14532d;
+  font-size: 0.9rem;
+}
+
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 1.6rem; margin: 8px 0 16px; overflow-wrap: anywhere; }
+h2 { font-size: 1.2rem; margin-top: 32px; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; }
+.muted { color: var(--muted); }
+.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 0.9em; overflow-wrap: anywhere; }
+.empty { background: var(--panel); border: 1px dashed var(--line); padding: 16px; }
+.error { color: var(--high); font-weight: 600; }
+.message { margin: 8px 0 0; font-weight: 600; }
+
+button {
+  font: inherit;
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  cursor: pointer;
+}
+button.secondary { background: var(--panel); color: var(--accent); }
+button[disabled] { opacity: 0.6; cursor: wait; }
+select, input[type="text"], input[type="file"] {
+  font: inherit;
+  padding: 5px 8px;
+  border: 1px solid var(--muted);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  max-width: 100%;
+}
+
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 16px; }
+.status-form, #upload-form { display: grid; gap: 8px; max-width: 420px; }
+
+/* Severity badges: the word is always there; the color only helps. */
+.sev {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.sev-critical { background: var(--critical); }
+.sev-high { background: var(--high); }
+.sev-medium { background: var(--medium); }
+.sev-low { background: var(--low); }
+.sev-info { background: var(--info); }
+
+table { width: 100%; border-collapse: collapse; background: var(--panel); }
+caption { text-align: left; color: var(--muted); padding: 4px 0; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: #eef1f4; }
+.table-wrap { overflow-x: auto; }
+tr:target { background: #fff3c4; }  /* the evidence row a citation link points to */
+
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; }
+.facts dt { font-weight: 600; }
+.facts dd { margin: 0; }
+
+.banner {
+  border: 2px solid var(--medium);
+  background: #fff4d6;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.ai-sentences li { margin-bottom: 8px; }
+.chip {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #eef1f4;
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+.controls { padding-left: 20px; }
+.controls li { margin-bottom: 8px; }
+.version { font-weight: 400; color: var(--muted); font-size: 0.9rem; }
+
+.home-view h1 { font-size: 1.5rem; }
+.home-view .sev { font-size: 1rem; padding: 4px 12px; }
+.home-action { font-size: 1.2rem; font-weight: 600; }
+
+/* htmx shows this while a request runs (its own inline style is switched off: CSP). */
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: block; }
+
+/* Phones (375 px): each table row becomes a small card with labels. */
+@media (max-width: 700px) {
+  .stack thead { position: absolute; left: -9999px; }
+  .stack tr { display: block; border-bottom: 2px solid var(--line); padding: 4px 0; }
+  .stack td { display: grid; grid-template-columns: 9rem 1fr; gap: 8px; border: 0; padding: 4px 8px; }
+  .stack td::before {
+    content: attr(data-label);
+    font: 600 0.9rem system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--muted);
+  }
+  .stack td .sev { justify-self: start; }
+  .facts { grid-template-columns: 1fr; }
+  .facts dd { margin-bottom: 8px; }
+  .mode-switch { margin-left: 0; }
+}
+```
+
+and `maxguard/web/static/app.js`, the only script besides htmx:
+
+```javascript
+// MaxGuard dashboard script (Ahmad, AHM-02). Everything else is htmx.
+// 1) Live refresh: the server sends "alerts-changed" on /api/stream; the alert
+//    table reloads itself on "refresh" (it also polls every 30 s as a fallback).
+// 2) Upload: /api/analyses answers JSON; show it as plain text (textContent,
+//    never innerHTML, because an error message can contain a file name).
+"use strict";
+
+document.addEventListener("DOMContentLoaded", function () {
+  if (document.getElementById("alerts") && window.EventSource) {
+    const stream = new EventSource("/api/stream");
+    stream.addEventListener("alerts-changed", function () {
+      htmx.trigger("#alerts", "refresh");
+    });
+  }
+
+  const form = document.getElementById("upload-form");
+  if (form) {
+    form.addEventListener("htmx:afterRequest", function (event) {
+      document.getElementById("upload-result").textContent = uploadMessage(event.detail.xhr);
+    });
+  }
+});
+
+function uploadMessage(xhr) {
+  let body = {};
+  try {
+    body = JSON.parse(xhr.responseText);
+  } catch (error) {
+    body = {};
+  }
+  if (xhr.status === 200) {
+    const n = body.findings;
+    return "Done: " + n + " finding" + (n === 1 ? "" : "s") + ". They are in the alert queue.";
+  }
+  if (xhr.status === 0) {
+    return "Upload failed: the MaxGuard server could not be reached.";
+  }
+  const detail = typeof body.detail === "string" ? body.detail : "error " + xhr.status;
+  return "Upload failed: " + detail;
+}
+```
+
+The live refresh: the server sends `alerts-changed` on `/api/stream`, and the table reloads itself; `hx-trigger="refresh, every 30s"` is the fallback. The upload answer is written with `textContent`, never `innerHTML`, because an error message can contain a file name.
+
+**Step 6.** Create the tests `tests/unit/test_web.py`:
+
+```python
+"""Tests for the dashboard pages (Ahmad, AHM-02).
+
+Reports come from maxguard.pipeline.analyze on the Zeek log fixtures (no Zeek,
+no AI) and are saved through the stores, exactly as the upload endpoint does.
+"""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import re
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from maxguard.api.app import STATIC_DIR, create_app
+from maxguard.pipeline import analyze
+
+FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "zeek"
+HTMX_SHA256 = "d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717"
+RECEIVED_AT = 1791300000.0  # a fixed "upload time" (Oct 2026), so tests never read the clock
+HOSTILE = "<script>alert('xss')</script>"
+
+
+@pytest.fixture(scope="module")
+def telnet_report(tmp_path_factory) -> dict:
+    return analyze(FIXTURES / "telnet", tmp_path_factory.mktemp("telnet"), explain=False)
+
+
+@pytest.fixture(scope="module")
+def ftp_report(tmp_path_factory) -> dict:
+    return analyze(FIXTURES / "ftp", tmp_path_factory.mktemp("ftp"), explain=False)
+
+
+@pytest.fixture
+def app(tmp_path):
+    return create_app(tmp_path / "data", explain=False)
+
+
+@pytest.fixture
+def client(app) -> TestClient:
+    return TestClient(app)
+
+
+def save(app, report: dict, received_at: float = RECEIVED_AT) -> str:
+    """Store a report the way POST /api/analyses does."""
+    analysis_id = app.state.state_store.save_analysis(report, received_at=received_at)
+    app.state.event_store.write(report.get("events", []))
+    return analysis_id
+
+
+def with_ai_sentences(report: dict) -> dict:
+    """A copy of the report with one AI sentence per finding, citing its evidence."""
+    report = copy.deepcopy(report)
+    for finding in report["findings"]:
+        ids = [e["record_id"] for e in finding["evidence"]]
+        finding["explanation_sentences"] = [
+            {"text": "A device logged in with Telnet, so the session was readable.",
+             "evidence_ids": ids}]
+        finding["explanation"] = finding["explanation_sentences"][0]["text"]
+    report["ai"] = {"status": "ok", "model": "qwen3:4b", "explained": len(report["findings"]),
+                    "dropped_sentences": 0, "reason": None}
+    return report
+
+
+def telnet_id(report: dict) -> str:
+    return report["findings"][0]["finding_id"]
+
+
+# ---------- AHM-02: layout, queue, upload ----------
+
+def test_htmx_file_is_the_reviewed_one():
+    data = (STATIC_DIR / "htmx-2.0.11.min.js").read_bytes()
+    assert hashlib.sha256(data).hexdigest() == HTMX_SHA256
+
+
+@pytest.mark.parametrize("path", ["/", "/upload"])
+def test_pages_return_200_with_the_layout(client, path):
+    page = client.get(path)
+    assert page.status_code == 200
+    assert "Your data never leaves this computer." in page.text
+    assert '<script src="/static/htmx-2.0.11.min.js"' in page.text
+    assert 'href="/static/app.css"' in page.text
+    assert "default-src 'self'" in page.headers["content-security-policy"]
+    # not "no-referrer": Chrome then sends "Origin: null" on form posts, which the API refuses
+    assert page.headers["referrer-policy"] == "same-origin"
+
+
+def test_static_files_are_served(client):
+    assert client.get("/static/app.js").status_code == 200
+    assert client.get("/static/app.css").status_code == 200
+
+
+def test_queue_lists_the_telnet_alert(app, client, telnet_report):
+    save(app, telnet_report)
+    page = client.get("/")
+    assert "Telnet session in cleartext" in page.text
+    assert f'href="/alerts/{telnet_id(telnet_report)}"' in page.text
+    assert "172.18.0.3 → 172.18.0.2:23" in page.text
+    # severity as text and color: the word is in the badge with the color class
+    assert '<span class="sev sev-high">High</span>' in page.text
+
+
+def test_queue_has_the_htmx_wiring(client):
+    page = client.get("/")
+    assert 'hx-trigger="refresh, every 30s"' in page.text
+    assert page.text.count('hx-get="/" hx-target="#alerts" hx-select="#alerts"') == 2
+    assert 'new EventSource("/api/stream")' in client.get("/static/app.js").text
+
+
+def test_queue_filters(app, client, telnet_report, ftp_report):
+    save(app, telnet_report)
+    save(app, ftp_report, received_at=RECEIVED_AT + 1)
+    app.state.state_store.update_alert(telnet_id(telnet_report), actor="test",
+                                       at=RECEIVED_AT + 2, status="resolved")
+    resolved = client.get("/?status=resolved&severity=").text
+    assert "Telnet session in cleartext" in resolved
+    assert "FTP" not in resolved.split('id="alerts"')[1]
+    new = client.get("/", params={"status": "new"}).text
+    assert "Telnet session in cleartext" not in new
+    low = client.get("/", params={"severity": "low"}).text
+    assert "No alerts match these filters" in low
+
+
+def test_unknown_filter_value_is_a_400_page(client):
+    page = client.get("/?status=bogus")
+    assert page.status_code == 400
+    assert "status must be one of" in page.text
+
+
+def test_hostile_values_are_escaped(app, client, telnet_report):
+    report = with_ai_sentences(telnet_report)
+    finding = report["findings"][0]
+    finding["title"] = HOSTILE
+    finding["details"] = {"user": HOSTILE}
+    finding["explanation_sentences"][0]["text"] = HOSTILE
+    save(app, report)
+    app.state.state_store.update_alert(finding["finding_id"], actor="test",
+                                       at=RECEIVED_AT, assignee=HOSTILE)
+    for path in ("/",):  # the alert page comes in AHM-03
+        page = client.get(path).text
+        assert HOSTILE not in page
+        assert "&lt;script&gt;" in page
+
+
+@pytest.mark.parametrize("mode", ["analyst", "home"])
+def test_no_page_loads_anything_from_outside(app, client, telnet_report, mode):
+    save(app, with_ai_sentences(telnet_report))
+    client.cookies.set("mg_mode", mode)
+    pages = ["/", "/upload"]
+    for path in pages:
+        for url in re.findall(r'(?:src|href|action|hx-[a-z]+)="([^"]*)"', client.get(path).text):
+            assert not url.startswith(("http:", "https:", "//")), (path, url)
+
+
+def test_mode_switch_sets_the_cookie(client):
+    answer = client.post("/mode", data={"mode": "home", "next": "/assets"},
+                         follow_redirects=False)
+    assert answer.status_code == 303
+    assert answer.headers["location"] == "/assets"
+    assert "mg_mode=home" in answer.headers["set-cookie"]
+
+
+def test_mode_switch_never_redirects_off_site(client):
+    answer = client.post("/mode", data={"mode": "home", "next": "//evil.example/"},
+                         follow_redirects=False)
+    assert answer.headers["location"] == "/"
+
+
+def test_cross_site_mode_switch_is_refused(client):
+    answer = client.post("/mode", data={"mode": "home"},
+                         headers={"Sec-Fetch-Site": "cross-site"})
+    assert answer.status_code == 403
+
+
+def test_upload_page_posts_to_the_api(client):
+    page = client.get("/upload").text
+    assert 'hx-post="/api/analyses"' in page
+    assert 'hx-encoding="multipart/form-data"' in page
+    assert 'href="/"' in page
+```
+
+Run them:
+
+```bash
+pytest tests/unit/test_web.py -q
+```
+
+Expected output:
+
+```text
+...............                                                                              [100%]
+15 passed in 1.69s
+```
+
+**Step 7.** Start the server and check the headers every page sends:
+
+```bash
+# terminal 1:
+uvicorn maxguard.api.app:create_app --factory --host 127.0.0.1 --port 8000
+# terminal 2:
+curl -s -D - -o /dev/null http://127.0.0.1:8000/ | grep -i -E '^(content-security-policy|referrer-policy|x-content-type-options):'
+```
+
+Expected output:
+
+```text
+content-security-policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'
+x-content-type-options: nosniff
+referrer-policy: same-origin
+```
+
+**Step 8.** Open http://127.0.0.1:8000, upload `tests/fixtures/zeek/telnet` as a `.zip` on the Upload page, and watch the alert appear in the queue in another tab without reloading. Then check the pages in a 375-pixel-wide window (your browser's device toolbar) and with the keyboard only (Tab, Enter, arrow keys). In planning, Chromium at 375 px showed no sideways scrolling, and every control was reachable with Tab.
+
+**Step 9.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -498,7 +1233,7 @@ git push -u origin HEAD
 
 #### How to test
 
-`pytest tests/unit/test_web.py -q` passes. With `docker compose -f docker/compose.yaml -f docker/compose.dev.yaml up --build`, uploading `tests/pcaps/telnet.pcap` on http://127.0.0.1:8000/upload makes the Telnet alert appear in the queue without reloading the page.
+`pytest tests/unit/test_web.py -q` passes. Uploading the Telnet fixture logs on http://127.0.0.1:8000/upload makes the Telnet alert appear in the queue in another tab without reloading the page.
 
 #### What you just did and why
 
@@ -518,11 +1253,9 @@ Server-rendered pages with htmx keep the whole dashboard in Python and one small
 
 ### AHM-03: Alert detail page with Analyst and Home modes
 
-**Due:** Week 4 (due Fri Nov 6) · **Milestone:** `W4 Full offline report` · **Needs first:** [AHM-02](#ahm-02-dashboard-layout-alert-queue-and-upload-page), [JON-02](jonattan.md#jon-02-ollama-client-one-evidence-citing-explanation-per-finding), [JON-04](jonattan.md#jon-04-home-mode-text-for-every-rule) · **Kind:** design
+**Due:** Week 4 (due Fri Nov 6) · **Milestone:** `W4 Full offline report` · **Needs first:** [AHM-02](#ahm-02-dashboard-layout-alert-queue-and-upload-page), [JON-02](jonattan.md#jon-02-ollama-client-one-evidence-citing-explanation-per-finding), [JON-04](jonattan.md#jon-04-home-mode-text-for-every-rule) · **Kind:** code, tested
 
 **Issue labels:** `type:task` `phase:alpha` `owner:ahmad` `area:ui` `critical-path`
-
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
 
 #### Goal
 
@@ -545,21 +1278,771 @@ git checkout -b ahmad/alert-detail
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** `GET /alerts/{finding_id}` → `templates/alert.html` from `state_store.get_alert(finding_id)` (404 page if missing).
+**Step 2.** Extend `maxguard/web/routes.py` with the alert page and the status form (the new parts are under `# ---------- AHM-03`; the queue now passes the Home text too):
 
-**Step 3.** Analyst mode: an evidence table (`record_id`, log, uid, time) where each row has `id="ev-<record_id>"`; controls grouped by framework, showing the version next to each framework name; techniques with their tactic; then the AI sentences, each followed by small links `#ev-<record_id>` (the citation chips).
+```python
+"""The dashboard's HTML pages (Ahmad, AHM-02, AHM-03).
 
-**Step 4.** If the stored report's `ai.status` is `unavailable`, show a clear banner with `ai.reason` (for example "model 'qwen3:4b' not found: run ollama pull qwen3:4b").
+create_app() in maxguard/api/app.py includes this router when it imports.
 
-**Step 5.** Home mode (cookie `mg_mode=home`): the headline and action from `maxguard.ai.load_home_text()[rule_id]`, the severity as words ("High: fix this week"), and no IDs or framework names.
+    GET   /                             alert queue (filters: ?status=&severity=)
+    GET   /upload                       upload form (posts to /api/analyses)
+    GET   /alerts/{finding_id}          one alert, Analyst or Home mode
+    PATCH /alerts/{finding_id}/status   change status/assignee, returns the form again
+    POST  /mode                         Analyst/Home switch (cookie mg_mode)
 
-**Step 6.** Status and assignee: a small form that sends `hx-patch` to an HTML endpoint `/alerts/{finding_id}/status`, which calls `state_store.update_alert(finding_id, actor=<name from the mg_actor cookie>, at=time.time(), status=..., assignee=...)` and returns the updated fragment. The page asks for a display name once and stores it in `mg_actor`.
+The pages read the stores only through request.app.state. Jinja2 escapes every
+value; nothing from traffic or from the AI is ever marked |safe, because an
+attacker writes the traffic (docs/ARCHITECTURE.md section 14).
+"""
 
-**Step 7.** AI text and everything from traffic is plain text in the templates: never `|safe`.
+from __future__ import annotations
 
-**Step 8.** Tests in `tests/unit/test_web.py`: both modes render, the citation links point to existing evidence rows, a status change is saved and appears in `list_audit()`, and the banner shows when the AI was unavailable.
+import time
+from datetime import UTC, datetime
+from pathlib import Path
 
-**Step 9.** Commit, push, and open the pull request:
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.templating import Jinja2Templates
+
+from maxguard.ai import load_home_text
+from maxguard.api.app import notify_change
+from maxguard.models import SEVERITIES
+from maxguard.storage.state import ALERT_STATUSES
+
+router = APIRouter()
+TEMPLATES = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
+
+MODES = ("analyst", "home")
+YEAR_SECONDS = 365 * 24 * 3600
+MAX_NAME_LENGTH = 100      # the same limit as "actor" in PATCH /api/alerts
+
+# Home mode: the severity in plain words (no jargon), and color is never the only signal.
+SEVERITY_WORDS = {
+    "critical": "Critical: fix this today",
+    "high": "High: fix this week",
+    "medium": "Medium: fix this month",
+    "low": "Low: fix when you can",
+    "info": "Info: nothing to fix, good to know",
+}
+STATUS_LABELS = {"new": "New", "investigating": "Investigating", "resolved": "Resolved",
+                 "false_positive": "False positive"}
+
+# Sent with every page. The dashboard needs nothing from outside this computer, so the
+# browser is told to refuse anything else, even if some text ever slipped past escaping.
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; "
+        "connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; "
+        "frame-ancestors 'none'"),
+    "X-Content-Type-Options": "nosniff",
+    # "same-origin", not "no-referrer": with no-referrer, Chrome sends "Origin: null" on
+    # form posts, and the API's cross-site check (rightly) refuses those.
+    "Referrer-Policy": "same-origin",
+}
+
+
+# ---------- small helpers ----------
+
+def now() -> float:
+    """The clock, in one place (the web layer may read it; the engine never does)."""
+    return time.time()
+
+
+def utc_time(ts: float | None) -> str:
+    """Unix seconds -> "2026-10-06 14:03:22 UTC" (the same on every machine)."""
+    if ts is None:
+        return ""
+    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+TEMPLATES.env.filters["utc_time"] = utc_time
+
+
+def mode_of(request: Request) -> str:
+    """"home" or "analyst" (the default) from the mg_mode cookie."""
+    return "home" if request.cookies.get("mg_mode") == "home" else "analyst"
+
+
+def actor_of(request: Request) -> str:
+    """The display name stored in the mg_actor cookie ("" when not set yet)."""
+    return request.cookies.get("mg_actor", "").strip()[:MAX_NAME_LENGTH]
+
+
+def render(request: Request, name: str, context: dict, status_code: int = 200) -> HTMLResponse:
+    """Render a template with the values every page needs, plus the security headers."""
+    full = {"mode": mode_of(request), "severities": SEVERITIES,
+            "severity_words": SEVERITY_WORDS, "status_labels": STATUS_LABELS, **context}
+    response = TEMPLATES.TemplateResponse(request, name, full, status_code=status_code)
+    response.headers.update(SECURITY_HEADERS)
+    return response
+
+
+def error_page(request: Request, status_code: int, message: str) -> HTMLResponse:
+    return render(request, "error.html", {"message": message}, status_code=status_code)
+
+
+def empty_to_none(value: str | None) -> str | None:
+    """A filter <select> sends "" for "All"."""
+    return value or None
+
+
+def safe_next(path: str) -> str:
+    """Only a path on this site: "//evil.example" or "https://..." would be an open redirect."""
+    if path.startswith("/") and not path.startswith("//") and "\\" not in path:
+        return path
+    return "/"
+
+
+# ---------- AHM-02: queue, upload, mode switch ----------
+
+@router.get("/", response_class=HTMLResponse)
+def queue(request: Request, status: str | None = None, severity: str | None = None):
+    status, severity = empty_to_none(status), empty_to_none(severity)
+    try:
+        alerts = request.app.state.state_store.list_alerts(status=status, severity=severity)
+    except ValueError as err:  # unknown status or severity in the URL
+        return error_page(request, 400, str(err))
+    return render(request, "queue.html", {
+        "alerts": alerts, "status": status or "", "severity": severity or "",
+        "statuses": ALERT_STATUSES, "home_text": load_home_text(),
+    })
+
+
+@router.get("/upload", response_class=HTMLResponse)
+def upload_page(request: Request):
+    return render(request, "upload.html", {})
+
+
+@router.post("/mode")
+async def switch_mode(request: Request):
+    """The Analyst/Home switch: a plain form, so it works with the keyboard and without
+    JavaScript. The cookie is only a display preference, not a security setting."""
+    form = await request.form()
+    mode = form.get("mode")
+    response = RedirectResponse(safe_next(str(form.get("next", "/"))), status_code=303)
+    if mode in MODES:
+        response.set_cookie("mg_mode", mode, max_age=YEAR_SECONDS, path="/",
+                            samesite="lax", httponly=True)
+    return response
+
+
+# ---------- AHM-03: alert detail ----------
+
+def controls_by_framework(controls: list[dict]) -> list[dict]:
+    """[{"framework", "version", "controls": [...]}, ...] in the order they first appear."""
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for control in controls:
+        groups.setdefault((control["framework"], control["version"]), []).append(control)
+    return [{"framework": framework, "version": version, "controls": items}
+            for (framework, version), items in groups.items()]
+
+
+def ai_status(request: Request, alert: dict) -> dict:
+    """The "ai" part of the report that last updated this alert."""
+    report = request.app.state.state_store.get_analysis(alert["analysis_id"]) or {}
+    return report.get("ai") or {"status": "disabled", "reason": None}
+
+
+def status_context(alert: dict, actor: str, message: str = "") -> dict:
+    return {"alert": alert, "actor": actor, "statuses": ALERT_STATUSES, "message": message}
+
+
+@router.get("/alerts/{finding_id}", response_class=HTMLResponse)
+def alert_detail(request: Request, finding_id: str):
+    alert = request.app.state.state_store.get_alert(finding_id)
+    if alert is None:
+        return error_page(request, 404, "No alert with this ID. It may have been removed.")
+    return render(request, "alert.html", {
+        **status_context(alert, actor_of(request)),
+        "groups": controls_by_framework(alert["controls"]),
+        "ai": ai_status(request, alert),
+        "home": load_home_text().get(alert["rule_id"]),
+    })
+
+
+@router.patch("/alerts/{finding_id}/status", response_class=HTMLResponse)
+async def change_status(request: Request, finding_id: str):
+    """Called by the htmx form on the alert page; returns the form again (a fragment).
+    The first time, the form also sends the person's display name ("actor"), which
+    is stored in the mg_actor cookie so the page does not ask again."""
+    form = await request.form()
+    actor = actor_of(request) or str(form.get("actor", "")).strip()
+    store = request.app.state.state_store
+    alert = store.get_alert(finding_id)
+    if alert is None:
+        return error_page(request, 404, "No alert with this ID.")
+    if not actor or len(actor) > MAX_NAME_LENGTH:
+        return render(request, "_status.html", status_context(
+            alert, "", f"Type your name (1 to {MAX_NAME_LENGTH} characters) first."), 400)
+    try:
+        alert = store.update_alert(
+            finding_id, actor=actor, at=now(),
+            status=empty_to_none(str(form.get("status", ""))),
+            assignee=str(form.get("assignee", "")).strip()[:MAX_NAME_LENGTH])
+    except ValueError as err:  # unknown status
+        return render(request, "_status.html", status_context(alert, actor, str(err)), 400)
+    notify_change(request.app)  # open queues refresh themselves
+    response = render(request, "_status.html", status_context(alert, actor, "Saved."))
+    response.set_cookie("mg_actor", actor, max_age=YEAR_SECONDS, path="/",
+                        samesite="lax", httponly=True)
+    return response
+
+
+@router.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    """Browsers ask for this on every page; answer "nothing" instead of a 404 log line."""
+    return Response(status_code=204)
+```
+
+`update_alert()` needs `at=now()`: the stores never read the clock, the web layer does, in one place (`now()`), so tests can replace it. After a change, `notify_change()` makes every open queue refresh itself.
+
+**Step 3.** Create `maxguard/web/templates/alert.html`:
+
+```html
+{% extends "base.html" %}
+{# One alert (Ahmad, AHM-03). Analyst mode: facts, AI sentences with citation links,
+   evidence, controls, techniques, and the status form. Home mode: the human-written
+   headline and action, and the severity in words; no IDs and no framework names.
+   AI text and anything from traffic is plain, escaped text: never |safe. #}
+{% block title %}{{ alert.title }}{% endblock %}
+{% block content %}
+<p class="back"><a href="/">← All alerts</a></p>
+
+{% if mode == "home" %}
+<article class="home-view card">
+  <h1>{{ home.headline if home else alert.title }}</h1>
+  <p class="home-severity">{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %}</p>
+  <h2>What to do</h2>
+  <p class="home-action">{{ home.action if home else "Ask the person who looks after your network to look at this alert." }}</p>
+  <p class="muted">Device involved: {{ alert.src_ip }}. Last seen {{ alert.last_seen | utc_time }}.</p>
+</article>
+{% else %}
+<h1>{{ alert.title }}</h1>
+<dl class="facts">
+  <dt>Severity</dt><dd>{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %} <span class="muted">(set by the rule, never by the AI)</span></dd>
+  <dt>Rule</dt><dd class="mono">{{ alert.rule_id }}</dd>
+  <dt>Source → destination</dt>
+  <dd class="mono">{{ alert.src_ip }}
+    → {{ alert.dst_ip }}:{{ alert.dst_port }} ({{ alert.protocol }})</dd>
+  <dt>Seen</dt><dd>{{ alert.count }} time{{ "" if alert.count == 1 else "s" }}, first {{ alert.first_seen | utc_time }}, last {{ alert.last_seen | utc_time }}</dd>
+  <dt>Detected by</dt><dd>{{ alert.source }}</dd>
+  {% for key, value in alert.details | dictsort %}
+  <dt>{{ key }}</dt><dd class="mono">{{ value }}</dd>
+  {% endfor %}
+</dl>
+
+<section aria-labelledby="ai-heading">
+  <h2 id="ai-heading">What the local AI says</h2>
+  {% if ai.status == "unavailable" %}
+  <div class="banner" role="alert">
+    <strong>The AI explanation is not available.</strong>
+    {{ ai.reason or "The local AI (Ollama) could not be reached." }}
+    The alert itself is complete: the rules, not the AI, decide what is an alert.
+  </div>
+  {% endif %}
+  {% if alert.explanation_sentences %}
+  <p class="muted">About: <strong>{{ alert.title }}</strong>, severity {{ alert.severity | capitalize }} (from the rule).
+    Each sentence links to the records it cites; check them before you trust it.</p>
+  <ul class="ai-sentences">
+    {% for sentence in alert.explanation_sentences %}
+    <li>{{ sentence.text }}
+      {% for record_id in sentence.evidence_ids %}<a class="chip mono" href="#ev-{{ record_id }}" title="Evidence record {{ record_id }}">{{ record_id }}</a>{% endfor %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% elif ai.status != "unavailable" %}
+  <p class="muted">No AI explanation for this alert{% if ai.status == "disabled" %} (the AI was switched off for this analysis){% endif %}.</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="ev-heading">
+  <h2 id="ev-heading">Evidence</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th scope="col">Record ID</th><th scope="col">Log</th><th scope="col">UID</th><th scope="col">Time</th></tr></thead>
+    <tbody>
+      {% for evidence in alert.evidence %}
+      <tr id="ev-{{ evidence.record_id }}" tabindex="-1">
+        <td class="mono">{{ evidence.record_id }}</td>
+        <td class="mono">{{ evidence.log }}</td>
+        <td class="mono">{{ evidence.uid }}</td>
+        <td>{{ evidence.ts | utc_time }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section aria-labelledby="controls-heading">
+  <h2 id="controls-heading">Compliance controls</h2>
+  {% for group in groups %}
+  <h3>{{ group.framework }} <span class="version">{{ group.version }}</span></h3>
+  <ul class="controls">
+    {% for control in group.controls %}
+    <li><span class="mono">{{ control.control_id }}</span> {{ control.title }}
+      <div class="muted">{{ control.rationale }}</div></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No compliance controls are mapped to this rule.</p>
+  {% endfor %}
+</section>
+
+<section aria-labelledby="attack-heading">
+  <h2 id="attack-heading">MITRE ATT&amp;CK techniques</h2>
+  {% if alert.attack %}
+  <ul class="controls">
+    {% for technique in alert.attack %}
+    <li><span class="mono">{{ technique.technique_id }}</span> {{ technique.name }}
+      <span class="muted">tactic: {{ technique.tactic }} · ATT&amp;CK {{ technique.version }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No ATT&amp;CK technique is mapped to this rule.</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="status-heading">
+  <h2 id="status-heading">Status and assignee</h2>
+  {% include "_status.html" %}
+</section>
+{% endif %}
+{% endblock %}
+```
+
+and the status form fragment `_status.html`, which the `PATCH` answer replaces in place:
+
+```html
+{# The status and assignee form (Ahmad, AHM-03). PATCH /alerts/{id}/status returns
+   this fragment again, and htmx swaps it in place. The display name is asked for
+   once and then kept in the mg_actor cookie (for the audit trail, not security). #}
+<form id="status-form" class="card status-form"
+      hx-patch="/alerts/{{ alert.finding_id }}/status" hx-target="this" hx-swap="outerHTML">
+  {% if actor %}
+  <p class="muted">Changes are recorded in the audit trail as <strong>{{ actor }}</strong>.</p>
+  {% else %}
+  <label for="actor">Your name (asked once, for the audit trail)</label>
+  <input id="actor" name="actor" type="text" maxlength="100" required autocomplete="name">
+  {% endif %}
+  <label for="alert-status">Status</label>
+  <select id="alert-status" name="status">
+    {% for value in statuses %}
+    <option value="{{ value }}" {% if value == alert.status %}selected{% endif %}>{{ status_labels[value] }}</option>
+    {% endfor %}
+  </select>
+  <label for="assignee">Assignee</label>
+  <input id="assignee" name="assignee" type="text" maxlength="100" value="{{ alert.assignee or '' }}">
+  <button type="submit">Save</button>
+  {% if message %}<p class="message" role="status">{{ message }}</p>{% endif %}
+</form>
+```
+
+Each evidence row has `id="ev-<record_id>"`, and every AI sentence is followed by links to the rows it cites: that is how an analyst checks the AI instead of trusting it (CLAUDE.md rule 3). Above the sentences the page repeats the rule's title and severity and says the severity comes from the rule. In Home mode the page shows the headline and action from `load_home_text()`, the severity in words ("High: fix this week") and the device's address, and no rule, record, framework or technique IDs. The status form appears in Analyst mode only: its words, such as "False positive", are jargon.
+
+**Step 4.** In Home mode the queue shows the Home headline instead of the rule title. Update `maxguard/web/templates/queue.html`:
+
+```html
+{% extends "base.html" %}
+{# The alert queue (Ahmad, AHM-02). The filters swap only the #alerts table; the
+   table also reloads itself on "refresh" (sent by app.js when the server says
+   alerts changed) and every 30 seconds in case the live stream is down. #}
+{% block title %}Alerts{% endblock %}
+{% block content %}
+<h1>Alerts</h1>
+
+<form id="filters" class="filters" method="get" action="/">
+  <label for="status">Status</label>
+  <select id="status" name="status"
+          hx-get="/" hx-target="#alerts" hx-select="#alerts" hx-swap="outerHTML"
+          hx-include="#filters" hx-push-url="true">
+    <option value="">All</option>
+    {% for value in statuses %}
+    <option value="{{ value }}" {% if value == status %}selected{% endif %}>{{ status_labels[value] }}</option>
+    {% endfor %}
+  </select>
+  <label for="severity">Severity</label>
+  <select id="severity" name="severity"
+          hx-get="/" hx-target="#alerts" hx-select="#alerts" hx-swap="outerHTML"
+          hx-include="#filters" hx-push-url="true">
+    <option value="">All</option>
+    {% for value in severities %}
+    <option value="{{ value }}" {% if value == severity %}selected{% endif %}>{{ value | capitalize }}</option>
+    {% endfor %}
+  </select>
+  {# Without JavaScript the selects do nothing on their own; this button still works. #}
+  <button type="submit" class="secondary">Apply</button>
+</form>
+
+<div id="alerts" hx-get="/?status={{ status | urlencode }}&amp;severity={{ severity | urlencode }}"
+     hx-trigger="refresh, every 30s" hx-select="#alerts" hx-swap="outerHTML" aria-live="polite">
+  {% if alerts %}
+  <table class="stack">
+    <caption>{{ alerts | length }} alert{{ "" if alerts | length == 1 else "s" }}, most severe first</caption>
+    <thead>
+      <tr>
+        <th scope="col">Severity</th>
+        <th scope="col">Alert</th>
+        <th scope="col">Source → destination:port</th>
+        <th scope="col">Count</th>
+        <th scope="col">Status</th>
+        <th scope="col">Assignee</th>
+        <th scope="col">Last seen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for alert in alerts %}
+      {% set home = home_text.get(alert.rule_id) %}
+      <tr>
+        <td data-label="Severity">{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %}</td>
+        <td data-label="Alert"><a href="/alerts/{{ alert.finding_id }}">{% if mode == "home" and home %}{{ home.headline }}{% else %}{{ alert.title }}{% endif %}</a></td>
+        <td data-label="Source → destination" class="mono">{{ alert.src_ip }} → {{ alert.dst_ip }}:{{ alert.dst_port }}</td>
+        <td data-label="Count">{{ alert.count }}</td>
+        <td data-label="Status">{{ status_labels.get(alert.status, alert.status) }}</td>
+        <td data-label="Assignee">{{ alert.assignee or "—" }}</td>
+        <td data-label="Last seen">{{ alert.last_seen | utc_time }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No alerts{% if status or severity %} match these filters{% endif %}.
+    <a href="/upload">Upload a capture</a> to check it.</p>
+  {% endif %}
+</div>
+{% endblock %}
+```
+
+**Step 5.** Add the AHM-03 tests to `tests/unit/test_web.py` (the new section is `# ---------- AHM-03`):
+
+```python
+"""Tests for the dashboard pages (Ahmad, AHM-02, AHM-03).
+
+Reports come from maxguard.pipeline.analyze on the Zeek log fixtures (no Zeek,
+no AI) and are saved through the stores, exactly as the upload endpoint does.
+"""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import re
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from maxguard.api.app import STATIC_DIR, create_app
+from maxguard.pipeline import analyze
+from maxguard.web import routes
+
+FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "zeek"
+HTMX_SHA256 = "d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717"
+RECEIVED_AT = 1791300000.0  # a fixed "upload time" (Oct 2026), so tests never read the clock
+HOSTILE = "<script>alert('xss')</script>"
+
+
+@pytest.fixture(scope="module")
+def telnet_report(tmp_path_factory) -> dict:
+    return analyze(FIXTURES / "telnet", tmp_path_factory.mktemp("telnet"), explain=False)
+
+
+@pytest.fixture(scope="module")
+def ftp_report(tmp_path_factory) -> dict:
+    return analyze(FIXTURES / "ftp", tmp_path_factory.mktemp("ftp"), explain=False)
+
+
+@pytest.fixture
+def app(tmp_path):
+    return create_app(tmp_path / "data", explain=False)
+
+
+@pytest.fixture
+def client(app) -> TestClient:
+    return TestClient(app)
+
+
+def save(app, report: dict, received_at: float = RECEIVED_AT) -> str:
+    """Store a report the way POST /api/analyses does."""
+    analysis_id = app.state.state_store.save_analysis(report, received_at=received_at)
+    app.state.event_store.write(report.get("events", []))
+    return analysis_id
+
+
+def with_ai_sentences(report: dict) -> dict:
+    """A copy of the report with one AI sentence per finding, citing its evidence."""
+    report = copy.deepcopy(report)
+    for finding in report["findings"]:
+        ids = [e["record_id"] for e in finding["evidence"]]
+        finding["explanation_sentences"] = [
+            {"text": "A device logged in with Telnet, so the session was readable.",
+             "evidence_ids": ids}]
+        finding["explanation"] = finding["explanation_sentences"][0]["text"]
+    report["ai"] = {"status": "ok", "model": "qwen3:4b", "explained": len(report["findings"]),
+                    "dropped_sentences": 0, "reason": None}
+    return report
+
+
+def telnet_id(report: dict) -> str:
+    return report["findings"][0]["finding_id"]
+
+
+# ---------- AHM-02: layout, queue, upload ----------
+
+def test_htmx_file_is_the_reviewed_one():
+    data = (STATIC_DIR / "htmx-2.0.11.min.js").read_bytes()
+    assert hashlib.sha256(data).hexdigest() == HTMX_SHA256
+
+
+@pytest.mark.parametrize("path", ["/", "/upload"])
+def test_pages_return_200_with_the_layout(client, path):
+    page = client.get(path)
+    assert page.status_code == 200
+    assert "Your data never leaves this computer." in page.text
+    assert '<script src="/static/htmx-2.0.11.min.js"' in page.text
+    assert 'href="/static/app.css"' in page.text
+    assert "default-src 'self'" in page.headers["content-security-policy"]
+    # not "no-referrer": Chrome then sends "Origin: null" on form posts, which the API refuses
+    assert page.headers["referrer-policy"] == "same-origin"
+
+
+def test_static_files_are_served(client):
+    assert client.get("/static/app.js").status_code == 200
+    assert client.get("/static/app.css").status_code == 200
+
+
+def test_queue_lists_the_telnet_alert(app, client, telnet_report):
+    save(app, telnet_report)
+    page = client.get("/")
+    assert "Telnet session in cleartext" in page.text
+    assert f'href="/alerts/{telnet_id(telnet_report)}"' in page.text
+    assert "172.18.0.3 → 172.18.0.2:23" in page.text
+    # severity as text and color: the word is in the badge with the color class
+    assert '<span class="sev sev-high">High</span>' in page.text
+
+
+def test_queue_has_the_htmx_wiring(client):
+    page = client.get("/")
+    assert 'hx-trigger="refresh, every 30s"' in page.text
+    assert page.text.count('hx-get="/" hx-target="#alerts" hx-select="#alerts"') == 2
+    assert 'new EventSource("/api/stream")' in client.get("/static/app.js").text
+
+
+def test_queue_filters(app, client, telnet_report, ftp_report):
+    save(app, telnet_report)
+    save(app, ftp_report, received_at=RECEIVED_AT + 1)
+    app.state.state_store.update_alert(telnet_id(telnet_report), actor="test",
+                                       at=RECEIVED_AT + 2, status="resolved")
+    resolved = client.get("/?status=resolved&severity=").text
+    assert "Telnet session in cleartext" in resolved
+    assert "FTP" not in resolved.split('id="alerts"')[1]
+    new = client.get("/", params={"status": "new"}).text
+    assert "Telnet session in cleartext" not in new
+    low = client.get("/", params={"severity": "low"}).text
+    assert "No alerts match these filters" in low
+
+
+def test_unknown_filter_value_is_a_400_page(client):
+    page = client.get("/?status=bogus")
+    assert page.status_code == 400
+    assert "status must be one of" in page.text
+
+
+def test_hostile_values_are_escaped(app, client, telnet_report):
+    report = with_ai_sentences(telnet_report)
+    finding = report["findings"][0]
+    finding["title"] = HOSTILE
+    finding["details"] = {"user": HOSTILE}
+    finding["explanation_sentences"][0]["text"] = HOSTILE
+    save(app, report)
+    app.state.state_store.update_alert(finding["finding_id"], actor="test",
+                                       at=RECEIVED_AT, assignee=HOSTILE)
+    for path in ("/", f"/alerts/{finding['finding_id']}"):
+        page = client.get(path).text
+        assert HOSTILE not in page
+        assert "&lt;script&gt;" in page
+
+
+@pytest.mark.parametrize("mode", ["analyst", "home"])
+def test_no_page_loads_anything_from_outside(app, client, telnet_report, mode):
+    save(app, with_ai_sentences(telnet_report))
+    client.cookies.set("mg_mode", mode)
+    pages = ["/", "/upload", f"/alerts/{telnet_id(telnet_report)}"]
+    for path in pages:
+        for url in re.findall(r'(?:src|href|action|hx-[a-z]+)="([^"]*)"', client.get(path).text):
+            assert not url.startswith(("http:", "https:", "//")), (path, url)
+
+
+def test_mode_switch_sets_the_cookie(client):
+    answer = client.post("/mode", data={"mode": "home", "next": "/assets"},
+                         follow_redirects=False)
+    assert answer.status_code == 303
+    assert answer.headers["location"] == "/assets"
+    assert "mg_mode=home" in answer.headers["set-cookie"]
+
+
+def test_mode_switch_never_redirects_off_site(client):
+    answer = client.post("/mode", data={"mode": "home", "next": "//evil.example/"},
+                         follow_redirects=False)
+    assert answer.headers["location"] == "/"
+
+
+def test_cross_site_mode_switch_is_refused(client):
+    answer = client.post("/mode", data={"mode": "home"},
+                         headers={"Sec-Fetch-Site": "cross-site"})
+    assert answer.status_code == 403
+
+
+def test_upload_page_posts_to_the_api(client):
+    page = client.get("/upload").text
+    assert 'hx-post="/api/analyses"' in page
+    assert 'hx-encoding="multipart/form-data"' in page
+    assert 'href="/"' in page
+
+
+# ---------- AHM-03: alert detail ----------
+
+def test_alert_detail_analyst_mode(app, client, telnet_report):
+    report = with_ai_sentences(telnet_report)
+    save(app, report)
+    page = client.get(f"/alerts/{telnet_id(report)}").text
+    finding = report["findings"][0]
+    assert finding["evidence"][0]["record_id"] in page
+    assert "NIST SP 800-53" in page
+    assert "Rev. 5 (Release 5.2.0)" in page  # the version next to the framework
+    assert "T1040" in page and "credential-access" in page
+    assert "A device logged in with Telnet" in page
+    assert 'id="status-form"' in page
+
+
+def test_controls_are_grouped_by_framework():
+    controls = [
+        {"framework": "PCI DSS", "version": "4.0.1", "control_id": "4.2.1"},
+        {"framework": "NIST SP 800-53", "version": "Rev. 5 (Release 5.2.0)", "control_id": "SC-8"},
+        {"framework": "PCI DSS", "version": "4.0.1", "control_id": "8.3.2"},
+    ]
+    groups = routes.controls_by_framework(controls)
+    assert [(g["framework"], len(g["controls"])) for g in groups] == [
+        ("PCI DSS", 2), ("NIST SP 800-53", 1)]
+
+
+def test_citation_links_point_to_evidence_rows(app, client, telnet_report):
+    report = with_ai_sentences(telnet_report)
+    save(app, report)
+    page = client.get(f"/alerts/{telnet_id(report)}").text
+    cited = re.findall(r'href="#ev-([0-9a-f]+)"', page)
+    assert cited  # at least one citation chip
+    for record_id in cited:
+        assert f'id="ev-{record_id}"' in page
+
+
+def test_alert_detail_home_mode(app, client, telnet_report):
+    report = with_ai_sentences(telnet_report)
+    save(app, report)
+    finding = report["findings"][0]
+    client.cookies.set("mg_mode", "home")
+    page = client.get(f"/alerts/{finding['finding_id']}").text
+    home = routes.load_home_text()["cleartext.telnet"]
+    assert home["headline"] in page
+    assert home["action"] in page
+    assert "High: fix this week" in page
+    main = page.split('<main id="main"', 1)[1]  # the page body, not the URLs in the nav
+    for jargon in (finding["evidence"][0]["record_id"], "cleartext.telnet", "NIST",
+                   "PCI DSS", "CISA", "CJIS", "T1040", "ATT&amp;CK"):
+        assert jargon not in main.replace(f"/alerts/{finding['finding_id']}", "")
+
+
+def test_unknown_alert_is_a_404_page(client):
+    page = client.get("/alerts/0000000000000000")
+    assert page.status_code == 404
+    assert "No alert with this ID" in page.text
+
+
+def test_ai_unavailable_banner_shows_the_reason(app, client, telnet_report):
+    report = copy.deepcopy(telnet_report)
+    reason = "model 'qwen3:4b' not found: run ollama pull qwen3:4b"
+    report["ai"] = {"status": "unavailable", "model": "qwen3:4b", "explained": 0,
+                    "dropped_sentences": 0, "reason": reason}
+    save(app, report)
+    page = client.get(f"/alerts/{telnet_id(report)}").text
+    assert 'class="banner" role="alert"' in page
+    assert "model &#39;qwen3:4b&#39; not found: run ollama pull qwen3:4b" in page
+
+
+def test_no_banner_when_the_ai_worked(app, client, telnet_report):
+    save(app, with_ai_sentences(telnet_report))
+    assert 'class="banner"' not in client.get(f"/alerts/{telnet_id(telnet_report)}").text
+
+
+def test_status_change_is_saved_and_audited(app, client, telnet_report):
+    save(app, telnet_report)
+    finding_id = telnet_id(telnet_report)
+    answer = client.patch(f"/alerts/{finding_id}/status",
+                          data={"actor": "Ahmad", "status": "investigating",
+                                "assignee": "Fiona"})
+    assert answer.status_code == 200
+    assert "Saved." in answer.text
+    assert "mg_actor=Ahmad" in answer.headers["set-cookie"]
+    alert = app.state.state_store.get_alert(finding_id)
+    assert (alert["status"], alert["assignee"]) == ("investigating", "Fiona")
+    audit = app.state.state_store.list_audit()
+    assert audit[0]["actor"] == "Ahmad"
+    assert audit[0]["target"] == finding_id
+    assert audit[0]["details"]["status"] == {"from": "new", "to": "investigating"}
+
+
+def test_status_change_uses_the_name_cookie(app, client, telnet_report):
+    save(app, telnet_report)
+    client.cookies.set("mg_actor", "Jaiden")
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"status": "resolved", "assignee": ""})
+    assert answer.status_code == 200
+    assert app.state.state_store.list_audit()[0]["actor"] == "Jaiden"
+
+
+def test_status_change_needs_a_name(app, client, telnet_report):
+    save(app, telnet_report)
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"status": "resolved"})
+    assert answer.status_code == 400
+    assert "Type your name" in answer.text
+    assert app.state.state_store.list_audit() == []
+
+
+def test_unknown_status_is_refused(app, client, telnet_report):
+    save(app, telnet_report)
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"actor": "Ahmad", "status": "deleted"})
+    assert answer.status_code == 400
+
+
+def test_cross_site_status_change_is_refused(app, client, telnet_report):
+    save(app, telnet_report)
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"actor": "x", "status": "resolved"},
+                          headers={"Origin": "http://evil.example"})
+    assert answer.status_code == 403
+    assert app.state.state_store.get_alert(telnet_id(telnet_report))["status"] == "new"
+```
+
+Run them:
+
+```bash
+pytest tests/unit/test_web.py -q
+```
+
+Expected output:
+
+```text
+...........................                                                                  [100%]
+27 passed in 3.34s
+```
+
+**Step 6.** Open an alert in both modes and change its status with the keyboard only. Then ask someone who is not technical to read the Home view of the Telnet alert and say what they would do.
+
+**Step 7.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -661,15 +2144,13 @@ A release is done when someone else can install and use it, not when the code is
 
 ### AHM-06: IP timeline and device inventory pages
 
-**Due:** Spring S1-S4 (due Fri Feb 12, 2027) · **Milestone:** `S1-S4 Live sensor` · **Needs first:** [AHM-03](#ahm-03-alert-detail-page-with-analyst-and-home-modes), [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) · **Kind:** design
+**Due:** Spring S1-S4 (due Fri Feb 12, 2027) · **Milestone:** `S1-S4 Live sensor` · **Needs first:** [AHM-03](#ahm-03-alert-detail-page-with-analyst-and-home-modes), [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) · **Kind:** code, tested
 
 **Issue labels:** `type:task` `phase:spring` `owner:ahmad` `area:ui`
 
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
-
 #### Goal
 
-Add `/timeline?ip=` (everything one address did, in time order, with the ATT&CK techniques of findings that involve it) and `/assets` (the device inventory with MAC addresses and names from device attribution).
+Add `/timeline?ip=` (everything one address did, in time order, with links to the alerts that involve it) and `/assets` (the device inventory with MAC addresses and names from device attribution).
 
 #### Prerequisites
 
@@ -688,13 +2169,1199 @@ git checkout -b ahmad/timeline-devices
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** `GET /timeline?ip=<address>`: validate the address with `ipaddress.ip_address` (400 if invalid); events from `event_store.query(ip=..., since=..., until=...)` (default the last 24 hours, with a selector up to 7 days); each row shows time, kind, summary, and a link to the alert if a finding cites that event.
+**Step 2.** The device table (JAK-08) must travel in the report: the log folder is deleted after an upload, so the dashboard cannot rebuild it later. In `maxguard/pipeline.py`, import `build_device_table` next to `build_inventory` and add a `devices` key after `assets` (a new optional report key, so nothing that reads reports breaks; tell Jaiden in the pull request):
 
-**Step 3.** `GET /assets`: the inventory of the latest analysis joined with the device table (MAC, host name, DNS names); each IP links to its timeline.
+```python
+"""The one function the CLI, the API, and the tests all call.
 
-**Step 4.** Tests in `tests/unit/test_web.py` with events written through `EventStore.write()`.
+analyze() turns a capture file or a folder of Zeek logs into a report dict
+(schema "maxguard.report/2", see docs/ARCHITECTURE.md). It never reads the
+clock, so the same input always gives the same report.
+"""
 
-**Step 5.** Commit, push, and open the pull request:
+from __future__ import annotations
+
+import hashlib
+import os
+from pathlib import Path
+
+import maxguard.rules  # noqa: F401  (importing registers every rule)
+from maxguard.adapters.live import LiveSensorAdapter
+from maxguard.adapters.pcap import PcapAdapter
+from maxguard.adapters.zeeklogs import ZeekLogAdapter
+from maxguard.mapping.loader import ATTACK, apply, load_all
+from maxguard.models import SEVERITIES, Finding
+from maxguard.rules.base import run_all
+
+# Order matters only for clarity: each adapter accepts a different kind of input
+# (a capture file; a folder with conn.log; a sensor folder with zeek/<interval>/).
+ADAPTERS = [PcapAdapter(), ZeekLogAdapter(), LiveSensorAdapter()]
+REPO_MAPPINGS_DIR = Path(__file__).resolve().parent.parent / "mappings"
+
+
+class UnsupportedInput(ValueError):
+    pass
+
+
+class MappingsNotFound(RuntimeError):
+    pass
+
+
+def mappings_dir() -> Path:
+    """Where the mapping YAML files live: $MAXGUARD_MAPPINGS_DIR, else the repo's mappings/.
+
+    The Docker image copies mappings/ to /opt/maxguard/mappings and sets the variable.
+    """
+    folder = Path(os.environ.get("MAXGUARD_MAPPINGS_DIR", REPO_MAPPINGS_DIR))
+    if not any(folder.glob("*.yaml")):
+        raise MappingsNotFound(f"no mapping files (*.yaml) in {folder}; "
+                               "set MAXGUARD_MAPPINGS_DIR to the mappings/ folder")
+    return folder
+
+
+def pick_adapter(path: Path):
+    for adapter in ADAPTERS:
+        if adapter.accepts(path):
+            return adapter
+    raise UnsupportedInput(f"{path.name}: not a pcap/pcapng file or a Zeek log folder/archive")
+
+
+def sha256_of(path: Path) -> str:
+    if path.is_dir():
+        return ""
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def sort_key(f: Finding):
+    return (SEVERITIES.index(f.severity), f.rule_id, f.src_ip, f.dst_ip, f.dst_port)
+
+
+def analyze(path, workdir, frameworks=None, explain=True, mapping_dir=None,
+            sensor_id=None) -> dict:
+    """1) pick adapter  2) get logs  3) run rules  4) apply mappings
+    5) build inventory and events  6) ask the local AI  7) return report dict
+
+    sensor_id names where the data came from in every event: by default "pcap" for
+    a capture and "import" for Zeek logs; the API passes the sensor's name for data
+    a sensor or host agent sent to POST /api/ingest."""
+    path, workdir = Path(path), Path(workdir)
+    adapter = pick_adapter(path)
+    log_dir = adapter.to_zeek_logs(path, workdir)
+
+    findings = sorted(run_all(log_dir), key=sort_key)
+
+    fw_files = load_all(Path(mapping_dir) if mapping_dir else mappings_dir())
+    apply(findings, fw_files, set(frameworks) if frameworks else None)
+
+    from maxguard.events.normalize import normalize
+    from maxguard.inventory import build as build_inventory
+    from maxguard.sensor.attribution import build_device_table
+
+    if sensor_id is None:
+        sensor_id = "pcap" if adapter.name == "pcap" else "import"
+    events = normalize(log_dir, sensor_id=sensor_id)
+    assets = build_inventory(log_dir, findings)
+
+    ai = {"status": "disabled", "model": None, "explained": 0, "dropped_sentences": 0,
+          "reason": None}
+    if explain:
+        from maxguard.ai.ollama_client import explain_all
+
+        ai = explain_all(findings, log_dir)
+
+    return {
+        "schema": "maxguard.report/2",
+        "input": {"name": path.name, "sha256": sha256_of(path), "adapter": adapter.name},
+        "tools": {"zeek": adapter.name == "pcap",
+                  "suricata": (log_dir / "eve.json").exists()},
+        "frameworks": [{"framework": fw["framework"], "version": fw["version"],
+                        "source": fw["source"]} for fw in fw_files if fw["framework"] != ATTACK],
+        "findings": [f.to_dict() for f in findings],
+        "assets": assets,
+        # MAC address, host name and DNS names per IP, from DHCP and DNS (JAK-08). The
+        # log folder is deleted after an upload, so the dashboard reads them from here.
+        "devices": build_device_table(log_dir),
+        "events": events,
+        "ai": ai,
+    }
+```
+
+Update `tests/unit/test_pipeline.py`: the report's key list gains `devices`, and a new test checks the DHCP fixture's laptop:
+
+```python
+"""The pipeline (Jaiden, JAI-03): picking an adapter and producing the report dict.
+
+These tests use the Zeek-log adapter on fixture folders, so they need no Zeek.
+tests/integration/ runs real captures through Zeek inside the engine image.
+"""
+
+import zipfile
+from pathlib import Path
+
+import pytest
+
+from maxguard.pipeline import MappingsNotFound, UnsupportedInput, analyze, pick_adapter
+
+FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "zeek"
+
+
+def test_text_file_is_unsupported_input(tmp_path):
+    path = tmp_path / "notes.txt"
+    path.write_text("hello\n")
+    with pytest.raises(UnsupportedInput):
+        pick_adapter(path)
+
+
+def test_zip_of_logs_is_analyzed(tmp_path):
+    archive = tmp_path / "telnet_logs.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        for log in sorted((FIXTURES / "telnet").glob("*.log")):
+            zf.write(log, arcname=log.name)
+
+    report = analyze(archive, tmp_path / "work", explain=False)
+
+    assert report["input"]["adapter"] == "zeek-logs"
+    assert [f["rule_id"] for f in report["findings"]] == ["cleartext.telnet"]
+
+
+def test_report_has_every_section(tmp_path):
+    report = analyze(FIXTURES / "telnet", tmp_path, explain=False)
+    assert report["schema"] == "maxguard.report/2"
+    assert set(report) == {"schema", "input", "tools", "frameworks", "findings", "assets",
+                           "devices", "events", "ai"}
+    assert report["ai"]["status"] == "disabled"
+
+
+def test_report_names_the_devices_from_dhcp_and_dns(tmp_path):
+    report = analyze(FIXTURES / "_handmade" / "dns_dhcp", tmp_path, explain=False)
+    [device] = [d for d in report["devices"] if d["mac"]]
+    assert device["ip"] == "192.168.56.50"
+    assert device["host_name"] == "laptop-lab"
+
+
+def test_findings_are_mapped_to_controls(tmp_path):
+    [finding] = analyze(FIXTURES / "telnet", tmp_path, explain=False)["findings"]
+    assert any(c["framework"] == "NIST SP 800-53" for c in finding["controls"])
+
+
+def test_same_input_gives_the_same_report(tmp_path):
+    first = analyze(FIXTURES / "cert_expired", tmp_path / "a", explain=False)
+    second = analyze(FIXTURES / "cert_expired", tmp_path / "b", explain=False)
+    assert first == second  # no clock, no randomness (CLAUDE.md rule 2)
+
+
+def test_missing_mapping_files_fail_loudly(tmp_path, monkeypatch):
+    monkeypatch.setenv("MAXGUARD_MAPPINGS_DIR", str(tmp_path / "nothing-here"))
+    with pytest.raises(MappingsNotFound):
+        analyze(FIXTURES / "telnet", tmp_path / "work", explain=False)
+```
+
+**Step 3.** Add the timeline and the devices page to `maxguard/web/routes.py` (the new section is `# ---------- AHM-06`):
+
+```python
+"""The dashboard's HTML pages (Ahmad, AHM-02, AHM-03, AHM-06).
+
+create_app() in maxguard/api/app.py includes this router when it imports.
+
+    GET   /                             alert queue (filters: ?status=&severity=)
+    GET   /upload                       upload form (posts to /api/analyses)
+    GET   /alerts/{finding_id}          one alert, Analyst or Home mode
+    PATCH /alerts/{finding_id}/status   change status/assignee, returns the form again
+    POST  /mode                         Analyst/Home switch (cookie mg_mode)
+    GET   /timeline?ip=&hours=&end=     everything one address did (AHM-06)
+    GET   /assets                       device inventory (AHM-06)
+
+The pages read the stores only through request.app.state. Jinja2 escapes every
+value; nothing from traffic or from the AI is ever marked |safe, because an
+attacker writes the traffic (docs/ARCHITECTURE.md section 14).
+"""
+
+from __future__ import annotations
+
+import ipaddress
+import time
+from datetime import UTC, datetime
+from pathlib import Path
+
+from fastapi import APIRouter, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.templating import Jinja2Templates
+
+from maxguard.ai import load_home_text
+from maxguard.api.app import notify_change
+from maxguard.inventory import ip_sort_key
+from maxguard.models import SEVERITIES
+from maxguard.storage.state import ALERT_STATUSES
+
+router = APIRouter()
+TEMPLATES = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
+
+MODES = ("analyst", "home")
+YEAR_SECONDS = 365 * 24 * 3600
+MAX_NAME_LENGTH = 100      # the same limit as "actor" in PATCH /api/alerts
+TIMELINE_HOURS = {1: "Last hour", 6: "Last 6 hours", 24: "Last 24 hours", 72: "Last 3 days",
+                  168: "Last 7 days"}  # the window selector: up to the 7 days events are kept
+TIMELINE_LIMIT = 1000
+
+# Home mode: the severity in plain words (no jargon), and color is never the only signal.
+SEVERITY_WORDS = {
+    "critical": "Critical: fix this today",
+    "high": "High: fix this week",
+    "medium": "Medium: fix this month",
+    "low": "Low: fix when you can",
+    "info": "Info: nothing to fix, good to know",
+}
+STATUS_LABELS = {"new": "New", "investigating": "Investigating", "resolved": "Resolved",
+                 "false_positive": "False positive"}
+
+# Sent with every page. The dashboard needs nothing from outside this computer, so the
+# browser is told to refuse anything else, even if some text ever slipped past escaping.
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; "
+        "connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; "
+        "frame-ancestors 'none'"),
+    "X-Content-Type-Options": "nosniff",
+    # "same-origin", not "no-referrer": with no-referrer, Chrome sends "Origin: null" on
+    # form posts, and the API's cross-site check (rightly) refuses those.
+    "Referrer-Policy": "same-origin",
+}
+
+
+# ---------- small helpers ----------
+
+def now() -> float:
+    """The clock, in one place (the web layer may read it; the engine never does)."""
+    return time.time()
+
+
+def utc_time(ts: float | None) -> str:
+    """Unix seconds -> "2026-10-06 14:03:22 UTC" (the same on every machine)."""
+    if ts is None:
+        return ""
+    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+TEMPLATES.env.filters["utc_time"] = utc_time
+
+
+def mode_of(request: Request) -> str:
+    """"home" or "analyst" (the default) from the mg_mode cookie."""
+    return "home" if request.cookies.get("mg_mode") == "home" else "analyst"
+
+
+def actor_of(request: Request) -> str:
+    """The display name stored in the mg_actor cookie ("" when not set yet)."""
+    return request.cookies.get("mg_actor", "").strip()[:MAX_NAME_LENGTH]
+
+
+def render(request: Request, name: str, context: dict, status_code: int = 200) -> HTMLResponse:
+    """Render a template with the values every page needs, plus the security headers."""
+    full = {"mode": mode_of(request), "severities": SEVERITIES,
+            "severity_words": SEVERITY_WORDS, "status_labels": STATUS_LABELS, **context}
+    response = TEMPLATES.TemplateResponse(request, name, full, status_code=status_code)
+    response.headers.update(SECURITY_HEADERS)
+    return response
+
+
+def error_page(request: Request, status_code: int, message: str) -> HTMLResponse:
+    return render(request, "error.html", {"message": message}, status_code=status_code)
+
+
+def empty_to_none(value: str | None) -> str | None:
+    """A filter <select> sends "" for "All"."""
+    return value or None
+
+
+def safe_next(path: str) -> str:
+    """Only a path on this site: "//evil.example" or "https://..." would be an open redirect."""
+    if path.startswith("/") and not path.startswith("//") and "\\" not in path:
+        return path
+    return "/"
+
+
+# ---------- AHM-02: queue, upload, mode switch ----------
+
+@router.get("/", response_class=HTMLResponse)
+def queue(request: Request, status: str | None = None, severity: str | None = None):
+    status, severity = empty_to_none(status), empty_to_none(severity)
+    try:
+        alerts = request.app.state.state_store.list_alerts(status=status, severity=severity)
+    except ValueError as err:  # unknown status or severity in the URL
+        return error_page(request, 400, str(err))
+    return render(request, "queue.html", {
+        "alerts": alerts, "status": status or "", "severity": severity or "",
+        "statuses": ALERT_STATUSES, "home_text": load_home_text(),
+    })
+
+
+@router.get("/upload", response_class=HTMLResponse)
+def upload_page(request: Request):
+    return render(request, "upload.html", {})
+
+
+@router.post("/mode")
+async def switch_mode(request: Request):
+    """The Analyst/Home switch: a plain form, so it works with the keyboard and without
+    JavaScript. The cookie is only a display preference, not a security setting."""
+    form = await request.form()
+    mode = form.get("mode")
+    response = RedirectResponse(safe_next(str(form.get("next", "/"))), status_code=303)
+    if mode in MODES:
+        response.set_cookie("mg_mode", mode, max_age=YEAR_SECONDS, path="/",
+                            samesite="lax", httponly=True)
+    return response
+
+
+# ---------- AHM-03: alert detail ----------
+
+def controls_by_framework(controls: list[dict]) -> list[dict]:
+    """[{"framework", "version", "controls": [...]}, ...] in the order they first appear."""
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for control in controls:
+        groups.setdefault((control["framework"], control["version"]), []).append(control)
+    return [{"framework": framework, "version": version, "controls": items}
+            for (framework, version), items in groups.items()]
+
+
+def ai_status(request: Request, alert: dict) -> dict:
+    """The "ai" part of the report that last updated this alert."""
+    report = request.app.state.state_store.get_analysis(alert["analysis_id"]) or {}
+    return report.get("ai") or {"status": "disabled", "reason": None}
+
+
+def status_context(alert: dict, actor: str, message: str = "") -> dict:
+    return {"alert": alert, "actor": actor, "statuses": ALERT_STATUSES, "message": message}
+
+
+@router.get("/alerts/{finding_id}", response_class=HTMLResponse)
+def alert_detail(request: Request, finding_id: str):
+    alert = request.app.state.state_store.get_alert(finding_id)
+    if alert is None:
+        return error_page(request, 404, "No alert with this ID. It may have been removed.")
+    return render(request, "alert.html", {
+        **status_context(alert, actor_of(request)),
+        "groups": controls_by_framework(alert["controls"]),
+        "ai": ai_status(request, alert),
+        "home": load_home_text().get(alert["rule_id"]),
+    })
+
+
+@router.patch("/alerts/{finding_id}/status", response_class=HTMLResponse)
+async def change_status(request: Request, finding_id: str):
+    """Called by the htmx form on the alert page; returns the form again (a fragment).
+    The first time, the form also sends the person's display name ("actor"), which
+    is stored in the mg_actor cookie so the page does not ask again."""
+    form = await request.form()
+    actor = actor_of(request) or str(form.get("actor", "")).strip()
+    store = request.app.state.state_store
+    alert = store.get_alert(finding_id)
+    if alert is None:
+        return error_page(request, 404, "No alert with this ID.")
+    if not actor or len(actor) > MAX_NAME_LENGTH:
+        return render(request, "_status.html", status_context(
+            alert, "", f"Type your name (1 to {MAX_NAME_LENGTH} characters) first."), 400)
+    try:
+        alert = store.update_alert(
+            finding_id, actor=actor, at=now(),
+            status=empty_to_none(str(form.get("status", ""))),
+            assignee=str(form.get("assignee", "")).strip()[:MAX_NAME_LENGTH])
+    except ValueError as err:  # unknown status
+        return render(request, "_status.html", status_context(alert, actor, str(err)), 400)
+    notify_change(request.app)  # open queues refresh themselves
+    response = render(request, "_status.html", status_context(alert, actor, "Saved."))
+    response.set_cookie("mg_actor", actor, max_age=YEAR_SECONDS, path="/",
+                        samesite="lax", httponly=True)
+    return response
+
+
+# ---------- AHM-06: timeline and assets ----------
+
+def alerts_for_ip(request: Request, ip: str) -> list[dict]:
+    """Alerts where this address is the source or the destination."""
+    alerts = request.app.state.state_store.list_alerts(limit=1000)
+    return [a for a in alerts if ip in (a["src_ip"], a["dst_ip"])]
+
+
+def evidence_links(alerts: list[dict]) -> dict[str, list[dict]]:
+    """record_id, Zeek uid or Community ID -> the alerts whose evidence names it.
+
+    A finding often cites a record that is not a timeline event (for example a
+    maxguard_cleartext.log line); the connection's conn.log event shares its uid,
+    so matching the uid too links the event to the alert."""
+    links: dict[str, list[dict]] = {}
+    for alert in alerts:
+        for evidence in alert["evidence"]:
+            for key in (evidence.get("record_id"), evidence.get("uid")):
+                if key:
+                    links.setdefault(key, []).append(alert)
+    return links
+
+
+def same_connection(event: dict, alert: dict) -> bool:
+    """Zeek uids are not unique across captures: `zeek -D` (used for uploads, so results
+    repeat) gives the first connection of every capture the same uid. So a uid match
+    only counts when the event is also between the alert's two hosts, on its port."""
+    return ({event["src_ip"], event["dst_ip"]} == {alert["src_ip"], alert["dst_ip"]}
+            and event["dst_port"] == alert["dst_port"])
+
+
+def alert_for_event(event: dict, links: dict[str, list[dict]]) -> dict | None:
+    for key in (event["event_id"], event["uid"], event["community_id"]):
+        for alert in links.get(key, []) if key else []:
+            if same_connection(event, alert):
+                return alert
+    return None
+
+
+@router.get("/timeline", response_class=HTMLResponse)
+def timeline(request: Request, ip: str = "", hours: int = Query(24, ge=1, le=168),
+             end: float | None = None):
+    """Everything one address did in a time window (default: the last 24 hours).
+    end (Unix seconds) moves the window back, for captures recorded earlier."""
+    context = {"ip": ip, "hours": hours, "hour_choices": TIMELINE_HOURS, "end": end,
+               "events": [], "alerts": []}
+    if not ip:
+        return render(request, "timeline.html", context)  # just the "which address?" form
+    try:
+        ip = str(ipaddress.ip_address(ip))  # also writes IPv6 the way Zeek does
+    except ValueError:
+        return error_page(request, 400, "That is not an IP address.")
+    until = end if end is not None else now()
+    events = request.app.state.event_store.query(ip=ip, since=until - hours * 3600,
+                                                 until=until, limit=TIMELINE_LIMIT)
+    alerts = alerts_for_ip(request, ip)
+    links = evidence_links(alerts)
+    rows = [{"event": event, "alert": alert_for_event(event, links)} for event in events]
+    context.update(ip=ip, until=until, rows=rows, alerts=alerts, limit=TIMELINE_LIMIT)
+    return render(request, "timeline.html", context)
+
+
+def join_devices(assets: list[dict], devices: list[dict]) -> list[dict]:
+    """Each asset plus mac, host_name and dns_names from the device table (JAK-08).
+
+    A full join: a device seen only in DHCP or DNS (for example a phone that
+    asked for an address and did nothing else yet) is still a device on the
+    network, so it gets a row too. Sorted by IP address, like both inputs."""
+    by_ip = {device["ip"]: device for device in devices}
+    rows = {asset["ip"]: {**asset, "mac": "", "host_name": "", "dns_names": []}
+            for asset in assets}
+    for ip, device in by_ip.items():
+        row = rows.setdefault(ip, {"ip": ip, "first_seen": device["first_seen"],
+                                   "services": [], "software": [], "finding_count": 0})
+        row.update(mac=device["mac"], host_name=device["host_name"],
+                   dns_names=device["dns_names"])
+    return [rows[ip] for ip in sorted(rows, key=ip_sort_key)]
+
+
+@router.get("/assets", response_class=HTMLResponse)
+def assets(request: Request):
+    store = request.app.state.state_store
+    newest = store.list_analyses(limit=1)
+    analysis = newest[0] if newest else None
+    report = store.get_analysis(analysis["analysis_id"]) if analysis else {}
+    rows = join_devices(report.get("assets", []), report.get("devices", []))
+    return render(request, "assets.html", {"analysis": analysis, "rows": rows})
+
+
+@router.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    """Browsers ask for this on every page; answer "nothing" instead of a 404 log line."""
+    return Response(status_code=204)
+```
+
+Two traps this code avoids. First, Zeek uids are not unique across captures: `zeek -D`, used for uploads so results repeat, gives the first connection of *every* capture the same uid, so linking an event to an alert by uid alone linked the Telnet connection to "Expired certificate". An event links to an alert only when its record ID, uid or Community ID is in the alert's evidence **and** it is between the alert's two hosts on the alert's port. Second, a finding often cites a record that is not a timeline event (a `maxguard_cleartext.log` line, for example); the connection's `conn.log` event shares its uid, which is why the uid is matched too. The window is 1, 6, 24, 72 or 168 hours; the optional `end` (Unix seconds) moves it back, so the alert page can link to the time of an old capture. The devices page is a full join: a phone seen only in DHCP still gets a row.
+
+**Step 4.** Create `maxguard/web/templates/timeline.html` and `assets.html`:
+
+```html
+{% extends "base.html" %}
+{# IP timeline (Ahmad, AHM-06): everything one address did, in time order, and the
+   alerts (with their ATT&CK techniques) that involve it. #}
+{% block title %}Timeline{% if ip %} {{ ip }}{% endif %}{% endblock %}
+{% block content %}
+<h1>Timeline{% if ip %} for <span class="mono">{{ ip }}</span>{% endif %}</h1>
+
+<form class="filters" method="get" action="/timeline">
+  <label for="ip">IP address</label>
+  <input id="ip" name="ip" type="text" value="{{ ip }}" required inputmode="text"
+         autocomplete="off" spellcheck="false" placeholder="192.0.2.10">
+  <label for="hours">Window</label>
+  <select id="hours" name="hours">
+    {% for choice, label in hour_choices.items() %}
+    <option value="{{ choice }}" {% if choice == hours %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  {% if end is not none %}<input type="hidden" name="end" value="{{ end }}">{% endif %}
+  <button type="submit">Show</button>
+</form>
+
+{% if ip %}
+<p class="muted">From {{ (until - hours * 3600) | utc_time }} to {{ until | utc_time }}.
+  {% if end is not none %}<a href="/timeline?ip={{ ip | urlencode }}&amp;hours={{ hours }}">Show the window up to now instead</a>.{% endif %}</p>
+
+<section aria-labelledby="alerts-heading">
+  <h2 id="alerts-heading">Alerts involving this address</h2>
+  {% if alerts %}
+  <ul class="controls">
+    {% for alert in alerts %}
+    <li>{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %}
+      <a href="/alerts/{{ alert.finding_id }}">{{ alert.title }}</a>
+      {% for technique in alert.attack %}
+      <span class="chip mono" title="{{ technique.name }}, tactic {{ technique.tactic }}">{{ technique.technique_id }} {{ technique.name }} ({{ technique.tactic }})</span>
+      {% endfor %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No alert involves this address.</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="events-heading">
+  <h2 id="events-heading">Events</h2>
+  {% if rows %}
+  <table class="stack">
+    <caption>{{ rows | length }} event{{ "" if rows | length == 1 else "s" }}, oldest first{% if rows | length >= limit %} (only the first {{ limit }}: pick a shorter window){% endif %}</caption>
+    <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Connection</th><th scope="col">Summary</th><th scope="col">Alert</th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      {% set event = row.event %}
+      <tr>
+        <td data-label="Time">{{ event.ts | utc_time }}</td>
+        <td data-label="Kind">{{ event.kind }}</td>
+        <td data-label="Connection" class="mono">{{ event.src_ip }}{% if event.src_port is not none %}:{{ event.src_port }}{% endif %} → {{ event.dst_ip }}{% if event.dst_port is not none %}:{{ event.dst_port }}{% endif %}</td>
+        <td data-label="Summary" class="mono">{{ event.summary }}</td>
+        <td data-label="Alert">{% if row.alert %}<a href="/alerts/{{ row.alert.finding_id }}">{{ row.alert.title }}</a>{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No events for this address in this window. Events are kept for 7 days;
+    for an older capture, open the timeline from the alert page.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
+```
+
+```html
+{% extends "base.html" %}
+{# Device inventory (Ahmad, AHM-06): the assets of the newest analysis joined with
+   the device table from device attribution (MAC, host name, DNS names). #}
+{% block title %}Devices{% endblock %}
+{% block content %}
+<h1>Devices</h1>
+{% if analysis %}
+<p class="muted">From the newest analysis: {{ analysis.input_name }}, received {{ analysis.received_at | utc_time }}.</p>
+{% endif %}
+{% if rows %}
+<table class="stack">
+  <caption>{{ rows | length }} device{{ "" if rows | length == 1 else "s" }}, by IP address</caption>
+  <thead>
+    <tr>
+      <th scope="col">IP address</th>
+      <th scope="col">MAC</th>
+      <th scope="col">Host name</th>
+      <th scope="col">DNS names asked for</th>
+      <th scope="col">Services</th>
+      <th scope="col">Software</th>
+      <th scope="col">Alerts</th>
+      <th scope="col">First seen</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td data-label="IP address" class="mono"><a href="/timeline?ip={{ row.ip | urlencode }}">{{ row.ip }}</a></td>
+      <td data-label="MAC" class="mono">{{ row.mac or "—" }}</td>
+      <td data-label="Host name">{{ row.host_name or "—" }}</td>
+      <td data-label="DNS names" class="mono">{{ row.dns_names | join(", ") or "—" }}</td>
+      <td data-label="Services" class="mono">{{ row.services | join(", ") or "—" }}</td>
+      <td data-label="Software">{{ row.software | join(", ") or "—" }}</td>
+      <td data-label="Alerts">{{ row.finding_count }}</td>
+      <td data-label="First seen">{{ row.first_seen | utc_time }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No devices yet. <a href="/upload">Upload a capture</a> to build the inventory.</p>
+{% endif %}
+{% endblock %}
+```
+
+**Step 5.** Add Timeline and Devices to the navigation in `base.html`, and link the alert page's addresses to their timelines in `alert.html`:
+
+```html
+<!doctype html>
+{# The layout every page extends (Ahmad, AHM-02). Everything is served by this
+   computer: no CDN, no web fonts. Jinja2 escapes every {{ value }}. #}
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {# htmx settings: no inline <style> (our CSP blocks it), never run scripts or eval
+     from a response, only talk to this site, and show 400 answers (form errors). #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "400", "swap": true, "error": false}, {"code": "[45]..", "swap": false, "error": true}]}'>
+  <title>{% block title %}MaxGuard{% endblock %} · MaxGuard</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx-2.0.11.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body class="mode-{{ mode }}">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="top">
+    <div class="brand">MaxGuard</div>
+    <nav aria-label="Main">
+      <a href="/">Alerts</a>
+      <a href="/upload">Upload</a>
+      <a href="/timeline">Timeline</a>
+      <a href="/assets">Devices</a>
+    </nav>
+    <form class="mode-switch" method="post" action="/mode">
+      <input type="hidden" name="next" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+      <span id="mode-label">View:</span>
+      <button type="submit" name="mode" value="analyst" aria-describedby="mode-label"
+              aria-pressed="{{ 'true' if mode == 'analyst' else 'false' }}">Analyst</button>
+      <button type="submit" name="mode" value="home" aria-describedby="mode-label"
+              aria-pressed="{{ 'true' if mode == 'home' else 'false' }}">Home</button>
+    </form>
+  </header>
+  <p class="privacy">Your data never leaves this computer.</p>
+  <main id="main" tabindex="-1">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
+```
+
+```html
+{% extends "base.html" %}
+{# One alert (Ahmad, AHM-03). Analyst mode: facts, AI sentences with citation links,
+   evidence, controls, techniques, and the status form. Home mode: the human-written
+   headline and action, and the severity in words; no IDs and no framework names.
+   AI text and anything from traffic is plain, escaped text: never |safe. #}
+{% block title %}{{ alert.title }}{% endblock %}
+{% block content %}
+<p class="back"><a href="/">← All alerts</a></p>
+
+{% if mode == "home" %}
+<article class="home-view card">
+  <h1>{{ home.headline if home else alert.title }}</h1>
+  <p class="home-severity">{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %}</p>
+  <h2>What to do</h2>
+  <p class="home-action">{{ home.action if home else "Ask the person who looks after your network to look at this alert." }}</p>
+  <p class="muted">Device involved: {{ alert.src_ip }}. Last seen {{ alert.last_seen | utc_time }}.</p>
+</article>
+{% else %}
+<h1>{{ alert.title }}</h1>
+<dl class="facts">
+  <dt>Severity</dt><dd>{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %} <span class="muted">(set by the rule, never by the AI)</span></dd>
+  <dt>Rule</dt><dd class="mono">{{ alert.rule_id }}</dd>
+  <dt>Source → destination</dt>
+  <dd class="mono"><a href="/timeline?ip={{ alert.src_ip | urlencode }}&amp;end={{ (alert.last_seen + 1) | int }}">{{ alert.src_ip }}</a>
+    → <a href="/timeline?ip={{ alert.dst_ip | urlencode }}&amp;end={{ (alert.last_seen + 1) | int }}">{{ alert.dst_ip }}</a>:{{ alert.dst_port }} ({{ alert.protocol }})</dd>
+  <dt>Seen</dt><dd>{{ alert.count }} time{{ "" if alert.count == 1 else "s" }}, first {{ alert.first_seen | utc_time }}, last {{ alert.last_seen | utc_time }}</dd>
+  <dt>Detected by</dt><dd>{{ alert.source }}</dd>
+  {% for key, value in alert.details | dictsort %}
+  <dt>{{ key }}</dt><dd class="mono">{{ value }}</dd>
+  {% endfor %}
+</dl>
+
+<section aria-labelledby="ai-heading">
+  <h2 id="ai-heading">What the local AI says</h2>
+  {% if ai.status == "unavailable" %}
+  <div class="banner" role="alert">
+    <strong>The AI explanation is not available.</strong>
+    {{ ai.reason or "The local AI (Ollama) could not be reached." }}
+    The alert itself is complete: the rules, not the AI, decide what is an alert.
+  </div>
+  {% endif %}
+  {% if alert.explanation_sentences %}
+  <p class="muted">About: <strong>{{ alert.title }}</strong>, severity {{ alert.severity | capitalize }} (from the rule).
+    Each sentence links to the records it cites; check them before you trust it.</p>
+  <ul class="ai-sentences">
+    {% for sentence in alert.explanation_sentences %}
+    <li>{{ sentence.text }}
+      {% for record_id in sentence.evidence_ids %}<a class="chip mono" href="#ev-{{ record_id }}" title="Evidence record {{ record_id }}">{{ record_id }}</a>{% endfor %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% elif ai.status != "unavailable" %}
+  <p class="muted">No AI explanation for this alert{% if ai.status == "disabled" %} (the AI was switched off for this analysis){% endif %}.</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="ev-heading">
+  <h2 id="ev-heading">Evidence</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th scope="col">Record ID</th><th scope="col">Log</th><th scope="col">UID</th><th scope="col">Time</th></tr></thead>
+    <tbody>
+      {% for evidence in alert.evidence %}
+      <tr id="ev-{{ evidence.record_id }}" tabindex="-1">
+        <td class="mono">{{ evidence.record_id }}</td>
+        <td class="mono">{{ evidence.log }}</td>
+        <td class="mono">{{ evidence.uid }}</td>
+        <td>{{ evidence.ts | utc_time }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section aria-labelledby="controls-heading">
+  <h2 id="controls-heading">Compliance controls</h2>
+  {% for group in groups %}
+  <h3>{{ group.framework }} <span class="version">{{ group.version }}</span></h3>
+  <ul class="controls">
+    {% for control in group.controls %}
+    <li><span class="mono">{{ control.control_id }}</span> {{ control.title }}
+      <div class="muted">{{ control.rationale }}</div></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No compliance controls are mapped to this rule.</p>
+  {% endfor %}
+</section>
+
+<section aria-labelledby="attack-heading">
+  <h2 id="attack-heading">MITRE ATT&amp;CK techniques</h2>
+  {% if alert.attack %}
+  <ul class="controls">
+    {% for technique in alert.attack %}
+    <li><span class="mono">{{ technique.technique_id }}</span> {{ technique.name }}
+      <span class="muted">tactic: {{ technique.tactic }} · ATT&amp;CK {{ technique.version }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No ATT&amp;CK technique is mapped to this rule.</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="status-heading">
+  <h2 id="status-heading">Status and assignee</h2>
+  {% include "_status.html" %}
+</section>
+{% endif %}
+{% endblock %}
+```
+
+**Step 6.** Add the AHM-06 tests to `tests/unit/test_web.py` (the new section is `# ---------- AHM-06`). They never depend on the real clock: they replace `routes.now` or pass `end=`:
+
+```python
+"""Tests for the dashboard pages (Ahmad, AHM-02, AHM-03, AHM-06).
+
+Reports come from maxguard.pipeline.analyze on the Zeek log fixtures (no Zeek,
+no AI) and are saved through the stores, exactly as the upload endpoint does.
+"""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import re
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from maxguard.api.app import STATIC_DIR, create_app
+from maxguard.pipeline import analyze
+from maxguard.sensor.attribution import build_device_table
+from maxguard.web import routes
+
+FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "zeek"
+HTMX_SHA256 = "d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717"
+RECEIVED_AT = 1791300000.0  # a fixed "upload time" (Oct 2026), so tests never read the clock
+HOSTILE = "<script>alert('xss')</script>"
+
+
+@pytest.fixture(scope="module")
+def telnet_report(tmp_path_factory) -> dict:
+    return analyze(FIXTURES / "telnet", tmp_path_factory.mktemp("telnet"), explain=False)
+
+
+@pytest.fixture(scope="module")
+def ftp_report(tmp_path_factory) -> dict:
+    return analyze(FIXTURES / "ftp", tmp_path_factory.mktemp("ftp"), explain=False)
+
+
+@pytest.fixture
+def app(tmp_path):
+    return create_app(tmp_path / "data", explain=False)
+
+
+@pytest.fixture
+def client(app) -> TestClient:
+    return TestClient(app)
+
+
+def save(app, report: dict, received_at: float = RECEIVED_AT) -> str:
+    """Store a report the way POST /api/analyses does."""
+    analysis_id = app.state.state_store.save_analysis(report, received_at=received_at)
+    app.state.event_store.write(report.get("events", []))
+    return analysis_id
+
+
+def with_ai_sentences(report: dict) -> dict:
+    """A copy of the report with one AI sentence per finding, citing its evidence."""
+    report = copy.deepcopy(report)
+    for finding in report["findings"]:
+        ids = [e["record_id"] for e in finding["evidence"]]
+        finding["explanation_sentences"] = [
+            {"text": "A device logged in with Telnet, so the session was readable.",
+             "evidence_ids": ids}]
+        finding["explanation"] = finding["explanation_sentences"][0]["text"]
+    report["ai"] = {"status": "ok", "model": "qwen3:4b", "explained": len(report["findings"]),
+                    "dropped_sentences": 0, "reason": None}
+    return report
+
+
+def telnet_id(report: dict) -> str:
+    return report["findings"][0]["finding_id"]
+
+
+# ---------- AHM-02: layout, queue, upload ----------
+
+def test_htmx_file_is_the_reviewed_one():
+    data = (STATIC_DIR / "htmx-2.0.11.min.js").read_bytes()
+    assert hashlib.sha256(data).hexdigest() == HTMX_SHA256
+
+
+@pytest.mark.parametrize("path", ["/", "/upload", "/timeline", "/assets"])
+def test_pages_return_200_with_the_layout(client, path):
+    page = client.get(path)
+    assert page.status_code == 200
+    assert "Your data never leaves this computer." in page.text
+    assert '<script src="/static/htmx-2.0.11.min.js"' in page.text
+    assert 'href="/static/app.css"' in page.text
+    assert "default-src 'self'" in page.headers["content-security-policy"]
+    # not "no-referrer": Chrome then sends "Origin: null" on form posts, which the API refuses
+    assert page.headers["referrer-policy"] == "same-origin"
+
+
+def test_static_files_are_served(client):
+    assert client.get("/static/app.js").status_code == 200
+    assert client.get("/static/app.css").status_code == 200
+
+
+def test_queue_lists_the_telnet_alert(app, client, telnet_report):
+    save(app, telnet_report)
+    page = client.get("/")
+    assert "Telnet session in cleartext" in page.text
+    assert f'href="/alerts/{telnet_id(telnet_report)}"' in page.text
+    assert "172.18.0.3 → 172.18.0.2:23" in page.text
+    # severity as text and color: the word is in the badge with the color class
+    assert '<span class="sev sev-high">High</span>' in page.text
+
+
+def test_queue_has_the_htmx_wiring(client):
+    page = client.get("/")
+    assert 'hx-trigger="refresh, every 30s"' in page.text
+    assert page.text.count('hx-get="/" hx-target="#alerts" hx-select="#alerts"') == 2
+    assert 'new EventSource("/api/stream")' in client.get("/static/app.js").text
+
+
+def test_queue_filters(app, client, telnet_report, ftp_report):
+    save(app, telnet_report)
+    save(app, ftp_report, received_at=RECEIVED_AT + 1)
+    app.state.state_store.update_alert(telnet_id(telnet_report), actor="test",
+                                       at=RECEIVED_AT + 2, status="resolved")
+    resolved = client.get("/?status=resolved&severity=").text
+    assert "Telnet session in cleartext" in resolved
+    assert "FTP" not in resolved.split('id="alerts"')[1]
+    new = client.get("/", params={"status": "new"}).text
+    assert "Telnet session in cleartext" not in new
+    low = client.get("/", params={"severity": "low"}).text
+    assert "No alerts match these filters" in low
+
+
+def test_unknown_filter_value_is_a_400_page(client):
+    page = client.get("/?status=bogus")
+    assert page.status_code == 400
+    assert "status must be one of" in page.text
+
+
+def test_hostile_values_are_escaped(app, client, telnet_report):
+    report = with_ai_sentences(telnet_report)
+    finding = report["findings"][0]
+    finding["title"] = HOSTILE
+    finding["details"] = {"user": HOSTILE}
+    finding["explanation_sentences"][0]["text"] = HOSTILE
+    save(app, report)
+    app.state.state_store.update_alert(finding["finding_id"], actor="test",
+                                       at=RECEIVED_AT, assignee=HOSTILE)
+    for path in ("/", f"/alerts/{finding['finding_id']}", "/timeline?ip=172.18.0.3"):
+        page = client.get(path).text
+        assert HOSTILE not in page
+        assert "&lt;script&gt;" in page
+
+
+@pytest.mark.parametrize("mode", ["analyst", "home"])
+def test_no_page_loads_anything_from_outside(app, client, telnet_report, mode):
+    save(app, with_ai_sentences(telnet_report))
+    client.cookies.set("mg_mode", mode)
+    pages = ["/", "/upload", "/assets", "/timeline?ip=172.18.0.3",
+             f"/alerts/{telnet_id(telnet_report)}"]
+    for path in pages:
+        for url in re.findall(r'(?:src|href|action|hx-[a-z]+)="([^"]*)"', client.get(path).text):
+            assert not url.startswith(("http:", "https:", "//")), (path, url)
+
+
+def test_mode_switch_sets_the_cookie(client):
+    answer = client.post("/mode", data={"mode": "home", "next": "/assets"},
+                         follow_redirects=False)
+    assert answer.status_code == 303
+    assert answer.headers["location"] == "/assets"
+    assert "mg_mode=home" in answer.headers["set-cookie"]
+
+
+def test_mode_switch_never_redirects_off_site(client):
+    answer = client.post("/mode", data={"mode": "home", "next": "//evil.example/"},
+                         follow_redirects=False)
+    assert answer.headers["location"] == "/"
+
+
+def test_cross_site_mode_switch_is_refused(client):
+    answer = client.post("/mode", data={"mode": "home"},
+                         headers={"Sec-Fetch-Site": "cross-site"})
+    assert answer.status_code == 403
+
+
+def test_upload_page_posts_to_the_api(client):
+    page = client.get("/upload").text
+    assert 'hx-post="/api/analyses"' in page
+    assert 'hx-encoding="multipart/form-data"' in page
+    assert 'href="/"' in page
+
+
+# ---------- AHM-03: alert detail ----------
+
+def test_alert_detail_analyst_mode(app, client, telnet_report):
+    report = with_ai_sentences(telnet_report)
+    save(app, report)
+    page = client.get(f"/alerts/{telnet_id(report)}").text
+    finding = report["findings"][0]
+    assert finding["evidence"][0]["record_id"] in page
+    assert "NIST SP 800-53" in page
+    assert "Rev. 5 (Release 5.2.0)" in page  # the version next to the framework
+    assert "T1040" in page and "credential-access" in page
+    assert "A device logged in with Telnet" in page
+    assert 'id="status-form"' in page
+
+
+def test_controls_are_grouped_by_framework():
+    controls = [
+        {"framework": "PCI DSS", "version": "4.0.1", "control_id": "4.2.1"},
+        {"framework": "NIST SP 800-53", "version": "Rev. 5 (Release 5.2.0)", "control_id": "SC-8"},
+        {"framework": "PCI DSS", "version": "4.0.1", "control_id": "8.3.2"},
+    ]
+    groups = routes.controls_by_framework(controls)
+    assert [(g["framework"], len(g["controls"])) for g in groups] == [
+        ("PCI DSS", 2), ("NIST SP 800-53", 1)]
+
+
+def test_citation_links_point_to_evidence_rows(app, client, telnet_report):
+    report = with_ai_sentences(telnet_report)
+    save(app, report)
+    page = client.get(f"/alerts/{telnet_id(report)}").text
+    cited = re.findall(r'href="#ev-([0-9a-f]+)"', page)
+    assert cited  # at least one citation chip
+    for record_id in cited:
+        assert f'id="ev-{record_id}"' in page
+
+
+def test_alert_detail_home_mode(app, client, telnet_report):
+    report = with_ai_sentences(telnet_report)
+    save(app, report)
+    finding = report["findings"][0]
+    client.cookies.set("mg_mode", "home")
+    page = client.get(f"/alerts/{finding['finding_id']}").text
+    home = routes.load_home_text()["cleartext.telnet"]
+    assert home["headline"] in page
+    assert home["action"] in page
+    assert "High: fix this week" in page
+    main = page.split('<main id="main"', 1)[1]  # the page body, not the URLs in the nav
+    for jargon in (finding["evidence"][0]["record_id"], "cleartext.telnet", "NIST",
+                   "PCI DSS", "CISA", "CJIS", "T1040", "ATT&amp;CK"):
+        assert jargon not in main.replace(f"/alerts/{finding['finding_id']}", "")
+
+
+def test_unknown_alert_is_a_404_page(client):
+    page = client.get("/alerts/0000000000000000")
+    assert page.status_code == 404
+    assert "No alert with this ID" in page.text
+
+
+def test_ai_unavailable_banner_shows_the_reason(app, client, telnet_report):
+    report = copy.deepcopy(telnet_report)
+    reason = "model 'qwen3:4b' not found: run ollama pull qwen3:4b"
+    report["ai"] = {"status": "unavailable", "model": "qwen3:4b", "explained": 0,
+                    "dropped_sentences": 0, "reason": reason}
+    save(app, report)
+    page = client.get(f"/alerts/{telnet_id(report)}").text
+    assert 'class="banner" role="alert"' in page
+    assert "model &#39;qwen3:4b&#39; not found: run ollama pull qwen3:4b" in page
+
+
+def test_no_banner_when_the_ai_worked(app, client, telnet_report):
+    save(app, with_ai_sentences(telnet_report))
+    assert 'class="banner"' not in client.get(f"/alerts/{telnet_id(telnet_report)}").text
+
+
+def test_status_change_is_saved_and_audited(app, client, telnet_report):
+    save(app, telnet_report)
+    finding_id = telnet_id(telnet_report)
+    answer = client.patch(f"/alerts/{finding_id}/status",
+                          data={"actor": "Ahmad", "status": "investigating",
+                                "assignee": "Fiona"})
+    assert answer.status_code == 200
+    assert "Saved." in answer.text
+    assert "mg_actor=Ahmad" in answer.headers["set-cookie"]
+    alert = app.state.state_store.get_alert(finding_id)
+    assert (alert["status"], alert["assignee"]) == ("investigating", "Fiona")
+    audit = app.state.state_store.list_audit()
+    assert audit[0]["actor"] == "Ahmad"
+    assert audit[0]["target"] == finding_id
+    assert audit[0]["details"]["status"] == {"from": "new", "to": "investigating"}
+
+
+def test_status_change_uses_the_name_cookie(app, client, telnet_report):
+    save(app, telnet_report)
+    client.cookies.set("mg_actor", "Jaiden")
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"status": "resolved", "assignee": ""})
+    assert answer.status_code == 200
+    assert app.state.state_store.list_audit()[0]["actor"] == "Jaiden"
+
+
+def test_status_change_needs_a_name(app, client, telnet_report):
+    save(app, telnet_report)
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"status": "resolved"})
+    assert answer.status_code == 400
+    assert "Type your name" in answer.text
+    assert app.state.state_store.list_audit() == []
+
+
+def test_unknown_status_is_refused(app, client, telnet_report):
+    save(app, telnet_report)
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"actor": "Ahmad", "status": "deleted"})
+    assert answer.status_code == 400
+
+
+def test_cross_site_status_change_is_refused(app, client, telnet_report):
+    save(app, telnet_report)
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"actor": "x", "status": "resolved"},
+                          headers={"Origin": "http://evil.example"})
+    assert answer.status_code == 403
+    assert app.state.state_store.get_alert(telnet_id(telnet_report))["status"] == "new"
+
+
+# ---------- AHM-06: timeline and assets ----------
+
+def test_timeline_rejects_a_bad_address(client):
+    page = client.get("/timeline", params={"ip": "not-an-ip"})
+    assert page.status_code == 400
+    assert "not an IP address" in page.text
+
+
+def test_timeline_lists_events_and_links_the_alert(app, client, telnet_report, monkeypatch):
+    save(app, telnet_report)
+    last_seen = telnet_report["findings"][0]["last_seen"]
+    monkeypatch.setattr(routes, "now", lambda: last_seen + 3600)  # one hour after the capture
+    page = client.get("/timeline", params={"ip": "172.18.0.3"}).text
+    assert "tcp/23 SF out=23 in=40" in page  # the conn.log event's summary
+    # the event shares the finding's Zeek uid, so its row links to the alert
+    assert page.count(f'href="/alerts/{telnet_id(telnet_report)}"') >= 2
+    assert "T1040" in page  # techniques of the alerts that involve this address
+
+
+def test_timeline_links_survive_repeated_zeek_uids(app, client, telnet_report, tmp_path):
+    """zeek -D gives the first connection of every capture the same uid, so the
+    telnet and cert_expired captures share one; each row must still link its own alert."""
+    cert_report = analyze(FIXTURES / "cert_expired", tmp_path / "cert", explain=False)
+    cert_uids = {e["uid"] for f in cert_report["findings"] for e in f["evidence"]}
+    assert telnet_report["findings"][0]["evidence"][0]["uid"] in cert_uids  # the collision
+    save(app, telnet_report)
+    save(app, cert_report, received_at=RECEIVED_AT + 1)
+    end = int(cert_report["findings"][0]["last_seen"]) + 1
+    page = client.get("/timeline", params={"ip": "172.18.0.3", "end": end}).text
+    telnet_row = next(row for row in page.split("<tr>") if "tcp/23 SF" in row)
+    assert f'href="/alerts/{telnet_id(telnet_report)}"' in telnet_row
+    assert cert_report["findings"][0]["finding_id"] not in telnet_row
+
+
+def test_timeline_default_window_is_24_hours(app, client, telnet_report, monkeypatch):
+    save(app, telnet_report)
+    last_seen = telnet_report["findings"][0]["last_seen"]
+    monkeypatch.setattr(routes, "now", lambda: last_seen + 2 * 24 * 3600)
+    page = client.get("/timeline", params={"ip": "172.18.0.3"}).text
+    assert "No events for this address in this window" in page
+    week = client.get("/timeline", params={"ip": "172.18.0.3", "hours": 168}).text
+    assert "tcp/23 SF out=23 in=40" in week
+
+
+def test_timeline_end_moves_the_window(app, client, telnet_report):
+    save(app, telnet_report)
+    end = int(telnet_report["findings"][0]["last_seen"]) + 1
+    page = client.get("/timeline", params={"ip": "172.18.0.3", "end": end}).text
+    assert "tcp/23 SF out=23 in=40" in page
+
+
+def test_timeline_window_is_at_most_7_days(client):
+    assert client.get("/timeline", params={"ip": "192.0.2.1", "hours": 169}).status_code == 422
+
+
+def test_assets_join_the_device_table(app, client, tmp_path):
+    report = analyze(FIXTURES / "_handmade" / "dns_dhcp", tmp_path / "work", explain=False)
+    report["devices"] = build_device_table(FIXTURES / "_handmade" / "dns_dhcp")
+    save(app, report)
+    page = client.get("/assets").text
+    assert "02:00:00:aa:bb:cc" in page
+    assert "laptop-lab" in page
+    assert 'href="/timeline?ip=192.168.56.50"' in page
+
+
+def test_join_devices_is_a_full_join_sorted_by_ip():
+    assets = [{"ip": "192.0.2.10", "first_seen": 1.0, "services": ["23/tcp"], "software": [],
+               "finding_count": 1}]
+    devices = [{"ip": "192.0.2.9", "mac": "02:00:00:00:00:09", "host_name": "printer",
+                "dns_names": ["printer.lab.invalid"], "first_seen": 2.0}]
+    joined = routes.join_devices(assets, devices)
+    assert [row["ip"] for row in joined] == ["192.0.2.9", "192.0.2.10"]  # by number, not text
+    assert joined[0] == {"ip": "192.0.2.9", "first_seen": 2.0, "services": [], "software": [],
+                         "finding_count": 0, "mac": "02:00:00:00:00:09",
+                         "host_name": "printer", "dns_names": ["printer.lab.invalid"]}
+    assert joined[1] == {**assets[0], "mac": "", "host_name": "", "dns_names": []}
+```
+
+Run the dashboard and pipeline tests:
+
+```bash
+pytest tests/unit/test_web.py tests/unit/test_pipeline.py -q
+```
+
+Expected output:
+
+```text
+............................................                                                 [100%]
+44 passed in 4.41s
+```
+
+**Step 7.** Check both pages at 375 px and with the keyboard only.
+
+**Step 8.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -721,6 +3388,7 @@ Alerts say *what* happened; the timeline says *what else that device did*, which
 - [ ] No secrets, passwords, email addresses, personal data, or captures from a real network (CLAUDE.md rule 6)
 - [ ] Any new dependency has a row in `docs/DEPENDENCIES.md` with its license
 - [ ] CI is green and your reviewer approved
+- [ ] Timeline links check hosts and port, not the uid alone
 
 ### AHM-07: Response: block proposals, generated rules, and preview before you block
 

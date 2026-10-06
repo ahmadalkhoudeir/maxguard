@@ -251,12 +251,12 @@ How the team avoids waiting:
 | W3 | [AMO-02](amory.md#amo-02-pci-dss-v401-rows-checked-in-the-official-document) | Amory | PCI DSS v4.0.1 rows, checked in the official document | process |
 | W3 | [ALI-03](ali.md#ali-03-benchmark-script-speed-citations-and-unsupported-details) | Ali | Benchmark script: speed, citations, and unsupported details | code, tested |
 | W3 | [KAR-04](karthik.md#kar-04-ci-runs-the-integration-tests-plus-a-determinism-test) | Karthik | CI runs the integration tests, plus a determinism test | code, written |
-| W3 | [AHM-02](ahmad.md#ahm-02-dashboard-layout-alert-queue-and-upload-page) | Ahmad | Dashboard: layout, alert queue, and upload page | design |
+| W3 | [AHM-02](ahmad.md#ahm-02-dashboard-layout-alert-queue-and-upload-page) | Ahmad | Dashboard: layout, alert queue, and upload page | code, tested |
 | W4 | [JAK-05](jakub.md#jak-05-suricata-in-the-pipeline) | Jakub | Suricata in the pipeline | code, tested |
 | W4 | [AMO-03](amory.md#amo-03-report-export-json-csv-and-html) | Amory | Report export: JSON, CSV, and HTML | code, tested |
 | W4 | [FIO-05](fiona.md#fio-05-cli-csv-and-html-reports-and---offline) | Fiona | CLI: CSV and HTML reports, and --offline | code, tested |
 | W4 | [JON-04](jonattan.md#jon-04-home-mode-text-for-every-rule) | Jonattan | Home mode text for every rule | code, tested |
-| W4 | [AHM-03](ahmad.md#ahm-03-alert-detail-page-with-analyst-and-home-modes) | Ahmad | Alert detail page with Analyst and Home modes | design |
+| W4 | [AHM-03](ahmad.md#ahm-03-alert-detail-page-with-analyst-and-home-modes) | Ahmad | Alert detail page with Analyst and Home modes | code, tested |
 | W4 | [ALI-04](ali.md#ali-04-run-the-benchmark-on-both-tiers-and-propose-the-default-models) | Ali | Run the benchmark on both tiers and propose the default models | process |
 | W5 | [JAI-08](jaiden.md#jai-08-ed25519-signing-library) | Jaiden | Ed25519 signing library | code, tested |
 | W5 | [AMO-04](amory.md#amo-04-cisa-cpg-20-and-cjis-v61-rows) | Amory | CISA CPG 2.0 and CJIS v6.1 rows | process |
@@ -270,7 +270,7 @@ How the team avoids waiting:
 | S4 | [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address) | Jakub | Device attribution: which device is behind each IP address | code, tested |
 | S4 | [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) | Jakub | Live sensor: capture, rotation, and shipping to the console | code, tested |
 | S4 | [AMO-05](amory.md#amo-05-chain-of-custody-log) | Amory | Chain-of-custody log | code, tested |
-| S4 | [AHM-06](ahmad.md#ahm-06-ip-timeline-and-device-inventory-pages) | Ahmad | IP timeline and device inventory pages | design |
+| S4 | [AHM-06](ahmad.md#ahm-06-ip-timeline-and-device-inventory-pages) | Ahmad | IP timeline and device inventory pages | code, tested |
 | S4 | [KAR-06](karthik.md#kar-06-end-to-end-test-of-the-live-sensor-on-the-lab) | Karthik | End-to-end test of the live sensor on the lab | code, tested |
 | S8 | [JAK-09](jakub.md#jak-09-ja4-watchlist-rule) | Jakub | JA4 watchlist rule | code, tested |
 | S8 | [JAI-11](jaiden.md#jai-11-signed-offline-intel-bundles) | Jaiden | Signed offline intel bundles | code, tested |

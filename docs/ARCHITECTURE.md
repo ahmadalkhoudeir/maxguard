@@ -130,7 +130,7 @@ built yet.
 | Event normalizer and record lookup | `maxguard/events/` | Jaiden | alpha | tested |
 | Storage (SQLite state, Parquet events) | `maxguard/storage/` | Jaiden | alpha | tested |
 | API | `maxguard/api/app.py` | Jaiden | alpha | tested (unit tests; a real capture through Zeek; curl against uvicorn) |
-| Dashboard pages | `maxguard/web/` | Ahmad | alpha | design (htmx 2.0.11 vendored) |
+| Dashboard pages | `maxguard/web/` | Ahmad | alpha | tested (unit tests; checked in Chromium at 375 px and with the keyboard; screenshots in planning) |
 | AI client and citation validator | `maxguard/ai/` | Jonattan | alpha | tested against a fake Ollama server; no real model run |
 | Home-mode plain-language text | `maxguard/ai/home_text.yaml` | Jonattan | alpha | tested |
 | Prompt-injection tests and injection set | `tests/unit/test_prompt_injection.py`, `scripts/make_injection_set.py`, `scripts/injection_report.py` | Jonattan | spring | tested (with a fake model that obeys) |
@@ -574,6 +574,7 @@ includes the IDs the AI cites, so MaxGuard controls every source of randomness:
 | Tab-separated (TSV) Zeek logs turned sets into one long string, so the certificate rules silently found nothing on imported logs. | `ZeekLogAdapter` converts every value with the log's own `#types` header; a test proves a TSV import and a JSON import give the same finding ID. |
 | The original AI cache reused one finding's explanation for every finding of the same rule, so a printer finding was "explained" with the payroll server's host name. | Explanations are generated per finding and never shared between findings. |
 | Storage code that reads the clock cannot be tested exactly. | The engine and the stores never read the clock. The API passes the time in (`received_at`, `at`). |
+| Because of `-D`, Zeek uids repeat **across** captures: the first connection of every lab capture is `CJKFoj4bpHEhTeaRoj`. Linking a timeline event to an alert by uid alone linked the Telnet connection to "Expired certificate". | A uid only identifies a connection *within one analysis*. Code that joins records from different analyses (the timeline, the events store, the response preview) also checks the hosts and the port, or uses the Community ID. |
 
 The IDs (`maxguard/ids.py`):
 
@@ -604,6 +605,7 @@ JSON, CSV, or HTML (`maxguard/report.py`); the API stores it. Schema
   "frameworks": [{"framework": ..., "version": ..., "source": ...}, ...],  # compliance files used
   "findings": [Finding.to_dict(), ...],               # sorted by severity, rule_id, src, dst, port
   "assets": [{"ip", "first_seen", "services", "software", "finding_count"}, ...],
+  "devices": [{"ip", "mac", "host_name", "dns_names", "first_seen"}, ...],  # DHCP and DNS (JAK-08)
   "events": [event, ...],                             # section 6
   "ai": {"status": "ok" | "unavailable" | "disabled", "model": str | None,
          "explained": int, "dropped_sentences": int, "reason": str | None},
@@ -797,7 +799,15 @@ pages: alert queue `/`, alert detail `/alerts/{finding_id}`, `/upload`,
 import stops the app, so a bug in it is never hidden. The pages are rendered on
 the server with Jinja2 (autoescaping on) and updated with htmx; the only
 JavaScript is the vendored htmx file and a few lines that turn `alerts-changed`
-into a refresh.
+into a refresh. Every page also sends a Content-Security-Policy (`default-src
+'self'; script-src 'self'; style-src 'self'; ...; frame-ancestors 'none'`),
+`X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin`. Not
+`no-referrer`: with it, Chrome sends `Origin: null` on form posts, which the
+cross-site check refuses. htmx is configured through a `<meta
+name="htmx-config">` tag to stay inside the CSP (no inline styles, no `eval`,
+no scripts from responses, requests only to this site). Two small extra routes:
+`POST /mode` (the Analyst/Home switch, a cookie that is only a display
+preference) and `GET /favicon.ico` (204).
 
 The alpha is a single-user app on `127.0.0.1` with no login. The dashboard asks
 for a display name once and records it as the `actor` in the audit trail; that
@@ -978,7 +988,7 @@ controlled. The main threats and the defenses:
 |---|---|---|
 | A malicious archive fills the disk (zip bomb) or writes outside its folder | Sizes are checked before extracting (4 GiB limit); zip members lose absolute paths and `..` parts; tar files are extracted with Python's `data` filter, which refuses absolute paths, `..`, links, and device files | `adapters/zeeklogs.py` |
 | A huge or fake upload, or a stranger on the LAN | Upload size limit, checked before and while reading; the file type is decided by its magic number; stored under a generated name; ingest is off by default and checks its token before reading the body | API |
-| Text in traffic attacks the dashboard (XSS) | Jinja2 autoescaping everywhere; AI text and anything from traffic is never marked `\|safe`; the HTML export escapes every value and carries a Content-Security-Policy that allows no scripts | web, `report.py` |
+| Text in traffic attacks the dashboard (XSS) | Jinja2 autoescaping everywhere; AI text and anything from traffic is never marked `\|safe` (tested with `<script>` in a title, a detail, an AI sentence and an assignee); every dashboard page sends a Content-Security-Policy that allows only this site's own scripts and styles; the HTML export escapes every value and carries a Content-Security-Policy that allows no scripts | web, `report.py` |
 | Text in traffic attacks a spreadsheet (CSV formula injection) | A CSV cell that starts with `=`, `+`, `-`, `@`, a tab, or a line break gets a leading `'`, as OWASP recommends | `report.py` |
 | Text in traffic attacks the AI (prompt injection) | Evidence is passed as JSON data and the prompt says never to follow it; the model can only fill two text fields; every sentence must cite this finding's records; the rule's severity is always shown; tested with four hostile fields and a model that obeys (section 11) | `ai/`, `tests/unit/test_prompt_injection.py` |
 | The dashboard is reached from the network | Published on `127.0.0.1` only. Sensors and agents get a separate ingest-only app (one route, token required, off by default) on the LAN address the user names | `docker/compose.yaml`, `docker/compose.lan.yaml`, API |

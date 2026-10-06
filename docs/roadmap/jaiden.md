@@ -2303,7 +2303,7 @@ Expected output:
 
 ```text
 ......                                                                                       [100%]
-6 passed in 0.18s
+6 passed in 0.24s
 ```
 
 **Step 5.** Try it yourself on a fixture folder (Zeek-log input needs no Zeek):
