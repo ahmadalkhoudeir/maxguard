@@ -65,7 +65,7 @@ flowchart LR
   subgraph engine["MaxGuard engine on the console"]
     A["Input adapters<br/>Contract 3"]
     ZK["Zeek 9.0.0"]
-    SU["Suricata 7.0"]
+    SU["Suricata"]
     LD[("Log folder<br/>Zeek JSON + eve.json")]
     R["Rule engine<br/>deterministic"]
     F["Findings<br/>Contract 1"]
@@ -167,7 +167,7 @@ sequenceDiagram
   participant API as FastAPI app
   participant P as pipeline.analyze()
   participant Z as Zeek 9.0.0
-  participant S as Suricata 7.0
+  participant S as Suricata
   participant AI as Ollama (local)
   participant DB as StateStore (SQLite)
   participant EV as EventStore (Parquet)
@@ -233,7 +233,7 @@ flowchart LR
   subgraph pi["Sensor: Raspberry Pi 5"]
     CAP["Capture port<br/>no IP address"]
     ZL["Zeek 9.0.0 live<br/>(no -D)"]
-    SL["Suricata 7.0.17<br/>AF_PACKET"]
+    SL["Suricata 8.0.7<br/>AF_PACKET"]
     D[("/data on a USB SSD<br/>one folder per interval")]
     SH["Shipper"]
   end
@@ -268,11 +268,12 @@ flowchart LR
   older than that, and the console's event store prunes whole hour folders
   (section 9).
 
-Three questions JAK-06 must answer on real hardware before this design is
-final: the exact Zeek 9 rotation settings without `zeekctl`, Suricata 7.0.17's
-`eve` rotation option, and why Suricata captured zero packets in the planning
-container test while Zeek in the same setup captured 449 (`docs/HARDWARE.md`
-section 11.3 has the commands; **not run — verify on hardware**).
+Three questions must be answered on real hardware before this design is final
+(JAK-06 builds the lab, JAK-07 the live sensor): the exact Zeek 9 rotation
+settings without `zeekctl`, Suricata 8.0's `eve` rotation option, and why
+Suricata captured zero packets in the planning container test while Zeek in the
+same setup captured 449 (`docs/HARDWARE.md` section 11.3 has the commands;
+**not run — verify on hardware**).
 
 ## 5. The three contracts and their v2.0 extensions
 
@@ -825,7 +826,7 @@ Compose file, `install.sh`, and a SHA-256 checksum file, split into parts under
 
 ### The sensor (spring)
 
-`docker/sensor-compose.yaml` (design) runs live Zeek 9.0.0 and Suricata 7.0.17
+`docker/sensor-compose.yaml` (design) runs live Zeek 9.0.0 and Suricata 8.0.7
 with host networking on the Raspberry Pi 5 (ARM64) or an x86-64 mini PC, plus
 the shipper. Every image MaxGuard uses is published for both `linux/amd64` and
 `linux/arm64` (checked for the pinned tags during planning).
@@ -893,8 +894,8 @@ re-generates the fixtures (when Zeek or Suricata change) and updates
 | Tool | Version | Pinned in | Notes |
 |---|---|---|---|
 | Zeek | 9.0.0 | `docker/Dockerfile` (`FROM zeek/zeek:9.0.0`), `scripts/make_fixtures.sh` | LTS release; image for amd64 and arm64 |
-| Suricata (engine image) | 7.0.10 | Debian 13 package installed in `docker/Dockerfile` | Fixtures come from `jasonish/suricata:7.0.10`, the same upstream version |
-| Suricata (live sensor) | 7.0.17 | `docker/sensor-compose.yaml` (spring) | Newest 7.0.x with security fixes; same `eve.json` format |
+| Suricata (engine image) | 7.0.10 | Debian 13 package installed in `docker/Dockerfile` | Fixtures come from `jasonish/suricata:7.0.10`, the same upstream version. OISF ended the 7.0 branch in July 2026 (7.0.17 is the last 7.0 release; the announcement was seen only through search excerpts). Whether Debian 13's package carries the later 7.0 security fixes was not checked (Debian's servers were unreachable in planning). Moving the engine to 8.0 before the v2.0 release is an open decision. |
+| Suricata (live sensor) | 8.0.7 | `docker/sensor-compose.yaml` (spring) | Supported branch for a sensor that parses untrusted traffic all day. JA4 with MaxGuard's settings was checked on 8.0.7, and the normalizer reads Suricata 8's DNS format (tested with a Suricata 8 fixture). |
 | Ollama | 0.35.1 | `docker/compose.yaml`, offline bundle | amd64 and arm64 |
 | Python | 3.11 or newer | `pyproject.toml` | Laptops and CI use 3.11; the image has Debian 13's 3.13 |
 | htmx | 2.0.11 | `maxguard/web/static/htmx-2.0.11.min.js` | 0BSD; SHA-256 `d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717` |
