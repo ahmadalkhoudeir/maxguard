@@ -962,9 +962,9 @@ stateDiagram-v2
   `response.revert_failed`) and answers 502. Other errors: 400 bad input, 404 no
   such proposal, 409 a step that is not allowed now.
 - **Audit.** Every step writes a row to the audit table (`response.<step>`,
-  target = the proposal ID, who and when). Open item: the state change and its
-  audit row are two transactions, so a crash between them could lose one row;
-  one transaction needs a small new `StateStore` interface.
+  target = the proposal ID, who and when), in the same transaction as the state
+  change, so a crash can never leave a block without its record. Refused and
+  failed steps are audited too.
 - **Dashboard.** The workflow is reachable through the API (AHM-08 shows a full
   session). A dashboard page for proposals is an open item for review: no task
   builds one yet.

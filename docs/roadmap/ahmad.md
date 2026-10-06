@@ -1379,7 +1379,9 @@ and is logged. The steps (docs/ARCHITECTURE.md section 13):
 - Approve needs the person's name and the IP address typed again (confirm_ip),
   so a block is never approved by a stray click.
 - Every step, and every refused approval, writes a row to the audit table
-  (StateStore.add_audit, action "response.<step>", target = the proposal id).
+  (action "response.<step>", target = the proposal id). A state change and its
+  audit row are written in ONE transaction (storage.state.insert_audit), so a
+  crash can never leave a change without its audit row.
 - Times are passed in by the caller (the API reads the clock, this module never does).
 
 Proposals live in their own table in state.db, created here with
@@ -1396,7 +1398,7 @@ from contextlib import contextmanager
 
 from maxguard.response.enforcers.base import Enforcer
 from maxguard.response.generate import check_direction, parse_ip, rules_for
-from maxguard.storage.state import StateStore
+from maxguard.storage.state import StateStore, insert_audit
 
 STATES = ("proposed", "previewed", "approved", "applied", "reverted", "rejected")
 
@@ -1463,24 +1465,23 @@ class ProposalStore:
                 finding_id: str | None = None) -> dict:
         address = str(parse_ip(ip))  # ValueError for anything that is not a plain address
         check_direction(direction)
-        with self._connect() as conn:
+        with self._connect() as conn:  # the proposal and its audit row: one transaction
             cur = conn.execute(
                 "INSERT INTO response_proposals (ip, direction, reason, finding_id, state, "
                 "created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'proposed', ?, ?, ?)",
                 (address, direction, reason, finding_id, actor, at, at))
             proposal_id = cur.lastrowid
-        self.audit(actor, "proposed", proposal_id, at,
-                   {"ip": address, "direction": direction, "finding_id": finding_id})
+            audit(conn, actor, "proposed", proposal_id, at,
+                  {"ip": address, "direction": direction, "finding_id": finding_id})
         return self.get(proposal_id)
 
     def record_preview(self, proposal_id: int, *, actor: str, preview: dict,
                        at: float) -> dict:
         """Keep the preview the person saw. A previewed proposal may be previewed again."""
-        self.move(proposal_id, ("proposed", "previewed"), "previewed", at,
+        self.move(proposal_id, ("proposed", "previewed"), "previewed", at, actor,
+                  {"connections": preview["connections"], "devices": len(preview["devices"]),
+                   "window_end": preview["window_end"]},
                   preview_json=json.dumps(preview, sort_keys=True))
-        self.audit(actor, "previewed", proposal_id, at,
-                   {"connections": preview["connections"], "devices": len(preview["devices"]),
-                    "window_end": preview["window_end"]})
         return self.get(proposal_id)
 
     def approve(self, proposal_id: int, *, actor: str, confirm_ip: str, at: float) -> dict:
@@ -1489,11 +1490,11 @@ class ProposalStore:
         if not actor.strip():
             raise ValueError("enter your name to approve a block")
         if not same_address(confirm_ip, proposal["ip"]):
-            self.audit(actor, "approve_refused", proposal_id, at,
-                       {"reason": "typed IP does not match"})
+            self.audit_only(actor, "approve_refused", proposal_id, at,
+                            {"reason": "typed IP does not match"})
             raise ValueError("the IP address you typed does not match the proposal")
-        self.move(proposal_id, ("previewed",), "approved", at, approved_by=actor)
-        self.audit(actor, "approved", proposal_id, at, {"ip": proposal["ip"]})
+        self.move(proposal_id, ("previewed",), "approved", at, actor, {"ip": proposal["ip"]},
+                  approved_by=actor)
         return self.get(proposal_id)
 
     def mark_applied(self, proposal_id: int, *, actor: str, at: float,
@@ -1507,10 +1508,10 @@ class ProposalStore:
                 enforcer.add(proposal["ip"])
                 enforcer.apply()
         except Exception as err:
-            self.audit(actor, "apply_failed", proposal_id, at, {"error": str(err)})
+            self.audit_only(actor, "apply_failed", proposal_id, at, {"error": str(err)})
             raise
-        self.move(proposal_id, ("approved",), "applied", at, method=method)
-        self.audit(actor, "applied", proposal_id, at, {"ip": proposal["ip"], "method": method})
+        self.move(proposal_id, ("approved",), "applied", at, actor,
+                  {"ip": proposal["ip"], "method": method}, method=method)
         return self.get(proposal_id)
 
     def revert(self, proposal_id: int, *, actor: str, at: float,
@@ -1526,16 +1527,15 @@ class ProposalStore:
                     enforcer.remove(proposal["ip"])
                     enforcer.apply()
             except Exception as err:
-                self.audit(actor, "revert_failed", proposal_id, at, {"error": str(err)})
+                self.audit_only(actor, "revert_failed", proposal_id, at, {"error": str(err)})
                 raise
-        self.move(proposal_id, ("applied",), "reverted", at)
-        self.audit(actor, "reverted", proposal_id, at,
-                   {"ip": proposal["ip"], "method": proposal["method"]})
+        self.move(proposal_id, ("applied",), "reverted", at, actor,
+                  {"ip": proposal["ip"], "method": proposal["method"]})
         return self.get(proposal_id)
 
     def reject(self, proposal_id: int, *, actor: str, at: float, reason: str = "") -> dict:
-        self.move(proposal_id, ("proposed", "previewed"), "rejected", at)
-        self.audit(actor, "rejected", proposal_id, at, {"reason": reason})
+        self.move(proposal_id, ("proposed", "previewed"), "rejected", at, actor,
+                  {"reason": reason})
         return self.get(proposal_id)
 
     # ---------- helpers ----------
@@ -1547,11 +1547,12 @@ class ProposalStore:
         return proposal
 
     def move(self, proposal_id: int, allowed: tuple[str, ...], new_state: str, at: float,
-             **columns: str) -> None:
-        """Change the state only if it is still one of `allowed`.
+             actor: str, details: dict, **columns: str) -> None:
+        """Change the state only if it is still one of `allowed`, and audit it.
 
         The check and the change are one UPDATE, so two people clicking at the same
-        moment cannot both approve (or both revert) the same proposal."""
+        moment cannot both approve (or both revert) the same proposal. The audit row
+        (action "response.<new_state>") is written in the same transaction."""
         self.get(proposal_id)  # KeyError first, so a missing proposal is a 404, not a 409
         sets = "".join(f", {name} = ?" for name in columns)  # names come from our code only
         placeholders = ", ".join("?" for _ in allowed)
@@ -1560,13 +1561,24 @@ class ProposalStore:
                 f"UPDATE response_proposals SET state = ?, updated_at = ?{sets} "
                 f"WHERE proposal_id = ? AND state IN ({placeholders})",
                 (new_state, at, *columns.values(), proposal_id, *allowed))
+            if cur.rowcount == 1:
+                audit(conn, actor, new_state, proposal_id, at, details)
         if cur.rowcount == 0:
             state = self.get(proposal_id)["state"]
             raise WrongState(f"proposal {proposal_id} is {state}; cannot become {new_state}")
 
-    def audit(self, actor: str, step: str, proposal_id: int, at: float, details: dict) -> None:
-        self.state_store.add_audit(actor=actor, action=f"response.{step}",
-                                   target=str(proposal_id), details=details, at=at)
+    def audit_only(self, actor: str, step: str, proposal_id: int, at: float,
+                   details: dict) -> None:
+        """Audit a refused or failed step, which changes nothing else."""
+        with self._connect() as conn:
+            audit(conn, actor, step, proposal_id, at, details)
+
+
+def audit(conn: sqlite3.Connection, actor: str, step: str, proposal_id: int, at: float,
+          details: dict) -> None:
+    """One audit row (action "response.<step>"), inside the caller's transaction."""
+    insert_audit(conn, actor=actor, action=f"response.{step}", target=str(proposal_id),
+                 details=details, at=at)
 
 
 def same_address(typed: str | None, expected: str) -> bool:
@@ -1584,7 +1596,7 @@ def row_to_proposal(row: sqlite3.Row) -> dict:
     return proposal
 ```
 
-The steps are `proposed → previewed → approved → applied → reverted`, and a proposed or previewed block can be `rejected`. Approve is allowed only after a preview, needs the person's name and the IP address typed again, and a refused approval is audited too. Each check and state change is **one** SQL `UPDATE ... WHERE state IN (...)`, so two people clicking at the same moment cannot both approve. The proposals table is created here with `CREATE TABLE IF NOT EXISTS`, so `storage/state.py` does not change. One gap to know: the state change and its audit row are two transactions, so a crash between them could lose one audit row; making them one transaction needs a small new `StateStore` interface (ask Jaiden).
+The steps are `proposed → previewed → approved → applied → reverted`, and a proposed or previewed block can be `rejected`. Approve is allowed only after a preview, needs the person's name and the IP address typed again, and a refused approval is audited too. Each check and state change is **one** SQL `UPDATE ... WHERE state IN (...)`, so two people clicking at the same moment cannot both approve. The proposals table is created here with `CREATE TABLE IF NOT EXISTS`, so `storage/state.py` does not change. Each state change and its audit row are written in **one** transaction (`insert_audit(conn, ...)` from `storage/state.py`), so a crash can never leave a block without its record; the last test proves it by making the audit write fail.
 
 **Step 3.** Create the enforcer interface `maxguard/response/enforcers/__init__.py` and `maxguard/response/enforcers/base.py`:
 
@@ -1916,8 +1928,11 @@ def reject_proposal(request: Request, proposal_id: int, body: Step) -> dict:
 ```python
 """Tests for maxguard.response.approvals (Ahmad, AHM-08)."""
 
+import sqlite3
+
 import pytest
 
+from maxguard.response import approvals
 from maxguard.response.approvals import ProposalStore, WrongState
 from maxguard.response.enforcers.base import EnforcerError
 from maxguard.storage.state import StateStore
@@ -2079,6 +2094,21 @@ def test_reject(store, state):
 def test_preview_is_kept_with_the_proposal(store):
     proposal_id = approved(store)
     assert store.get(proposal_id)["preview"] == PREVIEW
+
+
+def test_a_state_change_and_its_audit_row_are_one_transaction(store, state, monkeypatch):
+    proposal_id = store.propose(ip="203.0.113.7", direction="both", actor="ahmad",
+                                at=T0)["proposal_id"]
+
+    def broken_audit(*args, **kwargs):  # as if the disk filled up at this moment
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(approvals, "insert_audit", broken_audit)
+    with pytest.raises(sqlite3.OperationalError):
+        store.reject(proposal_id, actor="ahmad", at=T0 + 1)
+    # The UPDATE was rolled back with the failed audit row: no change without its record.
+    assert store.get(proposal_id)["state"] == "proposed"
+    assert actions(state) == ["response.proposed"]
 ```
 
 `tests/unit/test_opnsense.py` (a fake OPNsense: `http.server` on `127.0.0.1` wrapped in TLS with a throwaway test CA, so the tests also prove that an untrusted certificate is refused):
@@ -2552,8 +2582,8 @@ pytest tests/unit/test_response_approvals.py tests/unit/test_opnsense.py tests/u
 Expected output:
 
 ```text
-....................................................                                         [100%]
-52 passed in 3.36s
+.....................................................                                        [100%]
+53 passed in 3.40s
 ```
 
 **Step 6.** Walk through the whole workflow against the API. Start the server in one terminal, then run the rest in a second one:
@@ -2596,7 +2626,7 @@ EOF
 Expected output:
 
 ```text
-{"analysis_id":"20ba9a8122f51c5d","findings":1}
+{"analysis_id":"4423386c532f1b46","findings":1}
 400 '1.2.3.4; rm -rf /' does not appear to be an IPv4 or IPv6 address
 200 proposal 1: proposed
 sudo nft 'add element inet maxguard maxguard_block_in_v4 { 172.18.0.3 }'
