@@ -1,9 +1,10 @@
-# Save point: MaxGuard v2.0 reference build (October 6, 2026, 21:30 UTC)
+# Save point: MaxGuard v2.0 reference build (October 6, 2026, evening, stopped by the project lead)
 
 **Not for merging.** This folder saves the planning session's scratch workspace
 so the work can continue in a new session or container. The deliverable is the
 documentation in `docs/` on branch `v2-planning` (pull request #3, head
-`c0e780d` when this was saved). Work stopped here at the project lead's request;
+`d14e578` when this was saved; PR #3 was merged at `087121e`, the later commits on
+`v2-planning` are not in `main` yet). Work stopped here at the project lead's request;
 it continues when the project lead says "GO".
 
 ## What is in this folder
@@ -21,17 +22,19 @@ it continues when the project lead says "GO".
 
 | Task | State |
 |---|---|
-| JAI-07 API, AMO-05, JAI-11, JON-06 | Built, tested, in the docs |
-| KAR-03, KAR-04, KAR-06 | Built, tested, in the docs (KAR-06's lab run and ALI-05 stay hardware tasks) |
-| JAK-07 live sensor | Built, tested end to end with containers (1-minute folders shipped, HTTP 200, alerts with the sensor_id), in the docs |
-| AHM-07, AHM-08 response | Built by a builder, reviewed by the lead (one-transaction audit added), in the docs; the adversarial reviewer had not run yet |
-| API changes by the lead | Host allow-list (`MAXGUARD_ALLOWED_HOSTS`, DNS rebinding), `create_ingest_app()` and `docker/compose.lan.yaml` (only `POST /api/ingest` on the LAN, port 8001) |
-| AHM-02/03/06 dashboard | Being built (workflow `maxguard-reference-build-5`); not in this save point's committed `ref/` |
-| FIO-06/07, JAK-10/11, JAI-09 + JON-05 | Not built yet (queued in the same workflow) |
+| JAI-07, AMO-05, JAI-11, JON-06, KAR-03/04/06 | Built, tested, in the docs |
+| JAK-07 live sensor | Built, tested end to end with containers, in the docs |
+| AHM-07/08 response | Built, lead-reviewed (one-transaction audit added), in the docs. Adversarial review NOT run |
+| AHM-02/03/06 dashboard | Built, in the docs (stages made by `docgen/make_web_snippets.py`). Adversarial review NOT run |
+| FIO-06/07 decoys, baselines | Built, in the docs. Rule IDs wait for the Security Lead |
+| API changes by the lead | Host allow-list (`MAXGUARD_ALLOWED_HOSTS`), `create_ingest_app()` + `docker/compose.lan.yaml`, `report["devices"]` |
+| JAK-10/11 NetFlow, host agent | Interrupted: partial work in `results/wip-netflow.patch` (`git apply` it in `ref`); not reviewed |
+| JAI-09 + JON-05 release, offline bundle | Not built |
 
-`results/response-builder-result.json` is the response builder's full report.
-`workflows/maxguard-reference-build-5-*.js` runs the remaining builders one at a
-time (a usage cap stopped parallel builders twice).
+Builder reports: `results/*-result.json`. To continue: apply the patch, then
+re-run `workflows/maxguard-reference-build-5-*.js` with only the
+`jakub-netflow-agent` and `release-bundles` builders and the two reviews (it runs
+them one at a time; a usage cap stopped parallel builders twice).
 
 ## Findings to carry forward
 

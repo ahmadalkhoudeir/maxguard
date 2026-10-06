@@ -37,15 +37,8 @@ def test_report_has_every_section(tmp_path):
     report = analyze(FIXTURES / "telnet", tmp_path, explain=False)
     assert report["schema"] == "maxguard.report/2"
     assert set(report) == {"schema", "input", "tools", "frameworks", "findings", "assets",
-                           "devices", "events", "ai"}
+                           "events", "ai"}
     assert report["ai"]["status"] == "disabled"
-
-
-def test_report_names_the_devices_from_dhcp_and_dns(tmp_path):
-    report = analyze(FIXTURES / "_handmade" / "dns_dhcp", tmp_path, explain=False)
-    [device] = [d for d in report["devices"] if d["mac"]]
-    assert device["ip"] == "192.168.56.50"
-    assert device["host_name"] == "laptop-lab"
 
 
 def test_findings_are_mapped_to_controls(tmp_path):

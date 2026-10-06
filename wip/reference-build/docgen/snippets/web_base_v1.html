@@ -1,0 +1,38 @@
+<!doctype html>
+{# The layout every page extends (Ahmad, AHM-02). Everything is served by this
+   computer: no CDN, no web fonts. Jinja2 escapes every {{ value }}. #}
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {# htmx settings: no inline <style> (our CSP blocks it), never run scripts or eval
+     from a response, only talk to this site, and show 400 answers (form errors). #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "400", "swap": true, "error": false}, {"code": "[45]..", "swap": false, "error": true}]}'>
+  <title>{% block title %}MaxGuard{% endblock %} · MaxGuard</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx-2.0.11.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body class="mode-{{ mode }}">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="top">
+    <div class="brand">MaxGuard</div>
+    <nav aria-label="Main">
+      <a href="/">Alerts</a>
+      <a href="/upload">Upload</a>
+    </nav>
+    <form class="mode-switch" method="post" action="/mode">
+      <input type="hidden" name="next" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+      <span id="mode-label">View:</span>
+      <button type="submit" name="mode" value="analyst" aria-describedby="mode-label"
+              aria-pressed="{{ 'true' if mode == 'analyst' else 'false' }}">Analyst</button>
+      <button type="submit" name="mode" value="home" aria-describedby="mode-label"
+              aria-pressed="{{ 'true' if mode == 'home' else 'false' }}">Home</button>
+    </form>
+  </header>
+  <p class="privacy">Your data never leaves this computer.</p>
+  <main id="main" tabindex="-1">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

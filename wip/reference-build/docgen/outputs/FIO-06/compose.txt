@@ -1,0 +1,2 @@
+macvlan eth0 192.0.2.250 True ['ALL']
+error while interpolating services.decoy.networks.decoy-lan.ipv4_address: required variable MAXGUARD_DECOY_IP is missing a value: set MAXGUARD_DECOY_IP to a free LAN address

@@ -167,7 +167,8 @@ TASKS = [
             "Try it yourself on a fixture folder (Zeek-log input needs no Zeek):\n\n@@RUN try@@",
             pr_step("feat: pipeline.analyze from input to report (JAI-05)", "ahmadalkhoudeir"),
         ],
-        "files": [("maxguard/pipeline.py", "snip:pipeline_v1.py"), "tests/unit/test_pipeline.py"],
+        "files": [("maxguard/pipeline.py", "snip:pipeline_v1.py"),
+                  ("tests/unit/test_pipeline.py", "snip:test_pipeline_v1.py")],
         "commands": [
             {"id": "tests", "show": "pytest tests/unit/test_pipeline.py -q"},
             {"id": "try", "show": (

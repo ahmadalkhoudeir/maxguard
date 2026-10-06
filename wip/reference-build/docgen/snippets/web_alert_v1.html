@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{# One alert (Ahmad, AHM-03). Analyst mode: facts, AI sentences with citation links,
+   evidence, controls, techniques, and the status form. Home mode: the human-written
+   headline and action, and the severity in words; no IDs and no framework names.
+   AI text and anything from traffic is plain, escaped text: never |safe. #}
+{% block title %}{{ alert.title }}{% endblock %}
+{% block content %}
+<p class="back"><a href="/">← All alerts</a></p>
+
+{% if mode == "home" %}
+<article class="home-view card">
+  <h1>{{ home.headline if home else alert.title }}</h1>
+  <p class="home-severity">{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %}</p>
+  <h2>What to do</h2>
+  <p class="home-action">{{ home.action if home else "Ask the person who looks after your network to look at this alert." }}</p>
+  <p class="muted">Device involved: {{ alert.src_ip }}. Last seen {{ alert.last_seen | utc_time }}.</p>
+</article>
+{% else %}
+<h1>{{ alert.title }}</h1>
+<dl class="facts">
+  <dt>Severity</dt><dd>{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %} <span class="muted">(set by the rule, never by the AI)</span></dd>
+  <dt>Rule</dt><dd class="mono">{{ alert.rule_id }}</dd>
+  <dt>Source → destination</dt>
+  <dd class="mono">{{ alert.src_ip }}
+    → {{ alert.dst_ip }}:{{ alert.dst_port }} ({{ alert.protocol }})</dd>
+  <dt>Seen</dt><dd>{{ alert.count }} time{{ "" if alert.count == 1 else "s" }}, first {{ alert.first_seen | utc_time }}, last {{ alert.last_seen | utc_time }}</dd>
+  <dt>Detected by</dt><dd>{{ alert.source }}</dd>
+  {% for key, value in alert.details | dictsort %}
+  <dt>{{ key }}</dt><dd class="mono">{{ value }}</dd>
+  {% endfor %}
+</dl>
+
+<section aria-labelledby="ai-heading">
+  <h2 id="ai-heading">What the local AI says</h2>
+  {% if ai.status == "unavailable" %}
+  <div class="banner" role="alert">
+    <strong>The AI explanation is not available.</strong>
+    {{ ai.reason or "The local AI (Ollama) could not be reached." }}
+    The alert itself is complete: the rules, not the AI, decide what is an alert.
+  </div>
+  {% endif %}
+  {% if alert.explanation_sentences %}
+  <p class="muted">About: <strong>{{ alert.title }}</strong>, severity {{ alert.severity | capitalize }} (from the rule).
+    Each sentence links to the records it cites; check them before you trust it.</p>
+  <ul class="ai-sentences">
+    {% for sentence in alert.explanation_sentences %}
+    <li>{{ sentence.text }}
+      {% for record_id in sentence.evidence_ids %}<a class="chip mono" href="#ev-{{ record_id }}" title="Evidence record {{ record_id }}">{{ record_id }}</a>{% endfor %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% elif ai.status != "unavailable" %}
+  <p class="muted">No AI explanation for this alert{% if ai.status == "disabled" %} (the AI was switched off for this analysis){% endif %}.</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="ev-heading">
+  <h2 id="ev-heading">Evidence</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th scope="col">Record ID</th><th scope="col">Log</th><th scope="col">UID</th><th scope="col">Time</th></tr></thead>
+    <tbody>
+      {% for evidence in alert.evidence %}
+      <tr id="ev-{{ evidence.record_id }}" tabindex="-1">
+        <td class="mono">{{ evidence.record_id }}</td>
+        <td class="mono">{{ evidence.log }}</td>
+        <td class="mono">{{ evidence.uid }}</td>
+        <td>{{ evidence.ts | utc_time }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section aria-labelledby="controls-heading">
+  <h2 id="controls-heading">Compliance controls</h2>
+  {% for group in groups %}
+  <h3>{{ group.framework }} <span class="version">{{ group.version }}</span></h3>
+  <ul class="controls">
+    {% for control in group.controls %}
+    <li><span class="mono">{{ control.control_id }}</span> {{ control.title }}
+      <div class="muted">{{ control.rationale }}</div></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No compliance controls are mapped to this rule.</p>
+  {% endfor %}
+</section>
+
+<section aria-labelledby="attack-heading">
+  <h2 id="attack-heading">MITRE ATT&amp;CK techniques</h2>
+  {% if alert.attack %}
+  <ul class="controls">
+    {% for technique in alert.attack %}
+    <li><span class="mono">{{ technique.technique_id }}</span> {{ technique.name }}
+      <span class="muted">tactic: {{ technique.tactic }} · ATT&amp;CK {{ technique.version }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No ATT&amp;CK technique is mapped to this rule.</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="status-heading">
+  <h2 id="status-heading">Status and assignee</h2>
+  {% include "_status.html" %}
+</section>
+{% endif %}
+{% endblock %}

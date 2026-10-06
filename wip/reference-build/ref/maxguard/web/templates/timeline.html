@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{# IP timeline (Ahmad, AHM-06): everything one address did, in time order, and the
+   alerts (with their ATT&CK techniques) that involve it. #}
+{% block title %}Timeline{% if ip %} {{ ip }}{% endif %}{% endblock %}
+{% block content %}
+<h1>Timeline{% if ip %} for <span class="mono">{{ ip }}</span>{% endif %}</h1>
+
+<form class="filters" method="get" action="/timeline">
+  <label for="ip">IP address</label>
+  <input id="ip" name="ip" type="text" value="{{ ip }}" required inputmode="text"
+         autocomplete="off" spellcheck="false" placeholder="192.0.2.10">
+  <label for="hours">Window</label>
+  <select id="hours" name="hours">
+    {% for choice, label in hour_choices.items() %}
+    <option value="{{ choice }}" {% if choice == hours %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  {% if end is not none %}<input type="hidden" name="end" value="{{ end }}">{% endif %}
+  <button type="submit">Show</button>
+</form>
+
+{% if ip %}
+<p class="muted">From {{ (until - hours * 3600) | utc_time }} to {{ until | utc_time }}.
+  {% if end is not none %}<a href="/timeline?ip={{ ip | urlencode }}&amp;hours={{ hours }}">Show the window up to now instead</a>.{% endif %}</p>
+
+<section aria-labelledby="alerts-heading">
+  <h2 id="alerts-heading">Alerts involving this address</h2>
+  {% if alerts %}
+  <ul class="controls">
+    {% for alert in alerts %}
+    <li>{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %}
+      <a href="/alerts/{{ alert.finding_id }}">{{ alert.title }}</a>
+      {% for technique in alert.attack %}
+      <span class="chip mono" title="{{ technique.name }}, tactic {{ technique.tactic }}">{{ technique.technique_id }} {{ technique.name }} ({{ technique.tactic }})</span>
+      {% endfor %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No alert involves this address.</p>
+  {% endif %}
+</section>
+
+<section aria-labelledby="events-heading">
+  <h2 id="events-heading">Events</h2>
+  {% if rows %}
+  <table class="stack">
+    <caption>{{ rows | length }} event{{ "" if rows | length == 1 else "s" }}, oldest first{% if rows | length >= limit %} (only the first {{ limit }}: pick a shorter window){% endif %}</caption>
+    <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Connection</th><th scope="col">Summary</th><th scope="col">Alert</th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      {% set event = row.event %}
+      <tr>
+        <td data-label="Time">{{ event.ts | utc_time }}</td>
+        <td data-label="Kind">{{ event.kind }}</td>
+        <td data-label="Connection" class="mono">{{ event.src_ip }}{% if event.src_port is not none %}:{{ event.src_port }}{% endif %} → {{ event.dst_ip }}{% if event.dst_port is not none %}:{{ event.dst_port }}{% endif %}</td>
+        <td data-label="Summary" class="mono">{{ event.summary }}</td>
+        <td data-label="Alert">{% if row.alert %}<a href="/alerts/{{ row.alert.finding_id }}">{{ row.alert.title }}</a>{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No events for this address in this window. Events are kept for 7 days;
+    for an older capture, open the timeline from the alert page.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

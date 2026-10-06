@@ -1,0 +1,96 @@
+{
+ "owner": "fiona-spring (Fiona: FIO-06 decoys, FIO-07 per-device baselines)",
+ "files": [
+  "maxguard/decoy/__init__.py",
+  "maxguard/decoy/service.py",
+  "maxguard/decoy/__main__.py",
+  "maxguard/rules/decoy.py",
+  "maxguard/rules/baseline.py",
+  "docker/decoy-compose.yaml",
+  "tests/unit/test_decoy.py",
+  "tests/unit/test_baseline.py",
+  "docs-draft/decoy-baseline-notes.md"
+ ],
+ "commands": [
+  {
+   "command": "./.venv/bin/pytest tests/unit/test_decoy.py tests/unit/test_baseline.py -q -p no:cacheprovider",
+   "output": "......................                                                   [100%]\n22 passed in 0.85s"
+  },
+  {
+   "command": "docker run --rm --network none -v $PWD:/src:ro -v $(realpath ../deps313):/deps:ro -e PYTHONPATH=/deps:/src -e PYTHONDONTWRITEBYTECODE=1 -w /src zeek/zeek:9.0.0 python3 -m pytest tests/unit/test_decoy.py tests/unit/test_baseline.py -q -p no:cacheprovider",
+   "output": "22 passed in 0.43s   (Python 3.13.5)"
+  },
+  {
+   "command": "./.venv/bin/pytest tests/unit -q -p no:cacheprovider",
+   "output": "791 passed, 1 skipped in 16.06s"
+  },
+  {
+   "command": "./.venv/bin/ruff check maxguard/decoy maxguard/rules/decoy.py maxguard/rules/baseline.py tests/unit/test_decoy.py tests/unit/test_baseline.py",
+   "output": "All checks passed!"
+  },
+  {
+   "command": "docker compose -f docker/decoy-compose.yaml config",
+   "output": "error while interpolating services.decoy.networks.decoy-lan.ipv4_address: required variable MAXGUARD_DECOY_IP is missing a value: set MAXGUARD_DECOY_IP to a free LAN address"
+  },
+  {
+   "command": "MAXGUARD_DECOY_SUBNET=192.0.2.0/24 MAXGUARD_DECOY_GATEWAY=192.0.2.1 MAXGUARD_DECOY_IP=192.0.2.250 docker compose -f docker/decoy-compose.yaml config",
+   "output": "name: maxguard-decoy ... networks: decoy-lan: ipv4_address: 192.0.2.250 ... read_only: true ... cap_drop: [ALL] ... sysctls: net.ipv4.ip_unprivileged_port_start: \"0\" ... networks: decoy-lan: name: maxguard-decoy-lan, driver: macvlan, driver_opts: parent: eth0, ipam.config: subnet 192.0.2.0/24 gateway 192.0.2.1 (exit 0)"
+  },
+  {
+   "command": "docker run --rm python:3.11-slim-bookworm cat /proc/sys/net/ipv4/ip_unprivileged_port_start",
+   "output": "0"
+  },
+  {
+   "command": "docker network create fiona-spring-net; docker run -d --name fiona-spring-decoy --network fiona-spring-net --user 10001:10001 --read-only --cap-drop ALL --security-opt no-new-privileges:true --sysctl net.ipv4.ip_unprivileged_port_start=0 -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/src -e MAXGUARD_DECOY_LOG=/data/decoy.log -e MAXGUARD_DECOY_TIMEOUT=2 -v $REF/maxguard:/src/maxguard:ro -v <scratch dir>:/data python:3.11-slim-bookworm python -m maxguard.decoy; docker logs fiona-spring-decoy",
+   "output": "decoy ftp listening on 0.0.0.0:21\ndecoy http listening on 0.0.0.0:80\ndecoy telnet listening on 0.0.0.0:23"
+  },
+  {
+   "command": "docker run --rm --network fiona-spring-net nicolaka/netshoot:v0.15 sh -c 'printf \"root\\r\\n\" | nc -w 3 fiona-spring-decoy 23; printf \"USER admin\\r\\n\" | nc -w 3 fiona-spring-decoy 21; curl -s -m 5 http://fiona-spring-decoy/; head -c 300 /dev/urandom | nc -w 3 fiona-spring-decoy 23 | head -c 20 | od -c'",
+   "output": "--- telnet\nlogin: \n--- ftp\n220 FTP server ready\n--- http\n<!doctype html><html><head><title>Printer admin</title></head><body><h1>Printer admin</h1><form method=post>...</form></body></html>\n--- garbage\n0000000   l   o   g   i   n   :    "
+  },
+  {
+   "command": "tcpdump (netshoot in --network container:fiona-spring-decoy) during the 4 connections, then: tcpdump -n -r decoy.pcap 'tcp[tcpflags] & tcp-syn != 0'; count of 'src host 172.18.0.2 and tcp[tcpflags] & (tcp-syn|tcp-ack) == tcp-syn'; count of 'src host 172.18.0.2 and udp'",
+   "output": "IP 172.18.0.3.59642 > 172.18.0.2.23: Flags [S]\nIP 172.18.0.2.23 > 172.18.0.3.59642: Flags [S.]\nIP 172.18.0.3.54706 > 172.18.0.2.21: Flags [S]\nIP 172.18.0.2.21 > 172.18.0.3.54706: Flags [S.]\nIP 172.18.0.3.38648 > 172.18.0.2.80: Flags [S]\nIP 172.18.0.2.80 > 172.18.0.3.38648: Flags [S.]\nIP 172.18.0.3.59644 > 172.18.0.2.23: Flags [S]\nIP 172.18.0.2.23 > 172.18.0.3.59644: Flags [S.]\npackets sent by the decoy with only SYN set:\n0\nUDP (DNS) packets from the decoy:\n0"
+  },
+  {
+   "command": "docker cp fiona-spring-decoy:/data/decoy.log logs/decoy.log; cat logs/decoy.log",
+   "output": "{\"dst_ip\": \"172.18.0.2\", \"dst_port\": 23, \"first_bytes_hex\": \"726f6f740d0a\", \"service\": \"telnet\", \"src_ip\": \"172.18.0.3\", \"src_port\": 59642, \"ts\": 1791322676.0507245}\n{\"dst_ip\": \"172.18.0.2\", \"dst_port\": 21, \"first_bytes_hex\": \"555345522061646d696e0d0a\", \"service\": \"ftp\", ...}\n{\"dst_ip\": \"172.18.0.2\", \"dst_port\": 80, \"first_bytes_hex\": \"474554202f20485454502f312e310d0a486f73743a...\" (64 bytes), \"service\": \"http\", ...}\n{\"dst_ip\": \"172.18.0.2\", \"dst_port\": 23, \"first_bytes_hex\": \"57878dc4...\" (64 bytes of random garbage), \"service\": \"telnet\", ...}"
+  },
+  {
+   "command": "python -c \"from pathlib import Path; from maxguard.rules.base import merge; from maxguard.rules.decoy import decoy_contact; [print(f.severity, f.rule_id, f.src_ip, '->', f.dst_ip, f.dst_port, f.protocol, 'count', f.count, [e.record_id for e in f.evidence]) for f in merge(decoy_contact(Path('logs')))]\"",
+   "output": "critical decoy.contact 172.18.0.3 -> 172.18.0.2 23 telnet count 2 ['d80b44e8b9e1ecb7', '1cc11b20efd7ea83']\ncritical decoy.contact 172.18.0.3 -> 172.18.0.2 21 ftp count 1 ['03065dea8734db1a']\ncritical decoy.contact 172.18.0.3 -> 172.18.0.2 80 http count 1 ['1742b40f86e9eaf7']"
+  },
+  {
+   "command": "docker rm -f fiona-spring-decoy fiona-spring-tcpdump; docker network rm fiona-spring-net",
+   "output": "fiona-spring-net (no fiona-spring-* containers or networks left)"
+  }
+ ],
+ "tests_passed": true,
+ "verified_facts": [
+  "Docker gives a plain container net.ipv4.ip_unprivileged_port_start = 0 (ran: docker run --rm python:3.11-slim-bookworm cat /proc/sys/net/ipv4/ip_unprivileged_port_start -> 0). The decoy ran as uid 10001 with --cap-drop ALL, --read-only and no-new-privileges and still bound ports 21/23/80. The compose file sets the sysctl explicitly anyway.",
+  "The decoy never starts a connection: a tcpdump in the decoy's network namespace showed 4 SYNs from the client, 4 SYN-ACKs from the decoy, 0 SYN-only packets from the decoy and 0 UDP (DNS) packets from it. The unit test wraps socket.socket.connect and connect_ex, and the only recorded connect is the test client's own connection to the decoy port. asyncio's sock_connect goes through socket.connect, so the hook does see asyncio connections.",
+  "Docker macvlan docs (raw.githubusercontent.com/docker/docs/main/content/manuals/engine/network/drivers/macvlan.md, lines 40-52) say the networking equipment must handle promiscuous mode (several MAC addresses on one interface), and that 'Containers attached to a macvlan network cannot communicate with the host directly, this is a restriction in the Linux kernel'. docs.docker.com is blocked by the egress proxy, so I read the upstream source file instead.",
+  "docker compose (v5.3.1) config fails with the custom message when a ${VAR:?msg} value is missing, and resolves the file when the values are set (run above).",
+  "The unit tests also pass on Python 3.13.5 inside zeek/zeek:9.0.0 with ../deps313 (22 passed). The full unit suite on the host is 791 passed, 1 skipped.",
+  "On the lab fixture telnet/conn.log the service is empty (Zeek 9 has no Telnet analyzer), so baseline.new_service shows protocol 'tcp' for port 23. ftp/conn.log has an ftp-data connection to port 45817 next to port 21.",
+  "nicolaka/netshoot:v0.15 and python:3.11-slim-bookworm were already on the host. I pulled no new images."
+ ],
+ "not_run": [
+  "docker compose -f docker/decoy-compose.yaml up -d on a real LAN with macvlan: this sandbox has no real LAN or switch, so the decoy cannot get its own MAC/IP address on a physical network. I used a user-defined bridge network instead. Not run - verify on hardware: start it on the console's wired NIC, connect from a laptop to MAXGUARD_DECOY_IP, and check that decoy.log gets a line.",
+  "Whether Wi-Fi NICs work as a macvlan parent: the compose comment says 'Wi-Fi often cannot' based on Docker's promiscuous-mode note. Not verified here (no hardware). Verify on hardware.",
+  "End to end 'a connection from a laptop appears as a critical alert in the dashboard': needs decoy.log to reach the console's log folder (see issues_for_lead) and the rule registered after approval.",
+  "The image maxguard:2.0.0a0 named in decoy-compose.yaml was not built or run here. I ran the decoy code in python:3.11-slim-bookworm with the package mounted read-only. maxguard.decoy uses only the standard library, so it should behave the same in the runtime image (which has python on PATH from /opt/venv and the user maxguard with uid 10001)."
+ ],
+ "issues_for_lead": [
+  "Rule IDs: decoy.contact and baseline.new_service are built but NOT registered in maxguard/rules/__init__.py, so they still need Ahmad's approval. decoy.contact registers with @rule only when maxguard.rules.decoy is imported, the same pattern as ja4.py. baseline.new_service lives in its own registry, STATEFUL_RULES, which run_all() never runs. Home text (Jonattan) and mapping rows (Amory) for both rule IDs are still missing.",
+  "decoy.log has no route to the console yet. The decoy writes /data/decoy.log in its own volume (maxguard-decoy-data), but nothing ships it into an analysis log folder. Options: the live sensor shipper / POST /api/ingest accepts a decoy.log in the upload, or the decoy gets a small shipper. The normalizer also does not read decoy.log yet (EVENT_KEYS already allows source 'decoy'). This needs a decision from Jaiden or Jakub. I did not touch pipeline.py, live.py or shipper.py.",
+  "The spec says 'the first 64 bytes received as hex' without a key name. I used first_bytes_hex. Each decoy.log line also has a 'service' key (telnet/ftp/http), which the rule uses as Finding.protocol. Line keys: ts, service, src_ip, src_port, dst_ip, dst_port, first_bytes_hex. decoy.log has no uid/community_id, so Evidence.uid is ''. Adding community_id later would let the dashboard join decoy lines to Zeek/Suricata records.",
+  "FIO-07 wording: Step 4 says a device 'using' a new service, but 'What you just did' says 'a device that suddenly offers a new service'. I built 'uses': the device is the src_ip (originator) of a conn event, keyed on (dst_port, proto, service). Detecting new services a device OFFERS would be keyed on dst_ip and needs a separate decision. Please make the doc text consistent.",
+  "Baseline choices beyond the spec, to cut false positives (please confirm or fix in the docs): (a) only kind=='conn' events are counted, because http/ssl/eve describe the same connection again; (b) Zeek service 'ftp-data' is ignored, because its port changes on every transfer; (c) an event with service '' counts as known when the device already used the same port and proto; (d) devices with no baseline entry are skipped, not flagged, because flagging them would flood on every new device.",
+  "Shape of the stateful contract: context = {'baseline': <dict from build_baseline>, 'learning_ends': <epoch float>}. Events with ts < learning_ends never give a finding. Baseline shape: {ip: {'peers': int, 'services': [[port, proto, service], ...]}}, with devices and services sorted. I added run_stateful(log_dir, context), which runs STATEFUL_RULES in sorted order and calls base.merge(). Nothing calls it yet: pipeline.py needs a hook, plus somewhere to store the baseline (StateStore?) and the learning_ends setting. That is the lead's or Jaiden's decision. The rule calls normalize(log_dir, sensor_id='') internally; sensor_id does not affect any field it uses.",
+  "STATEFUL_RULES and @stateful_rule live in maxguard/rules/baseline.py, as instructed. I think they belong in maxguard/rules/base.py next to RULES so that future stateful rules do not import a specific rule module. stateful_rule() refuses IDs already in RULES, but base.rule() does not check STATEFUL_RULES, so a later @rule with a stateful ID would not be caught. If the registry moves to base.py, both checks can be symmetric.",
+  "docker/decoy-compose.yaml requires MAXGUARD_DECOY_SUBNET, MAXGUARD_DECOY_GATEWAY and MAXGUARD_DECOY_IP with no defaults (${VAR:?msg}), because a default IP could clash with a real device. Only the parent has a default (eth0), as the task asked. So a bare 'docker compose -f docker/decoy-compose.yaml config' (FIO-06 step 3) prints a clear error, and the docs should show the command with the three variables set (see docs-draft/decoy-baseline-notes.md).",
+  "Finding has no confidence field, so the 'high-confidence' wording in the FIO-06 Goal is not represented in the data. Severity is critical."
+ ],
+ "doc_notes": "Decoy (FIO-06):\n- service.py is pure standard library (asyncio). Telnet and FTP send their banner first because those servers speak first. HTTP waits for the request, then sends a page titled 'Printer admin'.\n- Every connection writes one JSON line (sort_keys) to decoy.log in a finally block, so garbage, silence (timeout) or an early hang-up still gets logged. The contact itself is the evidence.\n- Limits: it reads at most 1024 bytes, logs at most 64 bytes as hex, and waits at most 5 s (MAXGUARD_DECOY_TIMEOUT).\n- The clock is injectable (clock=...), which lets tests check exact ts values. Port 0 in tests picks a free port, so no root is needed.\n- functools.partial passes service, log path, timeout and clock to the handler; asyncio adds reader and writer.\n- The 'never connects out' test wraps socket.socket.connect/connect_ex with monkeypatch and asserts the only connect is the test client's own.\n\ndecoy.contact rule:\n- One finding per decoy.log line, severity critical, source 'decoy'. Evidence = ids.evidence('decoy.log', line), so record_id is the hash of the line and the AI can cite it.\n- merge() counts repeats per (src, dst, port).\n- To use it before approval: `from maxguard.rules.decoy import decoy_contact`.\n\nCompose:\n- macvlan gives the decoy its own MAC and IP on the LAN.\n- The parent must be the console's normal wired NIC, never the sensor capture port.\n- The host cannot reach its own macvlan containers (a Linux kernel restriction, per the Docker docs), so test from a laptop.\n- Hardening: read_only, cap_drop ALL, no-new-privileges, and the image's non-root user. The sysctl net.ipv4.ip_unprivileged_port_start=0 lets that user bind 21/23/80. Docker already defaults it to 0 in containers (verified); it is set explicitly so the setup does not depend on that default.\n- The bridge-network proof in the notes uses the same flags.\n\nBaselines (FIO-07):\n- build_baseline(events) uses only conn events. Device = src_ip. Output: {ip: {'peers': n, 'services': [[port, proto, service], ...]}}, sorted and JSON-ready.\n- JSON turns tuples into lists, so the rule converts them back (known_services) and works on a json.loads copy (tested).\n- The rule takes (log_dir, context) and never reads the clock or the disk for its history; same logs plus same context give the same findings (tested with to_dict twice).\n- Test fixture logic: the lab captures all come from 172.18.0.3 to 172.18.0.2, each on one service. The plain_http and clean_tls13 captures are the learning set. Telnet (port 23) is the new service. learning_ends 1791250000 comes before every lab capture.\n\nGotcha: `pkill -f <pattern>` inside a Bash tool call can kill the calling shell itself (exit 144). Do not use it with patterns that match your own command line.\n\nEverything I created in Docker is cleaned up: no fiona-spring-* containers or networks remain, and the scratch dirs are removed."
+}

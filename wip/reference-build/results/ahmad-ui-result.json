@@ -1,0 +1,94 @@
+{
+ "owner": "ahmad-ui (Ahmad: AHM-02, AHM-03, AHM-06 dashboard)",
+ "files": [
+  "maxguard/web/__init__.py",
+  "maxguard/web/routes.py",
+  "maxguard/web/templates/base.html",
+  "maxguard/web/templates/_severity.html",
+  "maxguard/web/templates/queue.html",
+  "maxguard/web/templates/upload.html",
+  "maxguard/web/templates/alert.html",
+  "maxguard/web/templates/_status.html",
+  "maxguard/web/templates/timeline.html",
+  "maxguard/web/templates/assets.html",
+  "maxguard/web/templates/error.html",
+  "maxguard/web/static/app.css",
+  "maxguard/web/static/app.js",
+  "tests/unit/test_web.py",
+  "screens/queue.png",
+  "screens/alert-analyst.png",
+  "screens/alert-home.png",
+  "screens/timeline.png",
+  "screens/assets.png",
+  "screens/upload.png",
+  "screens/queue-375.png",
+  "docs-draft/dashboard-notes.md"
+ ],
+ "commands": [
+  {
+   "command": "./.venv/bin/pytest tests/unit/test_web.py -q -p no:cacheprovider",
+   "output": ".....................................                                    [100%]\n37 passed in 3.11s"
+  },
+  {
+   "command": "./.venv/bin/pytest tests/unit -q -p no:cacheprovider",
+   "output": "768 passed, 1 skipped in 17.82s"
+  },
+  {
+   "command": "docker run --rm --name ahmad-ui-py313 --network none --user $(id -u):$(id -g) -e PYTHONDONTWRITEBYTECODE=1 -e HOME=/tmp -v $PWD:/src:ro -w /src maxguard-sandbox:test /opt/venv/bin/python -m pytest tests/unit/test_web.py -q -p no:cacheprovider   (Python 3.13.5)",
+   "output": "37 passed in 3.41s"
+  },
+  {
+   "command": "./.venv/bin/ruff check maxguard/web/routes.py maxguard/web/__init__.py tests/unit/test_web.py",
+   "output": "All checks passed!"
+  },
+  {
+   "command": "sha256sum maxguard/web/static/htmx-2.0.11.min.js",
+   "output": "d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717  maxguard/web/static/htmx-2.0.11.min.js"
+  },
+  {
+   "command": "MAXGUARD_DATA_DIR=<seeded> uvicorn maxguard.api.app:create_app --factory --host 127.0.0.1 --port 8765; Playwright 1.63 (throwaway venv) + /opt/pw-browsers/chromium (build 1194): page widths, tab order, status form by keyboard, live refresh",
+   "output": "queue-375: scrollWidth=375 (viewport 375)\nalert-375: scrollWidth=375 (viewport 375)\ntimeline-375: scrollWidth=375 (viewport 375)\nassets-375: scrollWidth=375 (viewport 375)\ntab order: ['Skip to content', 'Alerts', 'Upload', 'Timeline', 'Devices', 'mode', 'mode', '\u2190 All alerts', '172.18.0.3', '172.18.0.2', 'aab5e36795eaa77e', 'aab5e36795eaa77e', 'actor', 'alert-status', 'assignee', 'Save', ...]\nstatus form says: Saved.\nqueue row after change: ['High\\tTelnet session in cleartext\\t172.18.0.3 \u2192 172.18.0.2:23\\t1\\tResolved\\t\u2014\\t2026-10-06 01:31:25 UTC']\nconsole errors/warnings: []"
+  },
+  {
+   "command": "Playwright: open queue in one tab, upload tests/fixtures/zeek/pop3 as a .zip on /upload in another, then upload a .txt",
+   "output": "POP3 in queue before: False\nupload result: Done: 1 finding. They are in the alert queue.\nPOP3 in queue after (no reload): ['High\\tPOP3 mail retrieval in cleartext\\t172.18.0.3 \u2192 172.18.0.2:110\\t1\\tNew\\t\u2014\\t2026-10-06 01:32:28 UTC']\nbad upload result: Upload failed: not a .pcap/.pcapng capture or a .zip/.tar.gz of Zeek logs\n(uvicorn log: GET /api/stream 200, POST /api/analyses 200, POST /api/analyses 400)"
+  },
+  {
+   "command": "Playwright: focus the Home button on /timeline?ip=172.18.0.3, press Enter (after the Referrer-Policy fix)",
+   "output": "url: http://127.0.0.1:8765/timeline?ip=172.18.0.3 | home pressed: true\nuvicorn: \"POST /mode HTTP/1.1\" 303 See Other   (before the fix: 403 Forbidden)"
+  }
+ ],
+ "tests_passed": true,
+ "verified_facts": [
+  "htmx 2.0.11 vendored file sha256 = d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717 (sha256sum; also checked in test_htmx_file_is_the_reviewed_one).",
+  "The vendored htmx 2.0.11 reads <meta name=\"htmx-config\"> (querySelector('meta[name=\"htmx-config\"]') in the minified source) and has the config keys includeIndicatorStyles, allowEval, allowScriptTags, selfRequestsOnly, responseHandling (grep of maxguard/web/static/htmx-2.0.11.min.js). Its default responseHandling does not swap 4xx, so the page config adds {code:'400', swap:true} for form errors.",
+  "With Referrer-Policy: no-referrer, Chromium 1194 sent a form POST to /mode that the API's cross-site check refused with 403 (uvicorn log); with Referrer-Policy: same-origin it got 303. Consistent with Origin: null being sent under no-referrer.",
+  "Zeek -D uids repeat across captures: the telnet fixture's first connection uid CJKFoj4bpHEhTeaRoj also appears in the cert_expired finding's evidence (asserted in test_timeline_links_survive_repeated_zeek_uids). Linking timeline rows by uid alone linked the wrong alert (seen in a first screenshot).",
+  "The finding for cleartext.telnet cites maxguard_cleartext.log record aab5e36795eaa77e, which is not a timeline event (the normalizer does not read that log); its conn.log event aa1f0f2c2964073b shares the Zeek uid, so linking by uid plus the same host pair and port is needed (pipeline.analyze on tests/fixtures/zeek/telnet).",
+  "tests/fixtures/zeek/_handmade/dns_dhcp has no known_*.log, so report['assets'] is empty for it, while build_device_table() returns 192.168.56.50 / 02:00:00:aa:bb:cc / laptop-lab: the devices page needs a full join.",
+  "The CSP script-src 'self' is enforced in Chromium: Playwright's page.wait_for_function (eval) was refused with \"Refused to evaluate a string as JavaScript because 'unsafe-eval' is not an allowed source\". The dashboard pages produced no console errors or warnings.",
+  "Pages at a 375 px viewport have document.documentElement.scrollWidth == 375 (queue, alert, timeline, assets): no sideways scrolling.",
+  "Starlette 1.7.0 / FastAPI 0.142.2 / Jinja2 3.1.6 in ./.venv; TemplateResponse(request, name, context, status_code=...) is the signature used.",
+  "Web tests pass on Python 3.11 (./.venv) and Python 3.13.5 (maxguard-sandbox:test /opt/venv)."
+ ],
+ "not_run": [
+  "Step 9 of AHM-02 was checked with Playwright and Chromium (375 px viewport, Tab order, keyboard-only status change and mode switch), not with a real phone or a screen reader. Verify on a real phone and with NVDA/VoiceOver before release.",
+  "The AHM-02 'How to test' docker compose path (docker compose -f docker/compose.yaml -f docker/compose.dev.yaml up --build, then upload tests/pcaps/telnet.pcap) was not run. I uploaded a Zeek-log zip to uvicorn on the host instead. A real pcap upload needs Zeek in the engine image.",
+  "No AI model was run (registry blocked). The AI sentences in the screenshots and tests were written by hand into the stored report.",
+  "AHM-03 'a non-technical friend can read the Home view' is a human test and was not done."
+ ],
+ "issues_for_lead": [
+  "The device table is not in the report. AHM-06 step 3 says to join the inventory with the device table, but pipeline.analyze() never calls maxguard.sensor.attribution.build_device_table(), and the log folder is deleted after an upload. /assets reads report.get('devices', []), so MAC, host name and DNS names stay empty until pipeline.py adds report['devices'] = build_device_table(log_dir) (a new optional key, backward compatible; ARCHITECTURE section 8 should list it). test_web.py adds the key by hand. I did not touch pipeline.py.",
+  "Zeek -D uids are not unique across captures. The first connection of every lab capture gets uid CJKFoj4bpHEhTeaRoj. My timeline only links an event to an alert when its record_id, uid or Community ID matches the evidence AND it is between the alert's two hosts on the alert's port. Any other code that joins on uid across analyses (events store, custody, response preview) has the same trap. Worth one sentence in ARCHITECTURE section 7.",
+  "The timeline cannot link an event to an alert by record_id alone, as AHM-06 step 2 implies. Findings often cite records the normalizer does not turn into events (maxguard_cleartext.log, x509.log), so a link also matches the uid or Community ID, with the host/port check above. The step text should say 'a finding cites that event or its connection'.",
+  "I added to the AHM-06 timeline: an optional end=<Unix seconds> query parameter. The alert page links /timeline?ip=X&end=<last_seen+1>. With only 'the last 24 hours', a capture recorded earlier shows an empty timeline. The hours selector is 1, 6, 24, 72 or 168; out-of-range values get FastAPI's 422.",
+  "Referrer-Policy: the pages send 'same-origin'. 'no-referrer' makes Chromium send Origin: null on form posts, and app.py's is_cross_site() refuses Origin: null with 403. If any other page or the HTML report export sets no-referrer and has a POST form, it will break the same way. Worth a note in ARCHITECTURE section 10/14.",
+  "Every page now sends a Content-Security-Policy (default-src 'self'; script-src 'self'; style-src 'self'; ... frame-ancestors 'none'), plus X-Content-Type-Options: nosniff. ARCHITECTURE section 14 mentions a CSP only for the HTML export, so the web row could say so too. htmx is configured through <meta name=\"htmx-config\">: includeIndicatorStyles false (the CSP blocks inline styles), allowEval false, allowScriptTags false, selfRequestsOnly true, and responseHandling that swaps 400 answers (form errors).",
+  "I added routes not named in the steps: POST /mode (the Analyst/Home switch as a same-origin form; it sets cookie mg_mode and redirects only to a local path) and GET /favicon.ico (returns 204). AHM-04 security review: the mode cookie is a display preference only.",
+  "Upload page: /api/analyses answers JSON, so the form uses hx-swap=\"none\". app.js writes the result with textContent ('Done: N findings...' or 'Upload failed: <detail>'). A permanent link to the queue sits under the form. The AHM-02 step 7 wording 'then links to the queue' matches this.",
+  "AHM-02 step 4 says the nav has 'Alerts, Upload; Timeline and Devices come in AHM-06'. The reference build has all four links because AHM-06 is built too. The guides should show the 2-link nav in AHM-02 and add the other two in AHM-06.",
+  "AHM-03 choices the steps leave open: the status form shows in Analyst mode only (Home mode has no jargon such as 'False positive'); Home mode shows the device's IP address ('Device involved: ...') but no rule, record, framework or technique IDs (tested); the Home-mode queue shows the Home headline instead of the rule title; all times are UTC. Confirm or adjust in review.",
+  "AHM-06 does not mention the response module, so no page links to /api/response/. maxguard/response/routes.py is JSON only and has no HTML pages to link to."
+ ],
+ "doc_notes": "I put the full notes, with the real outputs to paste into the guides, in docs-draft/dashboard-notes.md. What a junior needs to know:\n1) Never use |safe. Jinja2 escapes every {{ value }} in .html templates. Titles, hosts, user names and AI sentences come from traffic an attacker controls. test_hostile_values_are_escaped puts <script> in the title, the details, an AI sentence and the assignee.\n2) Every page sends a Content-Security-Policy as a second wall. That is why htmx is configured through a <meta name=\"htmx-config\"> tag: no inline indicator style (we style .htmx-indicator in app.css), no eval, and no scripts run from responses.\n3) The pages send Referrer-Policy: same-origin, never no-referrer. With no-referrer, Chrome sends Origin: null on form posts, and the API's cross-site check refuses them. This was found in the browser, not by unit tests.\n4) htmx 2 does not swap 4xx answers by default. The config swaps 400, so a 'type your name' error shows up in the form.\n5) The queue's #alerts div has hx-trigger=\"refresh, every 30s\". app.js listens to /api/stream and calls htmx.trigger(\"#alerts\", \"refresh\"). The filters use hx-include=\"#filters\" because an htmx GET on one <select> sends only that select's value, and hx-push-url keeps the filters in the address bar. The Apply button is there for people without JavaScript.\n6) The status form sends hx-patch to /alerts/{id}/status, which returns the same form fragment. The first time, it asks for a name and stores it in the mg_actor cookie. StateStore.update_alert needs at=time.time() because the stores never read the clock.\n7) Zeek -D repeats uids across captures, so linking by uid alone is wrong. Also check the host pair and the port.\n8) Timeline tests never depend on the real clock. They monkeypatch routes.now or pass end=.\n9) For screenshots, run uvicorn with MAXGUARD_DATA_DIR pointing at a seeded folder. Playwright's wait_for_function fails on these pages because the CSP blocks eval; use wait_for_selector instead."
+}

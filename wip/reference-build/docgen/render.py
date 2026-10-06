@@ -17,7 +17,7 @@ from taskplan import PREFIX, TASKS
 HERE = Path(__file__).resolve().parent
 WEEK0_TEMPLATE = Path("/tmp/claude-0/drafts/week0_template.md")
 
-LANG = {".py": "python", ".yaml": "yaml", ".yml": "yaml", ".toml": "toml", ".md": "markdown",
+LANG = {".py": "python", ".html": "html", ".css": "css", ".js": "javascript", ".yaml": "yaml", ".yml": "yaml", ".toml": "toml", ".md": "markdown",
         ".sh": "bash", ".json": "json", ".zeek": "zeek", ".rules": "text", ".ini": "ini",
         ".txt": "text"}
 STATUS_LABEL = {"tested": "code, tested", "written": "code, written", "design": "design",

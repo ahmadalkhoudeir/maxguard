@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{# Device inventory (Ahmad, AHM-06): the assets of the newest analysis joined with
+   the device table from device attribution (MAC, host name, DNS names). #}
+{% block title %}Devices{% endblock %}
+{% block content %}
+<h1>Devices</h1>
+{% if analysis %}
+<p class="muted">From the newest analysis: {{ analysis.input_name }}, received {{ analysis.received_at | utc_time }}.</p>
+{% endif %}
+{% if rows %}
+<table class="stack">
+  <caption>{{ rows | length }} device{{ "" if rows | length == 1 else "s" }}, by IP address</caption>
+  <thead>
+    <tr>
+      <th scope="col">IP address</th>
+      <th scope="col">MAC</th>
+      <th scope="col">Host name</th>
+      <th scope="col">DNS names asked for</th>
+      <th scope="col">Services</th>
+      <th scope="col">Software</th>
+      <th scope="col">Alerts</th>
+      <th scope="col">First seen</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td data-label="IP address" class="mono"><a href="/timeline?ip={{ row.ip | urlencode }}">{{ row.ip }}</a></td>
+      <td data-label="MAC" class="mono">{{ row.mac or "—" }}</td>
+      <td data-label="Host name">{{ row.host_name or "—" }}</td>
+      <td data-label="DNS names" class="mono">{{ row.dns_names | join(", ") or "—" }}</td>
+      <td data-label="Services" class="mono">{{ row.services | join(", ") or "—" }}</td>
+      <td data-label="Software">{{ row.software | join(", ") or "—" }}</td>
+      <td data-label="Alerts">{{ row.finding_count }}</td>
+      <td data-label="First seen">{{ row.first_seen | utc_time }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No devices yet. <a href="/upload">Upload a capture</a> to build the inventory.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,67 @@
+# MaxGuard decoys (Fiona, FIO-06): fake Telnet, FTP and printer web services on
+# their OWN address on your LAN. Nothing legitimate should ever connect to them,
+# so every connection becomes a critical "decoy.contact" alert.
+#
+# Rules (CLAUDE.md rule 5):
+#   - The decoy has its own IP address on a macvlan network, so it looks like a
+#     separate device on the LAN (its own MAC address too).
+#   - It only answers connections made to it; it never opens one.
+#   - NEVER use the sensor's capture interface as the parent: that port has no IP
+#     address and must only listen. Use the console's normal network card.
+#
+# Settings (environment variables or a .env file next to the command you run):
+#   MAXGUARD_DECOY_PARENT   the console's normal LAN network card (default eth0;
+#                           see yours with: ip -br link). Use a wired card: the
+#                           card and switch must accept several MAC addresses on
+#                           one port ("promiscuous mode" in Docker's macvlan docs),
+#                           which Wi-Fi often cannot do.
+#   MAXGUARD_DECOY_SUBNET   your LAN, e.g. 192.168.1.0/24 (required)
+#   MAXGUARD_DECOY_GATEWAY  your router's address, e.g. 192.168.1.1 (required)
+#   MAXGUARD_DECOY_IP       a FREE address for the decoy, outside the router's
+#                           DHCP range, e.g. 192.168.1.250 (required)
+#
+# Check:  MAXGUARD_DECOY_SUBNET=192.168.1.0/24 MAXGUARD_DECOY_GATEWAY=192.168.1.1 \
+#         MAXGUARD_DECOY_IP=192.168.1.250 docker compose -f docker/decoy-compose.yaml config
+# Start:  (same variables) docker compose -f docker/decoy-compose.yaml up -d
+# Stop:   docker compose -f docker/decoy-compose.yaml down
+#
+# The console itself cannot reach a macvlan container ("a restriction in the Linux
+# kernel", Docker's macvlan docs); test from another device such as a laptop.
+name: maxguard-decoy
+
+services:
+  decoy:
+    image: maxguard:2.0.0a0 # the same image as the console; it contains maxguard.decoy
+    command: ["python", "-m", "maxguard.decoy"]
+    environment:
+      MAXGUARD_DECOY_PORTS: "telnet=23,ftp=21,http=80"
+      MAXGUARD_DECOY_LOG: /data/decoy.log
+    volumes:
+      - maxguard-decoy-data:/data # decoy.log lives here
+    networks:
+      decoy-lan:
+        ipv4_address: ${MAXGUARD_DECOY_IP:?set MAXGUARD_DECOY_IP to a free LAN address}
+    # Least privilege: the image's non-root user, no Linux capabilities, a
+    # read-only root file system. Ports 21/23/80 still work without root
+    # because this sysctl lets any user of this container use low ports.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
+    restart: unless-stopped
+
+networks:
+  decoy-lan:
+    name: maxguard-decoy-lan
+    driver: macvlan
+    driver_opts:
+      parent: ${MAXGUARD_DECOY_PARENT:-eth0}
+    ipam:
+      config:
+        - subnet: ${MAXGUARD_DECOY_SUBNET:?set MAXGUARD_DECOY_SUBNET to your LAN, e.g. 192.168.1.0/24}
+          gateway: ${MAXGUARD_DECOY_GATEWAY:?set MAXGUARD_DECOY_GATEWAY to your router address}
+
+volumes:
+  maxguard-decoy-data:
+    name: maxguard-decoy-data

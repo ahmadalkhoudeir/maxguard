@@ -1,0 +1,169 @@
+/* MaxGuard dashboard styles (Ahmad, AHM-02). System fonts only: nothing is
+   downloaded. Colors meet WCAG AA contrast; severity is always text + color. */
+
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #1b1f24;
+  --muted: #57606a;
+  --line: #d0d7de;
+  --accent: #0b5cad;
+  --focus: #e36209;
+  --critical: #82071e;
+  --high: #b42318;
+  --medium: #8a5300;
+  --low: #0b5cad;
+  --info: #57606a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 16px; top: 8px; background: var(--panel); padding: 8px; z-index: 1; }
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  padding: 12px 16px;
+  background: #0d1b2a;
+  color: #ffffff;
+}
+.brand { font-weight: 700; font-size: 1.2rem; }
+.top nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.top nav a { color: #ffffff; text-decoration: none; padding: 4px 0; }
+.top nav a:hover { text-decoration: underline; }
+.mode-switch { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.mode-switch button { background: transparent; color: #ffffff; border: 1px solid #8fa3b8; }
+.mode-switch button[aria-pressed="true"] { background: #ffffff; color: #0d1b2a; font-weight: 700; }
+
+.privacy {
+  margin: 0;
+  padding: 6px 16px;
+  background: #dff3e4;
+  color: #14532d;
+  font-size: 0.9rem;
+}
+
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 1.6rem; margin: 8px 0 16px; overflow-wrap: anywhere; }
+h2 { font-size: 1.2rem; margin-top: 32px; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; }
+.muted { color: var(--muted); }
+.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 0.9em; overflow-wrap: anywhere; }
+.empty { background: var(--panel); border: 1px dashed var(--line); padding: 16px; }
+.error { color: var(--high); font-weight: 600; }
+.message { margin: 8px 0 0; font-weight: 600; }
+
+button {
+  font: inherit;
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  cursor: pointer;
+}
+button.secondary { background: var(--panel); color: var(--accent); }
+button[disabled] { opacity: 0.6; cursor: wait; }
+select, input[type="text"], input[type="file"] {
+  font: inherit;
+  padding: 5px 8px;
+  border: 1px solid var(--muted);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  max-width: 100%;
+}
+
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 16px; }
+.status-form, #upload-form { display: grid; gap: 8px; max-width: 420px; }
+
+/* Severity badges: the word is always there; the color only helps. */
+.sev {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.sev-critical { background: var(--critical); }
+.sev-high { background: var(--high); }
+.sev-medium { background: var(--medium); }
+.sev-low { background: var(--low); }
+.sev-info { background: var(--info); }
+
+table { width: 100%; border-collapse: collapse; background: var(--panel); }
+caption { text-align: left; color: var(--muted); padding: 4px 0; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: #eef1f4; }
+.table-wrap { overflow-x: auto; }
+tr:target { background: #fff3c4; }  /* the evidence row a citation link points to */
+
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; }
+.facts dt { font-weight: 600; }
+.facts dd { margin: 0; }
+
+.banner {
+  border: 2px solid var(--medium);
+  background: #fff4d6;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.ai-sentences li { margin-bottom: 8px; }
+.chip {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #eef1f4;
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+.controls { padding-left: 20px; }
+.controls li { margin-bottom: 8px; }
+.version { font-weight: 400; color: var(--muted); font-size: 0.9rem; }
+
+.home-view h1 { font-size: 1.5rem; }
+.home-view .sev { font-size: 1rem; padding: 4px 12px; }
+.home-action { font-size: 1.2rem; font-weight: 600; }
+
+/* htmx shows this while a request runs (its own inline style is switched off: CSP). */
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: block; }
+
+/* Phones (375 px): each table row becomes a small card with labels. */
+@media (max-width: 700px) {
+  .stack thead { position: absolute; left: -9999px; }
+  .stack tr { display: block; border-bottom: 2px solid var(--line); padding: 4px 0; }
+  .stack td { display: grid; grid-template-columns: 9rem 1fr; gap: 8px; border: 0; padding: 4px 8px; }
+  .stack td::before {
+    content: attr(data-label);
+    font: 600 0.9rem system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--muted);
+  }
+  .stack td .sev { justify-self: start; }
+  .facts { grid-template-columns: 1fr; }
+  .facts dd { margin-bottom: 8px; }
+  .mode-switch { margin-left: 0; }
+}

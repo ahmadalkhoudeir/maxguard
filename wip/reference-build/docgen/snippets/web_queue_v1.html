@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{# The alert queue (Ahmad, AHM-02). The filters swap only the #alerts table; the
+   table also reloads itself on "refresh" (sent by app.js when the server says
+   alerts changed) and every 30 seconds in case the live stream is down. #}
+{% block title %}Alerts{% endblock %}
+{% block content %}
+<h1>Alerts</h1>
+
+<form id="filters" class="filters" method="get" action="/">
+  <label for="status">Status</label>
+  <select id="status" name="status"
+          hx-get="/" hx-target="#alerts" hx-select="#alerts" hx-swap="outerHTML"
+          hx-include="#filters" hx-push-url="true">
+    <option value="">All</option>
+    {% for value in statuses %}
+    <option value="{{ value }}" {% if value == status %}selected{% endif %}>{{ status_labels[value] }}</option>
+    {% endfor %}
+  </select>
+  <label for="severity">Severity</label>
+  <select id="severity" name="severity"
+          hx-get="/" hx-target="#alerts" hx-select="#alerts" hx-swap="outerHTML"
+          hx-include="#filters" hx-push-url="true">
+    <option value="">All</option>
+    {% for value in severities %}
+    <option value="{{ value }}" {% if value == severity %}selected{% endif %}>{{ value | capitalize }}</option>
+    {% endfor %}
+  </select>
+  {# Without JavaScript the selects do nothing on their own; this button still works. #}
+  <button type="submit" class="secondary">Apply</button>
+</form>
+
+<div id="alerts" hx-get="/?status={{ status | urlencode }}&amp;severity={{ severity | urlencode }}"
+     hx-trigger="refresh, every 30s" hx-select="#alerts" hx-swap="outerHTML" aria-live="polite">
+  {% if alerts %}
+  <table class="stack">
+    <caption>{{ alerts | length }} alert{{ "" if alerts | length == 1 else "s" }}, most severe first</caption>
+    <thead>
+      <tr>
+        <th scope="col">Severity</th>
+        <th scope="col">Alert</th>
+        <th scope="col">Source → destination:port</th>
+        <th scope="col">Count</th>
+        <th scope="col">Status</th>
+        <th scope="col">Assignee</th>
+        <th scope="col">Last seen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for alert in alerts %}
+      <tr>
+        <td data-label="Severity">{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %}</td>
+        <td data-label="Alert"><a href="/alerts/{{ alert.finding_id }}">{{ alert.title }}</a></td>
+        <td data-label="Source → destination" class="mono">{{ alert.src_ip }} → {{ alert.dst_ip }}:{{ alert.dst_port }}</td>
+        <td data-label="Count">{{ alert.count }}</td>
+        <td data-label="Status">{{ status_labels.get(alert.status, alert.status) }}</td>
+        <td data-label="Assignee">{{ alert.assignee or "—" }}</td>
+        <td data-label="Last seen">{{ alert.last_seen | utc_time }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No alerts{% if status or severity %} match these filters{% endif %}.
+    <a href="/upload">Upload a capture</a> to check it.</p>
+  {% endif %}
+</div>
+{% endblock %}

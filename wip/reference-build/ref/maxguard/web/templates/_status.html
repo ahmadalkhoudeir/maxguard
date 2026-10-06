@@ -1,0 +1,22 @@
+{# The status and assignee form (Ahmad, AHM-03). PATCH /alerts/{id}/status returns
+   this fragment again, and htmx swaps it in place. The display name is asked for
+   once and then kept in the mg_actor cookie (for the audit trail, not security). #}
+<form id="status-form" class="card status-form"
+      hx-patch="/alerts/{{ alert.finding_id }}/status" hx-target="this" hx-swap="outerHTML">
+  {% if actor %}
+  <p class="muted">Changes are recorded in the audit trail as <strong>{{ actor }}</strong>.</p>
+  {% else %}
+  <label for="actor">Your name (asked once, for the audit trail)</label>
+  <input id="actor" name="actor" type="text" maxlength="100" required autocomplete="name">
+  {% endif %}
+  <label for="alert-status">Status</label>
+  <select id="alert-status" name="status">
+    {% for value in statuses %}
+    <option value="{{ value }}" {% if value == alert.status %}selected{% endif %}>{{ status_labels[value] }}</option>
+    {% endfor %}
+  </select>
+  <label for="assignee">Assignee</label>
+  <input id="assignee" name="assignee" type="text" maxlength="100" value="{{ alert.assignee or '' }}">
+  <button type="submit">Save</button>
+  {% if message %}<p class="message" role="status">{{ message }}</p>{% endif %}
+</form>

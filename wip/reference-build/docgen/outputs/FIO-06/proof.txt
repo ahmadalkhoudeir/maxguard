@@ -1,0 +1,9 @@
+decoy ftp listening on 0.0.0.0:21
+decoy http listening on 0.0.0.0:80
+decoy telnet listening on 0.0.0.0:23
+login: 
+220 FTP server ready
+<!doctype html><html><head><title>Printer admin</title></hea
+critical decoy.contact 172.18.0.3 -> 172.18.0.2 23 telnet
+critical decoy.contact 172.18.0.3 -> 172.18.0.2 21 ftp
+critical decoy.contact 172.18.0.3 -> 172.18.0.2 80 http

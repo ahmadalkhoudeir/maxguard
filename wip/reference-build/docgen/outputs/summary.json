@@ -1,9 +1,17 @@
 {
- "AHM-08/session": {
+ "FIO-06/compose": {
+  "code": 1,
+  "ok": true
+ },
+ "FIO-06/proof": {
   "code": 0,
   "ok": true
  },
- "AHM-08/tests": {
+ "FIO-06/tests": {
+  "code": 0,
+  "ok": true
+ },
+ "FIO-07/tests": {
   "code": 0,
   "ok": true
  }

@@ -1,3 +1,5 @@
+d7768a8 decoys and baselines (FIO-06, FIO-07) from the builder
+d75a4c8 dashboard (AHM-02, AHM-03, AHM-06) from the builder; report['devices'] from the device table (lead)
 d41e393 response: a state change and its audit row in one transaction (insert_audit); rollback test
 cbc1e3c response: OPNsense setup text: LAN source rule too; alias type Host(s)
 5c453f9 response module (AHM-07, AHM-08) from the builder, before review
