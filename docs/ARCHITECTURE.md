@@ -147,7 +147,7 @@ built yet.
 | Offline bundle | `scripts/build-offline-bundle.sh`, `scripts/install.sh` | Jonattan | alpha | design |
 | Ed25519 signing | `maxguard/custody/signing.py` | Jaiden | alpha | tested |
 | Chain-of-custody log | `maxguard/custody/log.py` | Amory | spring | tested |
-| Response module | `maxguard/response/` | Ahmad | spring | design |
+| Response module | `maxguard/response/` | Ahmad | spring | tested (nftables and iptables commands loaded in a container; fake OPNsense server over TLS; API session); not run on a real firewall |
 | Live sensor: rotation script, Suricata live settings, Compose file, adapter, shipper | `maxguard/zeek/scripts/live/rotate.zeek`, `maxguard/suricata/maxguard-suricata-live.yaml`, `docker/sensor-compose.yaml`, `maxguard/adapters/live.py`, `maxguard/sensor/shipper.py` | Jakub | spring | tested (unit tests; the three containers shipped 1-minute folders to a console in planning); not run on a Raspberry Pi |
 | JA4 watchlist rule | `maxguard/rules/ja4.py` | Jakub | spring | tested |
 | Device attribution | `maxguard/sensor/attribution.py` | Jakub | spring | tested |
@@ -886,40 +886,88 @@ updates arrive on USB as signed bundles, not over the network.
 
 ## 13. The response module
 
-**Design (not yet built; spring S5–S8, Ahmad).** CLAUDE.md rule 4: blocking
-applies only to networks the user owns or administers, always needs explicit
-human approval, is reversible, and is logged.
+**Tested in planning** (spring S5–S8, Ahmad: AHM-07 and AHM-08) with real
+`nft` and `iptables` in a container and a fake OPNsense server; **not run** on
+a real firewall or an OPNsense VM. CLAUDE.md rule 4: blocking applies only to
+networks the user owns or administers, always needs explicit human approval, is
+reversible, and is logged. MaxGuard never sends anything toward the blocked
+address: it only writes commands, or asks the user's own firewall to block.
 
 ```mermaid
 stateDiagram-v2
   [*] --> proposed: analyst proposes a block
   proposed --> previewed: preview (last 7 days of events)
+  previewed --> previewed: preview again
   previewed --> approved: person types the IP to confirm
-  approved --> applied: manual rule, or enforcer
-  applied --> reverted: undo
+  approved --> applied: by hand, or by the enforcer
+  applied --> reverted: undo, the same way
   proposed --> rejected
   previewed --> rejected
   reverted --> [*]
   rejected --> [*]
 ```
 
-- **Propose.** One IP address and a direction (inbound, outbound, both). The
-  address is parsed with Python's `ipaddress` module, so nothing else can reach a
-  generated command. Loopback, multicast, unspecified, and link-local addresses
-  are refused.
-- **Preview before you block.** From the event store, the connections in the
-  last 7 days that the rule would have stopped: how many, which internal devices,
-  which services and ports, first and last seen, and up to ten sample events.
-  The end of the window is passed in, never read from the clock.
-- **Approve.** A person enters their name and types the IP address again.
-- **Apply.** Always available: generated commands with their exact undo
-  commands (nftables with a named set, so undo is one command; iptables; the
-  OPNsense alias steps; plain steps for a home router). Optional: an `Enforcer`
-  connector does it for the user, starting with OPNsense (add the address to a
-  firewall alias and apply), using an API key kept in the data folder, never in
-  the repository, with TLS verification on.
-- **Revert** undoes the block the same way it was applied.
-- Every step is written to the audit table with who and when.
+| File | What it does |
+|---|---|
+| `maxguard/response/generate.py` | `parse_ip()` and `rules_for(ip, direction)`: nftables, iptables, OPNsense and home-router steps, each with its undo. Writes text only. |
+| `maxguard/response/preview.py` | `preview(ip, direction, event_store, *, window_end)` |
+| `maxguard/response/approvals.py` | `ProposalStore`: the `response_proposals` table in `state.db` and the steps |
+| `maxguard/response/routes.py` | the API under `/api/response` (part of `create_app()` only, never the ingest-only app) |
+| `maxguard/response/enforcers/base.py`, `opnsense.py` | the `Enforcer` protocol (`add(ip)`, `remove(ip)`, `apply()`) and the OPNsense client |
+
+- **Propose.** One IP address and a direction. `parse_ip()` is the only way an
+  address reaches a command. Python's `ipaddress.ip_address()` alone is not
+  enough: it accepts an IPv6 scope that can hold shell syntax
+  (`2001:db8::1%$(id)`) and plain integers. So `parse_ip()` also refuses
+  non-text input, any `%scope`, IPv4-mapped IPv6, and loopback, multicast,
+  unspecified, link-local and `255.255.255.255`. Private addresses are allowed:
+  blocking a compromised device on your own network is legitimate.
+- **Direction** means who starts the connection: `inbound` blocks connections
+  the address starts (it is the Zeek originator), `outbound` blocks connections
+  our devices start toward it, `both` blocks either. The firewall rules match
+  conntrack's *original* direction, so an inbound-only block still lets our own
+  connections to that address work, and the preview counts with the same
+  definition.
+- **Preview before you block.** From the event store, the connections in the 7
+  days before `window_end` that the rule would have stopped: how many, which
+  internal devices, which services and ports, first and last seen, and up to ten
+  sample events. One connection seen in several logs counts once (by
+  `community_id`). `window_end` is passed in; only the API reads the clock.
+- **Approve** is allowed only after a preview and needs the person's name and
+  the IP address typed again. A missing or different address is refused (400)
+  and the refusal is audited.
+- **Apply.** Always available: the generated commands with their exact undo.
+  nftables uses four named sets in table `inet maxguard`
+  (`maxguard_block_{in,out}_v{4,6}`: a set holds one address family), created
+  once by a setup file that is safe to load again; blocking and undoing are one
+  command each. iptables rules carry the comment `maxguard`. OPNsense uses two
+  aliases, `maxguard_block_in` and `maxguard_block_out`. Optional: with
+  `MAXGUARD_OPNSENSE_URL` set, `apply` asks the OPNsense enforcer to do it.
+- **The OPNsense enforcer** calls `POST /api/firewall/alias_util/add/<alias>`
+  or `.../delete/<alias>` with `{"address": ip}`, then
+  `POST /api/firewall/alias/reconfigure` (from OPNsense's source, `opnsense/core`
+  commit `1177021c22d6`). The API key file (`key=` and `secret=` lines) lives in
+  `<data>/opnsense/apikey.txt`; a least-privilege API user needs only
+  *Diagnostics: PF Table IP addresses* and *Firewall: Alias: Edit*. The client
+  accepts only `https://`, always verifies the certificate
+  (`MAXGUARD_OPNSENSE_CA` or the system's), uses 5 s / 20 s timeouts, follows no
+  redirects and ignores proxy settings. With `MAXGUARD_OFFLINE=1`, the firewall
+  must be in `MAXGUARD_OFFLINE_ALLOW`, or `apply` answers 502 with that hint.
+- **Revert** undoes the block the same way it was applied: a block applied by
+  hand is undone by hand (the undo commands are always shown), an enforcer block
+  is removed from the firewall.
+- **Concurrency and errors.** Each check and state change is one SQL
+  `UPDATE ... WHERE state IN (...)`, so two people clicking at once cannot both
+  approve. A firewall error keeps the state, is audited (`response.apply_failed`,
+  `response.revert_failed`) and answers 502. Other errors: 400 bad input, 404 no
+  such proposal, 409 a step that is not allowed now.
+- **Audit.** Every step writes a row to the audit table (`response.<step>`,
+  target = the proposal ID, who and when). Open item: the state change and its
+  audit row are two transactions, so a crash between them could lose one row;
+  one transaction needs a small new `StateStore` interface.
+- **Dashboard.** The workflow is reachable through the API (AHM-08 shows a full
+  session). A dashboard page for proposals is an open item for review: no task
+  builds one yet.
 
 ## 14. Security design
 
@@ -935,7 +983,7 @@ controlled. The main threats and the defenses:
 | Text in traffic attacks the AI (prompt injection) | Evidence is passed as JSON data and the prompt says never to follow it; the model can only fill two text fields; every sentence must cite this finding's records; the rule's severity is always shown; tested with four hostile fields and a model that obeys (section 11) | `ai/`, `tests/unit/test_prompt_injection.py` |
 | The dashboard is reached from the network | Published on `127.0.0.1` only. Sensors and agents get a separate ingest-only app (one route, token required, off by default) on the LAN address the user names | `docker/compose.yaml`, `docker/compose.lan.yaml`, API |
 | A sensor leaks or injects traffic | The capture interface has no IP address; Zeek and Suricata only listen; decoys run on their own IP, never on the capture interface | `docs/HARDWARE.md`, CLAUDE.md rule 5 |
-| A block is abused or goes wrong | Typed confirmation, preview, audit log, undo, address validation, only the user's own firewall | response module |
+| A block is abused or goes wrong | Approve only after a preview, with the IP typed again; one-step state changes; audit row for every step and every refusal; undo always shown; strict address parsing (no scope IDs, integers or special addresses); only the user's own firewall, over verified HTTPS; the response API is never on the LAN port | response module |
 | A tampered rule or intel update | The archive's member list is read from its headers (regular files only, no duplicates, size limits); the Ed25519 signature over the manifest is checked before the manifest is trusted; only allowed paths (`rules/*.rules`, `intel/ja4_watchlist.yaml`, `mappings/*.yaml`) and only files in the manifest; every hash checked in memory, then again on disk after extracting with the `data` filter; the `current` link is switched in one step; a version that is not newer is refused, so an old signed bundle cannot be replayed (rollback attack) | `intel/bundle.py` |
 | Evidence is altered after the fact | Chain-of-custody log: a JSON Lines file where each entry holds the previous entry's hash and an Ed25519 signature over its own hash; `python -m maxguard.custody.log verify` names the first bad entry. A cut-off end still forms a valid chain, so `verify` prints the head hash, to be recorded elsewhere | `custody/log.py` |
 | Another website makes the user's browser send requests to the console (CSRF) | Changing requests are refused when `Sec-Fetch-Site` is `cross-site` or `same-site`, or `Origin` does not match `Host` (OWASP CSRF Prevention Cheat Sheet). DNS rebinding: requests for host names outside `MAXGUARD_ALLOWED_HOSTS` are refused | API |
@@ -979,6 +1027,8 @@ Settings (environment variables):
 | `MAXGUARD_INGEST_TOKEN` | unset (ingest off) | token for sensors and agents; at least 32 characters, or the app refuses to start |
 | `MAXGUARD_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` | the host names and addresses the console answers to (DNS rebinding, section 10); names or addresses only, no `http://`, port or `*` |
 | `MAXGUARD_MAX_UPLOAD_MB` | `1024` | upload limit in MiB (a whole number) |
+| `MAXGUARD_OPNSENSE_URL` | unset (blocks are applied by hand) | `https://` address of the user's own OPNsense firewall for the enforcer (section 13); its API key goes in `<data>/opnsense/apikey.txt` |
+| `MAXGUARD_OPNSENSE_CA` | unset (the system's CAs) | the firewall's CA file, when it uses its own certificate authority |
 | `MAXGUARD_KEEP_UPLOADS` | unset | `1` keeps uploaded files (under their generated names) after analysis, for debugging |
 
 `docker/compose.lan.yaml` (optional, JAK-07) adds a third container,

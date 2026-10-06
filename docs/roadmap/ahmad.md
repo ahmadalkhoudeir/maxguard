@@ -15,8 +15,8 @@ This is your part of the MaxGuard v2.0 roadmap. Read [the roadmap overview](READ
 | [AHM-04](#ahm-04-security-review-of-the-alpha) | W5 | Security review of the alpha | [AHM-03](#ahm-03-alert-detail-page-with-analyst-and-home-modes), [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly), [AMO-03](amory.md#amo-03-report-export-json-csv-and-html) | process |
 | [AHM-05](#ahm-05-alpha-acceptance-test-and-presentation) | W8 | Alpha acceptance test and presentation | [JAI-10](jaiden.md#jai-10-release-v20-alpha), [KAR-05](karthik.md#kar-05-release-candidate-test-with-an-outside-tester) | process |
 | [AHM-06](#ahm-06-ip-timeline-and-device-inventory-pages) | S4 | IP timeline and device inventory pages | [AHM-03](#ahm-03-alert-detail-page-with-analyst-and-home-modes), [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | design |
-| [AHM-07](#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block) | S8 | Response: block proposals, generated rules, and preview before you block | [JAI-06](jaiden.md#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | design |
-| [AHM-08](#ahm-08-response-approvals-audit-revert-and-the-opnsense-connector) | S8 | Response: approvals, audit, revert, and the OPNsense connector | [AHM-07](#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block), [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly) | design |
+| [AHM-07](#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block) | S8 | Response: block proposals, generated rules, and preview before you block | [JAI-06](jaiden.md#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | code, tested |
+| [AHM-08](#ahm-08-response-approvals-audit-revert-and-the-opnsense-connector) | S8 | Response: approvals, audit, revert, and the OPNsense connector | [AHM-07](#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block), [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly) | code, tested |
 | [AHM-09](#ahm-09-v20-acceptance-test) | S14 | v2.0 acceptance test | [JAI-12](jaiden.md#jai-12-release-v20-rc1-and-v20) | process |
 
 **Kind:** *code, tested* — the complete code below was run with its tests during planning; copy it exactly, then improve it in a later pull request if you like. *code, written* — written in planning, but part of it needs a machine planning did not have. *design* — you write the code from the steps. *process* — no code: setup, review, testing or release work.
@@ -724,11 +724,9 @@ Alerts say *what* happened; the timeline says *what else that device did*, which
 
 ### AHM-07: Response: block proposals, generated rules, and preview before you block
 
-**Due:** Spring S5-S8 (due Fri Mar 12, 2027) · **Milestone:** `S5-S8 Respond` · **Needs first:** [JAI-06](jaiden.md#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) · **Kind:** design
+**Due:** Spring S5-S8 (due Fri Mar 12, 2027) · **Milestone:** `S5-S8 Respond` · **Needs first:** [JAI-06](jaiden.md#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) · **Kind:** code, tested
 
 **Issue labels:** `type:task` `phase:spring` `owner:ahmad` `area:response`
-
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
 
 #### Goal
 
@@ -751,13 +749,562 @@ git checkout -b ahmad/response-generate
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** `maxguard/response/generate.py`: `rules_for(ip: str, direction: str) -> dict` parses the address with `ipaddress.ip_address` (anything else raises `ValueError`, so nothing else can reach a command), refuses loopback, multicast, unspecified and link-local addresses, and returns nftables commands that add the address to a named set `maxguard_block` plus the matching delete command, iptables commands with their undo, the OPNsense alias steps, and plain steps for a home router.
+**Step 2.** Create `maxguard/response/__init__.py` (one line):
 
-**Step 3.** Check the nftables syntax for real with `nft -c -f <file>` (find a container image that has `nft`, or a Linux machine) and record the output in the pull request.
+```python
+"""Response module: block proposals, preview, approval, enforcers (Ahmad, AHM-07/AHM-08)."""
+```
 
-**Step 4.** `maxguard/response/preview.py`: `preview(ip, direction, event_store, *, window_end)` looks back 7 days from `window_end` (passed in, never the clock) and returns the number of connections, the internal devices affected, services and ports, first and last seen, and up to 10 sample events in a fixed order.
+and `maxguard/response/generate.py`:
 
-**Step 5.** Tests `tests/unit/test_response_generate.py` and `test_response_preview.py`, including a hostile input such as `"1.2.3.4; rm -rf /"`.
+```python
+"""Firewall commands for blocking one IP address, with their undo (Ahmad, AHM-07).
+
+CLAUDE.md rule 4: blocking is defensive only, needs a person's approval, and must
+be reversible. This module only *writes text*: it never runs a command and never
+sends anything toward the address. A person (or an approved Enforcer) uses it.
+
+Safety: the address is parsed with Python's ipaddress module and only the parsed
+address is ever put into a command. Anything that is not a plain IP address, such
+as "1.2.3.4; rm -rf /", raises ValueError before a command is built.
+
+What "direction" means (the same in the preview, so the numbers match):
+- inbound:  connections the address starts toward us (it is the originator),
+- outbound: connections we start toward the address,
+- both:     either of them.
+The rules match the connection's *original* direction (conntrack), so an
+inbound-only block still lets our own connections to that address work.
+
+nftables keeps blocked addresses in named sets, so blocking and undoing are one
+command each. A set holds one address family, so there is one set per direction
+and family: maxguard_block_in_v4, maxguard_block_in_v6, maxguard_block_out_v4,
+maxguard_block_out_v6. NFT_SETUP creates them once (safe to run again: it keeps
+the addresses already in the sets).
+"""
+
+from __future__ import annotations
+
+import ipaddress
+
+DIRECTIONS = ("inbound", "outbound", "both")
+NFT_TABLE = "inet maxguard"
+LIMITED_BROADCAST = ipaddress.ip_address("255.255.255.255")
+
+# Run once on the Linux firewall with:  sudo nft -f maxguard-setup.nft
+# "add" does nothing when the table, set or chain exists already; "flush chain"
+# then removes the old rules so running the file twice never doubles them.
+NFT_SETUP = """\
+add table inet maxguard
+add set inet maxguard maxguard_block_in_v4 { type ipv4_addr; }
+add set inet maxguard maxguard_block_in_v6 { type ipv6_addr; }
+add set inet maxguard maxguard_block_out_v4 { type ipv4_addr; }
+add set inet maxguard maxguard_block_out_v6 { type ipv6_addr; }
+add chain inet maxguard input { type filter hook input priority filter; policy accept; }
+add chain inet maxguard forward { type filter hook forward priority filter; policy accept; }
+add chain inet maxguard output { type filter hook output priority filter; policy accept; }
+flush chain inet maxguard input
+flush chain inet maxguard forward
+flush chain inet maxguard output
+add rule inet maxguard input ct original ip saddr @maxguard_block_in_v4 drop
+add rule inet maxguard input ct original ip6 saddr @maxguard_block_in_v6 drop
+add rule inet maxguard forward ct original ip saddr @maxguard_block_in_v4 drop
+add rule inet maxguard forward ct original ip6 saddr @maxguard_block_in_v6 drop
+add rule inet maxguard forward ct original ip daddr @maxguard_block_out_v4 drop
+add rule inet maxguard forward ct original ip6 daddr @maxguard_block_out_v6 drop
+add rule inet maxguard output ct original ip daddr @maxguard_block_out_v4 drop
+add rule inet maxguard output ct original ip6 daddr @maxguard_block_out_v6 drop
+"""
+
+# OPNsense: one firewall alias per direction (an alias holds IPv4 and IPv6).
+OPNSENSE_ALIASES = {"inbound": "maxguard_block_in", "outbound": "maxguard_block_out"}
+
+
+def parse_ip(text: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
+    """Parse one address the user typed, or raise ValueError saying why not."""
+    if not isinstance(text, str):
+        # ip_address(16909060) would quietly mean 1.2.3.4
+        raise ValueError("the IP address must be text")
+    ip = ipaddress.ip_address(text)  # "1.2.3.4; rm -rf /" raises ValueError here
+    if getattr(ip, "scope_id", None):
+        # "2001:db8::1%$(id)" is a valid address with a scope: refuse the scope.
+        raise ValueError(f"{text!r}: an address with a %scope cannot be blocked")
+    if getattr(ip, "ipv4_mapped", None):
+        raise ValueError(f"{text!r}: write the IPv4 address {ip.ipv4_mapped} instead")
+    refuse_special(ip)
+    return ip
+
+
+def refuse_special(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> None:
+    """Blocking these would cut off this machine or the whole network segment."""
+    if ip.is_loopback:
+        raise ValueError(f"{ip} is a loopback address (this machine)")
+    if ip.is_multicast:
+        raise ValueError(f"{ip} is a multicast address")
+    if ip.is_unspecified:
+        raise ValueError(f"{ip} is the unspecified address")
+    if ip.is_link_local:
+        raise ValueError(f"{ip} is a link-local address")
+    if ip == LIMITED_BROADCAST:
+        raise ValueError(f"{ip} is the broadcast address")
+
+
+def check_direction(direction: str) -> str:
+    if direction not in DIRECTIONS:
+        raise ValueError(f"direction must be one of {', '.join(DIRECTIONS)}")
+    return direction
+
+
+def sides(direction: str) -> list[str]:
+    """'both' -> ['inbound', 'outbound']; the others stay as they are."""
+    return ["inbound", "outbound"] if direction == "both" else [direction]
+
+
+def rules_for(ip: str, direction: str) -> dict:
+    """All the ways to block ip (and undo it): nftables, iptables, OPNsense, home router."""
+    address = parse_ip(ip)
+    check_direction(direction)
+    return {
+        "ip": str(address),
+        "version": address.version,
+        "direction": direction,
+        "nftables": nftables_rules(address, direction),
+        "iptables": iptables_rules(address, direction),
+        "opnsense": opnsense_steps(address, direction),
+        "home_router": home_router_steps(address, direction),
+    }
+
+
+def nft_set_name(side: str, version: int) -> str:
+    short = "in" if side == "inbound" else "out"
+    return f"maxguard_block_{short}_v{version}"
+
+
+def nftables_rules(ip, direction: str) -> dict:
+    block, undo = [], []
+    for side in sides(direction):
+        target = f"{NFT_TABLE} {nft_set_name(side, ip.version)} {{ {ip} }}"
+        # One quoted argument, so the shell never interprets the braces.
+        block.append(f"sudo nft 'add element {target}'")
+        undo.append(f"sudo nft 'delete element {target}'")
+    return {"setup": NFT_SETUP, "block": block, "undo": undo}
+
+
+def iptables_rules(ip, direction: str) -> dict:
+    program = "iptables" if ip.version == 4 else "ip6tables"
+    matches = []
+    for side in sides(direction):
+        if side == "inbound":   # connections the address starts
+            matches += [("INPUT", f"--ctorigsrc {ip}"), ("FORWARD", f"--ctorigsrc {ip}")]
+        else:                   # connections we start toward the address
+            matches += [("OUTPUT", f"--ctorigdst {ip}"), ("FORWARD", f"--ctorigdst {ip}")]
+    rule = "-m conntrack {match} -m comment --comment maxguard -j DROP"
+    block = [f"sudo {program} -I {chain} {rule.format(match=m)}" for chain, m in matches]
+    undo = [f"sudo {program} -D {chain} {rule.format(match=m)}" for chain, m in matches]
+    return {"block": block, "undo": undo}
+
+
+def opnsense_steps(ip, direction: str) -> dict:
+    block, undo = [], []
+    for side in sides(direction):
+        alias = OPNSENSE_ALIASES[side]
+        block.append(f"Firewall > Aliases: add {ip} to the content of the alias {alias}, "
+                     "click Save, then Apply.")
+        undo.append(f"Firewall > Aliases: remove {ip} from the alias {alias}, "
+                    "click Save, then Apply.")
+    setup = [
+        "Once: Firewall > Aliases: create the aliases maxguard_block_in and "
+        "maxguard_block_out, type Host(s), empty.",
+        "Once: Firewall > Rules > WAN: a Block rule with source maxguard_block_in "
+        "(stops connections an address on the internet starts).",
+        "Once: Firewall > Rules > LAN: a Block rule with source maxguard_block_in "
+        "(stops connections a device on your network starts through the firewall), and "
+        "a Block rule with destination maxguard_block_out (stops connections your devices "
+        "start toward that address).",
+    ]
+    return {"setup": setup, "block": block, "undo": undo}
+
+
+def home_router_steps(ip, direction: str) -> dict:
+    wording = {
+        "inbound": f"incoming connections from {ip}",
+        "outbound": f"connections from your devices to {ip}",
+        "both": f"all connections to and from {ip}",
+    }[direction]
+    block = [
+        "Open your router's admin page (often printed on a sticker on the router).",
+        "Find the firewall, 'access control', or 'IP filter' settings "
+        "(the name differs between brands).",
+        f"Add a rule that blocks {wording}, and save it.",
+        "Write down where you added it, so you can find it again to undo it.",
+    ]
+    undo = [f"Open the same settings page, delete the rule for {ip}, and save."]
+    return {"block": block, "undo": undo}
+```
+
+Four things to notice. `parse_ip()` is the only way an address gets into a command, and `ipaddress.ip_address()` alone is not enough: it accepts `2001:db8::1%$(id)` (an IPv6 *scope*, which can hold shell syntax) and plain integers (`16909060` means `1.2.3.4`), so those are refused too. An nftables set holds one address family, and a block has a direction, so there are four sets, created once by `NFT_SETUP`. *Direction* means who starts the connection: `inbound` blocks connections the address starts, `outbound` blocks connections your devices start toward it; the rules match conntrack's *original* direction, so an inbound block still lets your own connections to that address work. And each `nft` command is one quoted argument, so the shell never reads the braces.
+
+**Step 3.** Check the generated commands for real. `nicolaka/netshoot:v0.15` has `nft` and `iptables`; `--network none` gives the container only its own loopback, so nothing can leave it. The setup file is loaded twice to show that running it again never doubles the rules:
+
+```bash
+mkdir -p data/nft-check
+python - <<'EOF'
+from pathlib import Path
+from maxguard.response.generate import NFT_SETUP, rules_for
+Path("data/nft-check/maxguard-setup.nft").write_text(NFT_SETUP)
+r = rules_for("203.0.113.7", "both")
+commands = (r["nftables"]["block"] + r["iptables"]["block"]
+            + ["nft list set inet maxguard maxguard_block_in_v4 | grep elements",
+               "iptables -S | grep maxguard"]
+            + r["nftables"]["undo"] + r["iptables"]["undo"]
+            + ['echo "rules left: $(iptables -S | grep -c maxguard)"'])
+# The container runs as root, so sudo is not needed there.
+Path("data/nft-check/run.sh").write_text("\n".join(commands).replace("sudo ", "") + "\n")
+EOF
+docker run --rm --network none --cap-add NET_ADMIN --cap-add NET_RAW \
+  -v "$PWD/data/nft-check:/w:ro" nicolaka/netshoot:v0.15 sh -c '
+  nft -c -f /w/maxguard-setup.nft && echo "syntax check: ok"
+  nft -f /w/maxguard-setup.nft && nft -f /w/maxguard-setup.nft
+  echo "drop rules in input after loading twice: $(nft list chain inet maxguard input | grep -c drop)"
+  bash -e /w/run.sh'
+```
+
+Expected output:
+
+```text
+syntax check: ok
+drop rules in input after loading twice: 2
+		elements = { 203.0.113.7 }
+-A INPUT -m conntrack --ctorigsrc 203.0.113.7 -m comment --comment maxguard -j DROP
+-A FORWARD -m conntrack --ctorigdst 203.0.113.7 -m comment --comment maxguard -j DROP
+-A FORWARD -m conntrack --ctorigsrc 203.0.113.7 -m comment --comment maxguard -j DROP
+-A OUTPUT -m conntrack --ctorigdst 203.0.113.7 -m comment --comment maxguard -j DROP
+rules left: 0
+```
+
+*`nicolaka/netshoot` is for testing only, never shipped (`docs/DEPENDENCIES.md`). Not checked here: the older iptables-legacy backend, and a real router forwarding traffic (the `forward` chain loads, but no routed packets went through it).*
+
+**Step 4.** Create `maxguard/response/preview.py`:
+
+```python
+"""Preview before you block: what would this block have stopped? (Ahmad, AHM-07)
+
+Before a person approves a block they see the connections of the last 7 days
+that the block would have stopped: how many, which of our devices, which
+services and ports, first and last seen, and up to 10 sample events.
+
+window_end is passed in by the caller, never read from the clock here, so the
+same events and the same window_end always give the same preview (and the tests
+do not depend on today's date). Every list is sorted, so the order is fixed.
+
+"inbound" means the address started the connection (it is the event's src_ip);
+"outbound" means one of our devices started it (the address is the dst_ip).
+This matches the generated firewall rules in generate.py.
+"""
+
+from __future__ import annotations
+
+from maxguard.response.generate import check_direction, parse_ip, sides
+
+WINDOW_SECONDS = 7 * 24 * 3600
+MAX_SAMPLES = 10
+MAX_EVENTS = 100_000  # a preview reads at most this many events (see "truncated")
+
+
+def preview(ip: str, direction: str, event_store, *, window_end: float) -> dict:
+    """Summarize the events in [window_end - 7 days, window_end) that the block matches."""
+    address = str(parse_ip(ip))  # the same spelling as Zeek, e.g. "2001:db8::7"
+    check_direction(direction)
+    window_start = window_end - WINDOW_SECONDS
+    events = event_store.query(ip=address, since=window_start, until=window_end,
+                               limit=MAX_EVENTS)
+    matched = [e for e in events if matches(e, address, direction)]
+    matched.sort(key=lambda e: (e["ts"], e["event_id"]))
+    return {
+        "ip": address,
+        "direction": direction,
+        "window_start": window_start,
+        "window_end": window_end,
+        "connections": len({connection_key(e) for e in matched}),
+        "events": len(matched),
+        "devices": sorted({other_side(e, address) for e in matched}),
+        "services": services(matched),
+        "first_seen": matched[0]["ts"] if matched else None,
+        "last_seen": matched[-1]["ts"] if matched else None,
+        "samples": matched[:MAX_SAMPLES],
+        "truncated": len(events) == MAX_EVENTS,  # there may be more than we read
+    }
+
+
+def matches(event: dict, address: str, direction: str) -> bool:
+    """Would a block in this direction have stopped the connection of this event?"""
+    wanted = sides(direction)
+    if "inbound" in wanted and event["src_ip"] == address:
+        return True
+    return "outbound" in wanted and event["dst_ip"] == address
+
+
+def connection_key(event: dict) -> str:
+    """Zeek and Suricata events of one connection share a community_id (or a Zeek uid).
+
+    Counting keys instead of events stops one connection counting three times
+    (conn.log + ssl.log + eve.json)."""
+    return event["community_id"] or event["uid"] or event["event_id"]
+
+
+def other_side(event: dict, address: str) -> str:
+    """The device at the other end of the connection: the one the block protects."""
+    return event["dst_ip"] if event["src_ip"] == address else event["src_ip"]
+
+
+def services(events: list[dict]) -> list[dict]:
+    """Distinct (proto, dst_port, service) with how many events used each."""
+    counts: dict[tuple, int] = {}
+    for event in events:
+        key = (event["proto"], event["dst_port"], event["service"])
+        counts[key] = counts.get(key, 0) + 1
+    rows = [{"proto": proto, "port": port, "service": service, "events": n}
+            for (proto, port, service), n in counts.items()]
+    return sorted(rows, key=service_order)
+
+
+def service_order(row: dict) -> tuple:
+    # A port can be None (e.g. DHCP) and None cannot be compared with a number,
+    # so those rows sort first by using -1 in their place.
+    port = -1 if row["port"] is None else row["port"]
+    return (row["proto"], port, row["service"])
+```
+
+`window_end` comes from the caller, never from the clock, so the same events always give the same preview. One connection seen in `conn.log`, `ssl.log` and `eve.json` counts once (by `community_id`).
+
+**Step 5.** Create the tests `tests/unit/test_response_generate.py`:
+
+```python
+"""Tests for maxguard.response.generate (Ahmad, AHM-07)."""
+
+import pytest
+
+from maxguard.response.generate import NFT_SETUP, parse_ip, rules_for
+
+HOSTILE = [
+    "1.2.3.4; rm -rf /",
+    "1.2.3.4 && reboot",
+    "$(reboot)",
+    " 203.0.113.7",          # leading space
+    "203.0.113.7\n",         # trailing newline
+    "203.0.113.0/24",        # a network, not one address
+    "203.0.113",
+    "",
+    "2001:db8::1%$(id)",     # ipaddress accepts this scope: it must still be refused
+    "2001:db8::1%eth0",
+]
+
+REFUSED = [
+    "127.0.0.1", "127.0.0.2", "::1",            # loopback
+    "224.0.0.1", "ff02::1",                     # multicast
+    "0.0.0.0", "::",                            # unspecified
+    "169.254.10.1", "fe80::1", "fe80::1%eth0",  # link-local
+    "255.255.255.255",                          # broadcast
+    "::ffff:203.0.113.7",                       # IPv4 written as IPv6
+]
+
+
+def all_text(rules: dict) -> str:
+    """Every command and step in one string, to search for leaked input."""
+    parts = []
+    for method in ("nftables", "iptables", "opnsense", "home_router"):
+        for key in ("block", "undo"):
+            parts.extend(rules[method][key])
+    return "\n".join(parts)
+
+
+@pytest.mark.parametrize("text", HOSTILE)
+def test_hostile_input_never_reaches_a_command(text):
+    with pytest.raises(ValueError):
+        rules_for(text, "both")
+
+
+@pytest.mark.parametrize("text", REFUSED)
+def test_special_addresses_are_refused(text):
+    with pytest.raises(ValueError):
+        rules_for(text, "inbound")
+
+
+def test_a_number_is_not_an_address():
+    with pytest.raises(ValueError):
+        parse_ip(16909060)  # ipaddress alone would read this as 1.2.3.4
+
+
+def test_unknown_direction_is_refused():
+    with pytest.raises(ValueError, match="direction"):
+        rules_for("203.0.113.7", "sideways")
+
+
+def test_inbound_ipv4_rules_and_undo():
+    rules = rules_for("203.0.113.7", "inbound")
+    assert rules["ip"] == "203.0.113.7" and rules["version"] == 4
+    assert rules["nftables"]["block"] == [
+        "sudo nft 'add element inet maxguard maxguard_block_in_v4 { 203.0.113.7 }'"]
+    assert rules["nftables"]["undo"] == [
+        "sudo nft 'delete element inet maxguard maxguard_block_in_v4 { 203.0.113.7 }'"]
+    assert rules["iptables"]["block"] == [
+        "sudo iptables -I INPUT -m conntrack --ctorigsrc 203.0.113.7 "
+        "-m comment --comment maxguard -j DROP",
+        "sudo iptables -I FORWARD -m conntrack --ctorigsrc 203.0.113.7 "
+        "-m comment --comment maxguard -j DROP",
+    ]
+
+
+def test_every_block_command_has_an_undo():
+    rules = rules_for("198.51.100.20", "both")
+    for method in ("nftables", "opnsense"):
+        assert len(rules[method]["block"]) == len(rules[method]["undo"]) == 2  # in + out
+    assert len(rules["iptables"]["block"]) == len(rules["iptables"]["undo"]) == 4
+    undo = [c.replace(" -D ", " -I ") for c in rules["iptables"]["undo"]]
+    assert undo == rules["iptables"]["block"]  # the same rule, deleted instead of inserted
+
+
+def test_ipv6_uses_the_v6_sets_and_ip6tables():
+    rules = rules_for("2001:DB8:0:0:0:0:0:7", "outbound")
+    assert rules["ip"] == "2001:db8::7"  # one spelling, the same as Zeek writes
+    assert "maxguard_block_out_v6 { 2001:db8::7 }" in rules["nftables"]["block"][0]
+    assert all(c.startswith("sudo ip6tables -I ") for c in rules["iptables"]["block"])
+    assert all("--ctorigdst 2001:db8::7" in c for c in rules["iptables"]["block"])
+
+
+def test_private_addresses_can_be_blocked():
+    # A compromised device on the user's own network is a valid thing to block.
+    assert rules_for("192.168.1.50", "both")["ip"] == "192.168.1.50"
+
+
+def test_only_the_parsed_address_appears():
+    rules = rules_for("203.0.113.7", "both")
+    text = all_text(rules)
+    assert ";" not in text.replace("Save, then", "")  # no shell separators
+    assert "$(" not in text and "`" not in text
+
+
+def test_setup_declares_every_set_the_commands_use():
+    for ip in ("203.0.113.7", "2001:db8::7"):
+        for command in rules_for(ip, "both")["nftables"]["block"]:
+            set_name = command.split()[6]  # sudo nft 'add element inet maxguard <set> ...
+            assert f"add set inet maxguard {set_name} " in NFT_SETUP
+
+
+def test_same_input_same_output():
+    assert rules_for("203.0.113.7", "both") == rules_for("203.0.113.7", "both")
+```
+
+and `tests/unit/test_response_preview.py`:
+
+```python
+"""Tests for maxguard.response.preview (Ahmad, AHM-07). Synthetic events only."""
+
+import pytest
+
+from maxguard.events.normalize import EVENT_KEYS
+from maxguard.response.preview import WINDOW_SECONDS, preview
+from maxguard.storage.events import EventStore
+
+WINDOW_END = 1791331200.0   # 2026-10-07 00:00:00 UTC
+BAD = "203.0.113.7"          # the address we want to block
+LAPTOP = "192.168.1.20"
+PRINTER = "192.168.1.30"
+
+
+def event(n: int, ts: float, src: str, dst: str, port: int, service: str = "",
+          community_id: str = "") -> dict:
+    row = dict.fromkeys(EVENT_KEYS, "")
+    row.update(event_id=f"ev{n:04d}", ts=ts, sensor_id="pcap", source="zeek", log="conn.log",
+               kind="conn", community_id=community_id or f"1:c{n}=", src_ip=src, dst_ip=dst,
+               src_port=40000 + n, dst_port=port, proto="tcp", service=service,
+               bytes_out=10, bytes_in=20)
+    return row
+
+
+@pytest.fixture
+def store(tmp_path):
+    events = [
+        # inbound: the bad address starts connections to our devices
+        event(1, WINDOW_END - 3600, BAD, LAPTOP, 22, "ssh"),
+        event(2, WINDOW_END - 1800, BAD, PRINTER, 23),
+        # outbound: our laptop starts a connection to it (two events of one connection)
+        event(3, WINDOW_END - 7200, LAPTOP, BAD, 443, "ssl", community_id="1:same="),
+        event(4, WINDOW_END - 7199, LAPTOP, BAD, 443, "ssl", community_id="1:same="),
+        # outside the 7-day window, and exactly at window_end (the end is not included)
+        event(5, WINDOW_END - WINDOW_SECONDS - 1, BAD, LAPTOP, 22, "ssh"),
+        event(6, WINDOW_END, BAD, LAPTOP, 22, "ssh"),
+        # another address: never part of the preview
+        event(7, WINDOW_END - 60, "198.51.100.9", LAPTOP, 80, "http"),
+    ]
+    events += [event(100 + i, WINDOW_END - 100 + i, BAD, LAPTOP, 22, "ssh") for i in range(12)]
+    target = EventStore(tmp_path / "events")
+    target.write(events)
+    return target
+
+
+def test_inbound_counts_only_connections_the_address_starts(store):
+    result = preview(BAD, "inbound", store, window_end=WINDOW_END)
+    assert result["connections"] == 14            # events 1, 2 and the 12 extra ones
+    assert result["devices"] == [LAPTOP, PRINTER]
+    assert result["first_seen"] == WINDOW_END - 3600
+    assert result["last_seen"] == WINDOW_END - 100 + 11
+    assert [s["port"] for s in result["services"]] == [22, 23]
+
+
+def test_outbound_counts_one_connection_once(store):
+    result = preview(BAD, "outbound", store, window_end=WINDOW_END)
+    assert result["events"] == 2
+    assert result["connections"] == 1             # the two events share a community_id
+    assert result["devices"] == [LAPTOP]
+    assert result["services"] == [{"proto": "tcp", "port": 443, "service": "ssl", "events": 2}]
+
+
+def test_samples_are_ten_in_time_order(store):
+    result = preview(BAD, "both", store, window_end=WINDOW_END)
+    assert result["connections"] == 15
+    samples = result["samples"]
+    assert len(samples) == 10
+    assert [s["ts"] for s in samples] == sorted(s["ts"] for s in samples)
+    assert samples[0]["event_id"] == "ev0003"     # the oldest event in the window
+
+
+def test_window_end_comes_from_the_caller(store):
+    result = preview(BAD, "both", store, window_end=WINDOW_END - 5000)
+    assert result["window_start"] == WINDOW_END - 5000 - WINDOW_SECONDS
+    # The window moved back: events 3, 4 (outbound) and 5 are inside it now.
+    assert [s["event_id"] for s in result["samples"]] == ["ev0005", "ev0003", "ev0004"]
+
+
+def test_same_input_same_preview(store):
+    first = preview(BAD, "both", store, window_end=WINDOW_END)
+    assert preview(BAD, "both", store, window_end=WINDOW_END) == first
+
+
+def test_no_events_gives_an_empty_preview(tmp_path):
+    result = preview(BAD, "both", EventStore(tmp_path / "empty"), window_end=WINDOW_END)
+    assert result["connections"] == 0 and result["samples"] == []
+    assert result["first_seen"] is None and result["last_seen"] is None
+
+
+def test_hostile_input_is_refused_before_any_query(store):
+    with pytest.raises(ValueError):
+        preview("1.2.3.4; rm -rf /", "both", store, window_end=WINDOW_END)
+    with pytest.raises(ValueError):
+        preview("127.0.0.1", "both", store, window_end=WINDOW_END)
+```
+
+Run them:
+
+```bash
+pytest tests/unit/test_response_generate.py tests/unit/test_response_preview.py -q
+```
+
+Expected output:
+
+```text
+......................................                                                       [100%]
+38 passed in 0.78s
+```
 
 **Step 6.** Commit, push, and open the pull request:
 
@@ -790,11 +1337,11 @@ Blocking the wrong address can cut off a printer, a phone, or the whole office. 
 
 ### AHM-08: Response: approvals, audit, revert, and the OPNsense connector
 
-**Due:** Spring S5-S8 (due Fri Mar 12, 2027) · **Milestone:** `S5-S8 Respond` · **Needs first:** [AHM-07](#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block), [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly) · **Kind:** design
+**Due:** Spring S5-S8 (due Fri Mar 12, 2027) · **Milestone:** `S5-S8 Respond` · **Needs first:** [AHM-07](#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block), [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly) · **Kind:** code, tested
 
-**Issue labels:** `type:task` `phase:spring` `owner:ahmad` `area:response`
+**Issue labels:** `type:task` `phase:spring` `owner:ahmad` `area:response` `needs-hardware`
 
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
+> **Needs hardware.** Steps that use the Raspberry Pi, the switch or other devices were not run during planning; they are marked *not run — verify on hardware*.
 
 #### Goal
 
@@ -802,7 +1349,7 @@ Add the approval workflow (propose → preview → approve with the IP typed aga
 
 #### Prerequisites
 
-AHM-07 is merged. You need an OPNsense test firewall in a VM, never a real one.
+AHM-07 is merged. For the last step you need an OPNsense test firewall in a VM, never a real one.
 
 #### Steps
 
@@ -817,15 +1364,1280 @@ git checkout -b ahmad/response-approvals
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** `maxguard/response/approvals.py`: proposals stored in `state.db` (create the tables with `CREATE TABLE IF NOT EXISTS` in this module; ask Jaiden before changing `state.py`); each state change calls `StateStore.add_audit`.
+**Step 2.** Create `maxguard/response/approvals.py`:
 
-**Step 3.** `maxguard/response/routes.py`: `APIRouter` under `/api/response`: `POST /proposals`, `GET /proposals`, `POST /proposals/{id}/preview`, `POST /proposals/{id}/approve` (needs `actor` and `confirm_ip` equal to the proposal's IP), `POST /proposals/{id}/revert`.
+```python
+"""Block proposals and their approval workflow (Ahmad, AHM-08).
 
-**Step 4.** `maxguard/response/enforcers/base.py` (the `Enforcer` protocol: `add(ip)`, `remove(ip)`, `apply()`) and `enforcers/opnsense.py`: look up the alias endpoints (`/api/firewall/alias_util/add/<alias>`, `.../delete/<alias>`, and `/api/firewall/alias/reconfigure`) in the OPNsense documentation and cite it; HTTP basic auth with an API key and secret from a file in the data folder; TLS verification on. Document adding the firewall to `MAXGUARD_OFFLINE_ALLOW`.
+CLAUDE.md rule 4: a block always needs explicit human approval, is reversible,
+and is logged. The steps (docs/ARCHITECTURE.md section 13):
 
-**Step 5.** Tests with a fake OPNsense server (`http.server` on `127.0.0.1`) and TestClient: approval without the typed IP fails, every step is audited, revert removes the address.
+    proposed -> previewed -> approved -> applied -> reverted
+    proposed or previewed -> rejected
 
-**Step 6.** Commit, push, and open the pull request:
+- Approve only after a preview: the person must have seen what the block stops.
+- Approve needs the person's name and the IP address typed again (confirm_ip),
+  so a block is never approved by a stray click.
+- Every step, and every refused approval, writes a row to the audit table
+  (StateStore.add_audit, action "response.<step>", target = the proposal id).
+- Times are passed in by the caller (the API reads the clock, this module never does).
+
+Proposals live in their own table in state.db, created here with
+CREATE TABLE IF NOT EXISTS, so storage/state.py does not change.
+"""
+
+from __future__ import annotations
+
+import ipaddress
+import json
+import sqlite3
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+
+from maxguard.response.enforcers.base import Enforcer
+from maxguard.response.generate import check_direction, parse_ip, rules_for
+from maxguard.storage.state import StateStore
+
+STATES = ("proposed", "previewed", "approved", "applied", "reverted", "rejected")
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS response_proposals (
+    proposal_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip           TEXT NOT NULL,
+    direction    TEXT NOT NULL,
+    reason       TEXT NOT NULL,
+    finding_id   TEXT,
+    state        TEXT NOT NULL,
+    created_by   TEXT NOT NULL,
+    created_at   REAL NOT NULL,
+    updated_at   REAL NOT NULL,
+    approved_by  TEXT,
+    method       TEXT,      -- how it was applied: "manual" or "enforcer"
+    preview_json TEXT       -- the last preview the person saw
+);
+"""
+
+
+class WrongState(Exception):
+    """This step is not allowed from the proposal's current state (the API answers 409)."""
+
+
+class ProposalStore:
+    def __init__(self, state_store: StateStore):
+        self.state_store = state_store
+        with self._connect() as conn:
+            conn.executescript(SCHEMA)
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        # A new connection per call, like StateStore: the API uses several threads.
+        conn = sqlite3.connect(self.state_store.path, timeout=5.0)
+        conn.row_factory = sqlite3.Row
+        try:
+            with conn:  # commit on success, roll back on an exception
+                yield conn
+        finally:
+            conn.close()
+
+    # ---------- reading ----------
+
+    def get(self, proposal_id: int) -> dict:
+        """One proposal with its generated commands. KeyError if it does not exist."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM response_proposals WHERE proposal_id = ?",
+                               (proposal_id,)).fetchone()
+        if row is None:
+            raise KeyError(proposal_id)
+        return row_to_proposal(row)
+
+    def list_proposals(self, limit: int = 200) -> list[dict]:
+        """Newest first."""
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM response_proposals "
+                                "ORDER BY proposal_id DESC LIMIT ?", (limit,)).fetchall()
+        return [row_to_proposal(row) for row in rows]
+
+    # ---------- the steps ----------
+
+    def propose(self, *, ip: str, direction: str, actor: str, at: float, reason: str = "",
+                finding_id: str | None = None) -> dict:
+        address = str(parse_ip(ip))  # ValueError for anything that is not a plain address
+        check_direction(direction)
+        with self._connect() as conn:
+            cur = conn.execute(
+                "INSERT INTO response_proposals (ip, direction, reason, finding_id, state, "
+                "created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'proposed', ?, ?, ?)",
+                (address, direction, reason, finding_id, actor, at, at))
+            proposal_id = cur.lastrowid
+        self.audit(actor, "proposed", proposal_id, at,
+                   {"ip": address, "direction": direction, "finding_id": finding_id})
+        return self.get(proposal_id)
+
+    def record_preview(self, proposal_id: int, *, actor: str, preview: dict,
+                       at: float) -> dict:
+        """Keep the preview the person saw. A previewed proposal may be previewed again."""
+        self.move(proposal_id, ("proposed", "previewed"), "previewed", at,
+                  preview_json=json.dumps(preview, sort_keys=True))
+        self.audit(actor, "previewed", proposal_id, at,
+                   {"connections": preview["connections"], "devices": len(preview["devices"]),
+                    "window_end": preview["window_end"]})
+        return self.get(proposal_id)
+
+    def approve(self, proposal_id: int, *, actor: str, confirm_ip: str, at: float) -> dict:
+        """The person types the address again; a missing or different address is refused."""
+        proposal = self.get(proposal_id)
+        if not actor.strip():
+            raise ValueError("enter your name to approve a block")
+        if not same_address(confirm_ip, proposal["ip"]):
+            self.audit(actor, "approve_refused", proposal_id, at,
+                       {"reason": "typed IP does not match"})
+            raise ValueError("the IP address you typed does not match the proposal")
+        self.move(proposal_id, ("previewed",), "approved", at, approved_by=actor)
+        self.audit(actor, "approved", proposal_id, at, {"ip": proposal["ip"]})
+        return self.get(proposal_id)
+
+    def mark_applied(self, proposal_id: int, *, actor: str, at: float,
+                     enforcers: Sequence[Enforcer] = ()) -> dict:
+        """Apply an approved block: by the enforcers if given, else the person ran the
+        commands by hand and says so. If an enforcer fails, the state stays 'approved'."""
+        proposal = self.require_state(proposal_id, "approved")
+        method = "enforcer" if enforcers else "manual"
+        try:
+            for enforcer in enforcers:
+                enforcer.add(proposal["ip"])
+                enforcer.apply()
+        except Exception as err:
+            self.audit(actor, "apply_failed", proposal_id, at, {"error": str(err)})
+            raise
+        self.move(proposal_id, ("approved",), "applied", at, method=method)
+        self.audit(actor, "applied", proposal_id, at, {"ip": proposal["ip"], "method": method})
+        return self.get(proposal_id)
+
+    def revert(self, proposal_id: int, *, actor: str, at: float,
+               enforcers: Sequence[Enforcer] = ()) -> dict:
+        """Undo the block the same way it was applied."""
+        proposal = self.require_state(proposal_id, "applied")
+        if proposal["method"] == "enforcer":
+            if not enforcers:
+                raise ValueError("this block was applied by the firewall connector, "
+                                 "which is not configured now")
+            try:
+                for enforcer in enforcers:
+                    enforcer.remove(proposal["ip"])
+                    enforcer.apply()
+            except Exception as err:
+                self.audit(actor, "revert_failed", proposal_id, at, {"error": str(err)})
+                raise
+        self.move(proposal_id, ("applied",), "reverted", at)
+        self.audit(actor, "reverted", proposal_id, at,
+                   {"ip": proposal["ip"], "method": proposal["method"]})
+        return self.get(proposal_id)
+
+    def reject(self, proposal_id: int, *, actor: str, at: float, reason: str = "") -> dict:
+        self.move(proposal_id, ("proposed", "previewed"), "rejected", at)
+        self.audit(actor, "rejected", proposal_id, at, {"reason": reason})
+        return self.get(proposal_id)
+
+    # ---------- helpers ----------
+
+    def require_state(self, proposal_id: int, state: str) -> dict:
+        proposal = self.get(proposal_id)
+        if proposal["state"] != state:
+            raise WrongState(f"proposal {proposal_id} is {proposal['state']}, not {state}")
+        return proposal
+
+    def move(self, proposal_id: int, allowed: tuple[str, ...], new_state: str, at: float,
+             **columns: str) -> None:
+        """Change the state only if it is still one of `allowed`.
+
+        The check and the change are one UPDATE, so two people clicking at the same
+        moment cannot both approve (or both revert) the same proposal."""
+        self.get(proposal_id)  # KeyError first, so a missing proposal is a 404, not a 409
+        sets = "".join(f", {name} = ?" for name in columns)  # names come from our code only
+        placeholders = ", ".join("?" for _ in allowed)
+        with self._connect() as conn:
+            cur = conn.execute(
+                f"UPDATE response_proposals SET state = ?, updated_at = ?{sets} "
+                f"WHERE proposal_id = ? AND state IN ({placeholders})",
+                (new_state, at, *columns.values(), proposal_id, *allowed))
+        if cur.rowcount == 0:
+            state = self.get(proposal_id)["state"]
+            raise WrongState(f"proposal {proposal_id} is {state}; cannot become {new_state}")
+
+    def audit(self, actor: str, step: str, proposal_id: int, at: float, details: dict) -> None:
+        self.state_store.add_audit(actor=actor, action=f"response.{step}",
+                                   target=str(proposal_id), details=details, at=at)
+
+
+def same_address(typed: str | None, expected: str) -> bool:
+    """'2001:DB8::7' and '2001:db8::7' are the same address; '' or 'abc' never match."""
+    try:
+        return str(ipaddress.ip_address((typed or "").strip())) == expected
+    except ValueError:
+        return False
+
+
+def row_to_proposal(row: sqlite3.Row) -> dict:
+    proposal = {key: row[key] for key in row.keys() if key != "preview_json"}
+    proposal["preview"] = json.loads(row["preview_json"]) if row["preview_json"] else None
+    proposal["rules"] = rules_for(row["ip"], row["direction"])  # commands + undo, always shown
+    return proposal
+```
+
+The steps are `proposed → previewed → approved → applied → reverted`, and a proposed or previewed block can be `rejected`. Approve is allowed only after a preview, needs the person's name and the IP address typed again, and a refused approval is audited too. Each check and state change is **one** SQL `UPDATE ... WHERE state IN (...)`, so two people clicking at the same moment cannot both approve. The proposals table is created here with `CREATE TABLE IF NOT EXISTS`, so `storage/state.py` does not change. One gap to know: the state change and its audit row are two transactions, so a crash between them could lose one audit row; making them one transaction needs a small new `StateStore` interface (ask Jaiden).
+
+**Step 3.** Create the enforcer interface `maxguard/response/enforcers/__init__.py` and `maxguard/response/enforcers/base.py`:
+
+```python
+"""Enforcers: connectors that apply an approved block on a firewall (Ahmad, AHM-08)."""
+```
+
+```python
+"""The Enforcer protocol (Ahmad, AHM-08).
+
+An Enforcer applies an *approved* block on a firewall the user owns, and undoes
+it. It only ever talks to that firewall: nothing is sent toward the blocked
+address (CLAUDE.md rule 4). maxguard.response.approvals decides when an enforcer
+may run; an enforcer never decides anything by itself.
+
+Any class with these three methods is an Enforcer (typing.Protocol checks the
+shape, no base class needed), so a test can pass a small fake one.
+"""
+
+from __future__ import annotations
+
+from typing import Protocol
+
+
+class EnforcerError(RuntimeError):
+    """The firewall refused or could not be reached; the block state did not change."""
+
+
+class Enforcer(Protocol):
+    def add(self, ip: str) -> None:
+        """Put ip on the firewall's block list."""
+
+    def remove(self, ip: str) -> None:
+        """Take ip off the firewall's block list."""
+
+    def apply(self) -> None:
+        """Make the firewall use the changed list (some firewalls need this step)."""
+```
+
+and the OPNsense client `maxguard/response/enforcers/opnsense.py`:
+
+```python
+"""OPNsense enforcer: put an approved address in a firewall alias (Ahmad, AHM-08).
+
+Optional. Without it, MaxGuard shows the commands and a person applies them by
+hand. With it, MaxGuard asks the user's own OPNsense firewall, through its API,
+to add the address to an alias that the user's block rules already use.
+
+The endpoints, read from the OPNsense source (opnsense/core, commit
+1177021c22d6dedb63ff9bffd6300e789a8822e2, 2026-10-06):
+- POST /api/firewall/alias_util/add/<alias>     body {"address": "<ip>"} -> {"status": "done"}
+- POST /api/firewall/alias_util/delete/<alias>  body {"address": "<ip>"} -> {"status": "done"}
+  src/opnsense/mvc/app/controllers/OPNsense/Firewall/Api/AliasUtilController.php
+  (addAction, deleteAction). Both update the alias in the configuration AND the
+  live pf table at once ("pfctl -t <alias> -T add <ip>",
+  src/opnsense/service/conf/actions.d/actions_filter.conf, [add.table]).
+- POST /api/firewall/alias/reconfigure                                 -> {"status": "ok"}
+  src/opnsense/mvc/app/controllers/OPNsense/Firewall/Api/AliasController.php
+  (reconfigureAction): the "Apply" button for aliases.
+- A JSON body is read like a form (ApiControllerBase.php, parseJsonBodyData).
+- API key: a file with the lines "key=..." and "secret=...", sent with HTTP basic
+  auth (opnsense/docs repository, source/development/how-tos/api.rst).
+- Least privilege for the API user (src/opnsense/mvc/app/models/OPNsense/Core/ACL/ACL.xml):
+  "Diagnostics: PF Table IP addresses" (api/firewall/alias_util/*) and
+  "Firewall: Alias: Edit" (api/firewall/alias/*).
+
+Safety:
+- https only, TLS verification always on. A firewall with its own certificate
+  authority: give its CA file (MAXGUARD_OPNSENSE_CA).
+- The API key lives in the data folder (data/opnsense/apikey.txt), never in the
+  repository. Proxy settings from the environment are ignored: the request goes
+  straight to the firewall on the user's own network.
+- With the offline guard on (MAXGUARD_OFFLINE=1), add the firewall's host name or
+  IP to MAXGUARD_OFFLINE_ALLOW, or every request fails with OfflineViolation.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+from urllib.parse import urlparse
+
+import requests
+
+from maxguard.offline import OfflineViolation
+from maxguard.response.enforcers.base import EnforcerError
+from maxguard.response.generate import parse_ip
+
+TIMEOUT = (5.0, 20.0)  # seconds to connect, seconds to wait for an answer
+ALIAS_NAME = re.compile(r"[A-Za-z0-9_]{1,32}")  # OPNsense alias names: letters, digits, _
+KEY_FILE = Path("opnsense") / "apikey.txt"      # inside the data folder
+
+
+class OPNsenseEnforcer:
+    """Adds and removes addresses in one OPNsense alias."""
+
+    def __init__(self, base_url: str, key: str, secret: str, *, alias: str,
+                 ca_file: str | None = None):
+        if urlparse(base_url).scheme != "https":
+            raise ValueError("the OPNsense URL must start with https://")
+        if not ALIAS_NAME.fullmatch(alias):
+            raise ValueError(f"not an OPNsense alias name: {alias!r}")
+        self.base_url = base_url.rstrip("/")
+        self.alias = alias
+        self.session = requests.Session()
+        self.session.auth = (key, secret)
+        self.session.verify = ca_file or True   # never False
+        self.session.trust_env = False          # no proxy, no ~/.netrc: straight to the firewall
+
+    def add(self, ip: str) -> None:
+        address = str(parse_ip(ip))  # checked again here: only a clean address is sent
+        self.post(f"/api/firewall/alias_util/add/{self.alias}", {"address": address}, "done")
+
+    def remove(self, ip: str) -> None:
+        address = str(parse_ip(ip))
+        self.post(f"/api/firewall/alias_util/delete/{self.alias}", {"address": address},
+                  "done")
+
+    def apply(self) -> None:
+        self.post("/api/firewall/alias/reconfigure", {}, "ok")
+
+    def post(self, path: str, body: dict, expected: str) -> None:
+        """POST JSON and check OPNsense's {"status": ...} answer."""
+        try:
+            response = self.session.post(self.base_url + path, json=body, timeout=TIMEOUT,
+                                         allow_redirects=False)
+        except OfflineViolation as err:
+            raise EnforcerError(f"{err} (add the firewall to MAXGUARD_OFFLINE_ALLOW)") from err
+        except requests.RequestException as err:
+            raise EnforcerError(f"OPNsense not reachable: {err}") from err
+        if response.status_code != 200:
+            raise EnforcerError(f"OPNsense answered HTTP {response.status_code} for {path}")
+        try:
+            status = response.json().get("status")
+        except (ValueError, AttributeError):
+            raise EnforcerError(f"OPNsense sent an answer that is not JSON for {path}") from None
+        if status != expected:
+            raise EnforcerError(f"OPNsense said {status!r} for {path} (expected {expected!r})")
+
+
+def read_api_key(path: Path) -> tuple[str, str]:
+    """Read the key file OPNsense lets you download once: lines key=... and secret=..."""
+    values = {}
+    for line in Path(path).read_text().splitlines():
+        name, sep, value = line.strip().partition("=")  # the secret itself may end in "="
+        if sep:
+            values[name] = value
+    if not values.get("key") or not values.get("secret"):
+        raise EnforcerError(f"{path} needs a key=... line and a secret=... line")
+    return values["key"], values["secret"]
+
+
+def from_env(data_dir: Path, alias: str) -> OPNsenseEnforcer | None:
+    """The enforcer the user configured, or None when MAXGUARD_OPNSENSE_URL is not set."""
+    url = os.environ.get("MAXGUARD_OPNSENSE_URL")
+    if not url:
+        return None
+    key_file = Path(data_dir) / KEY_FILE
+    if not key_file.is_file():
+        raise EnforcerError(f"MAXGUARD_OPNSENSE_URL is set but {key_file} does not exist")
+    key, secret = read_api_key(key_file)
+    return OPNsenseEnforcer(url, key, secret, alias=alias,
+                            ca_file=os.environ.get("MAXGUARD_OPNSENSE_CA") or None)
+```
+
+The endpoints come from OPNsense's own source code (`opnsense/core`, commit `1177021c22d6dedb63ff9bffd6300e789a8822e2`, October 6, 2026): `POST /api/firewall/alias_util/add/<alias>` and `.../delete/<alias>` with `{"address": ip}` (`AliasUtilController.php`; they change the live `pf` table at once through `pfctl -t <alias> -T add`) and `POST /api/firewall/alias/reconfigure` (`AliasController.php`, the "Apply" step). The key file has `key=` and `secret=` lines and is sent with HTTP basic auth (OPNsense's API how-to, `api.rst`). The client accepts only `https://`, always verifies the certificate (your CA file or the system's), uses short timeouts, follows no redirects, and ignores proxy settings (`trust_env = False`): the request goes straight to your firewall, and never toward the blocked address.
+
+**Step 4.** Create `maxguard/response/routes.py`, the API under `/api/response`:
+
+```python
+"""JSON API for block proposals under /api/response (Ahmad, AHM-08).
+
+create_app() in maxguard/api/app.py includes this router when it imports. The
+routes read the stores from request.app.state and read the clock (time.time())
+like the rest of the API; approvals.py and preview.py never do.
+
+    POST /api/response/proposals                  {actor, ip, direction, reason?, finding_id?}
+    GET  /api/response/proposals
+    GET  /api/response/proposals/{id}
+    POST /api/response/proposals/{id}/preview     {actor}
+    POST /api/response/proposals/{id}/approve     {actor, confirm_ip}
+    POST /api/response/proposals/{id}/apply       {actor}
+    POST /api/response/proposals/{id}/revert      {actor}
+    POST /api/response/proposals/{id}/reject      {actor, reason?}
+
+apply uses the OPNsense enforcer when MAXGUARD_OPNSENSE_URL is set; otherwise
+it records that the person ran the generated commands by hand.
+Errors: 400 bad input or wrong typed IP, 404 no such proposal, 409 step not
+allowed now, 502 the firewall refused or could not be reached.
+"""
+
+from __future__ import annotations
+
+import time
+
+from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, Field
+
+from maxguard.response.approvals import ProposalStore, WrongState
+from maxguard.response.enforcers import opnsense
+from maxguard.response.enforcers.base import EnforcerError
+from maxguard.response.generate import OPNSENSE_ALIASES, sides
+from maxguard.response.preview import preview
+
+router = APIRouter(prefix="/api/response")
+
+
+class NewProposal(BaseModel):
+    actor: str = Field(min_length=1, max_length=100)
+    ip: str = Field(min_length=1, max_length=100)
+    direction: str = "both"
+    reason: str = Field(default="", max_length=1000)
+    finding_id: str | None = Field(default=None, max_length=100)
+
+
+class Step(BaseModel):
+    actor: str = Field(min_length=1, max_length=100)
+    reason: str = Field(default="", max_length=1000)
+
+
+class Approval(BaseModel):
+    actor: str = Field(min_length=1, max_length=100)
+    confirm_ip: str = Field(default="", max_length=100)  # missing -> refused, and audited
+
+
+def proposals(request: Request) -> ProposalStore:
+    """One ProposalStore per app, made on first use (it creates its table once)."""
+    state = request.app.state
+    if getattr(state, "proposal_store", None) is None:
+        state.proposal_store = ProposalStore(state.state_store)
+    return state.proposal_store
+
+
+def enforcers_for(request: Request, direction: str) -> list:
+    """The configured OPNsense enforcers (one alias per side), or [] when none is set up."""
+    enforcers = []
+    for side in sides(direction):
+        enforcer = opnsense.from_env(request.app.state.data_dir, OPNSENSE_ALIASES[side])
+        if enforcer is not None:
+            enforcers.append(enforcer)
+    return enforcers
+
+
+def run_step(step):
+    """Call one workflow step and turn its errors into HTTP answers."""
+    try:
+        return step()
+    except KeyError:
+        raise HTTPException(404, "no such proposal") from None
+    except WrongState as err:
+        raise HTTPException(409, str(err)) from None
+    except EnforcerError as err:
+        raise HTTPException(502, str(err)) from None
+    except ValueError as err:
+        raise HTTPException(400, str(err)) from None
+
+
+@router.post("/proposals")
+def create_proposal(request: Request, body: NewProposal) -> dict:
+    return run_step(lambda: proposals(request).propose(
+        ip=body.ip, direction=body.direction, actor=body.actor, at=time.time(),
+        reason=body.reason, finding_id=body.finding_id))
+
+
+@router.get("/proposals")
+def list_proposals(request: Request, limit: int = Query(200, ge=1, le=1000)) -> list[dict]:
+    return proposals(request).list_proposals(limit=limit)
+
+
+@router.get("/proposals/{proposal_id}")
+def get_proposal(request: Request, proposal_id: int) -> dict:
+    return run_step(lambda: proposals(request).get(proposal_id))
+
+
+@router.post("/proposals/{proposal_id}/preview")
+def preview_proposal(request: Request, proposal_id: int, body: Step) -> dict:
+    store = proposals(request)
+    proposal = run_step(lambda: store.get(proposal_id))
+    now = time.time()
+    summary = preview(proposal["ip"], proposal["direction"], request.app.state.event_store,
+                      window_end=now)
+    return run_step(lambda: store.record_preview(proposal_id, actor=body.actor,
+                                                 preview=summary, at=now))
+
+
+@router.post("/proposals/{proposal_id}/approve")
+def approve_proposal(request: Request, proposal_id: int, body: Approval) -> dict:
+    return run_step(lambda: proposals(request).approve(
+        proposal_id, actor=body.actor, confirm_ip=body.confirm_ip, at=time.time()))
+
+
+@router.post("/proposals/{proposal_id}/apply")
+def apply_proposal(request: Request, proposal_id: int, body: Step) -> dict:
+    store = proposals(request)
+
+    def step():
+        proposal = store.get(proposal_id)
+        enforcers = enforcers_for(request, proposal["direction"])
+        return store.mark_applied(proposal_id, actor=body.actor, at=time.time(),
+                                  enforcers=enforcers)
+    return run_step(step)
+
+
+@router.post("/proposals/{proposal_id}/revert")
+def revert_proposal(request: Request, proposal_id: int, body: Step) -> dict:
+    store = proposals(request)
+
+    def step():
+        proposal = store.get(proposal_id)
+        # Undo the same way it was applied: a block applied by hand is undone by hand.
+        enforcers = []
+        if proposal["method"] == "enforcer":
+            enforcers = enforcers_for(request, proposal["direction"])
+        return store.revert(proposal_id, actor=body.actor, at=time.time(), enforcers=enforcers)
+    return run_step(step)
+
+
+@router.post("/proposals/{proposal_id}/reject")
+def reject_proposal(request: Request, proposal_id: int, body: Step) -> dict:
+    return run_step(lambda: proposals(request).reject(
+        proposal_id, actor=body.actor, at=time.time(), reason=body.reason))
+```
+
+`create_app()` (JAI-07) includes this router automatically now that the module exists. It is part of the dashboard's app on `127.0.0.1` only, never the ingest-only app that sensors reach. Errors: 400 bad input or a wrong typed IP, 404 no such proposal, 409 a step that is not allowed now, 502 the firewall refused or could not be reached.
+
+**Step 5.** Create the tests `tests/unit/test_response_approvals.py`:
+
+```python
+"""Tests for maxguard.response.approvals (Ahmad, AHM-08)."""
+
+import pytest
+
+from maxguard.response.approvals import ProposalStore, WrongState
+from maxguard.response.enforcers.base import EnforcerError
+from maxguard.storage.state import StateStore
+
+T0 = 1791331200.0  # times are passed in; the store never reads the clock
+PREVIEW = {"connections": 3, "devices": ["192.168.1.20"], "window_end": T0}
+
+
+class FakeEnforcer:
+    """Keeps a block list in memory, like a firewall alias."""
+
+    def __init__(self, fail: bool = False):
+        self.blocked: set[str] = set()
+        self.applied = 0
+        self.fail = fail
+
+    def add(self, ip: str) -> None:
+        if self.fail:
+            raise EnforcerError("firewall said no")
+        self.blocked.add(ip)
+
+    def remove(self, ip: str) -> None:
+        self.blocked.discard(ip)
+
+    def apply(self) -> None:
+        self.applied += 1
+
+
+@pytest.fixture
+def state(tmp_path):
+    return StateStore(tmp_path / "state.db")
+
+
+@pytest.fixture
+def store(state):
+    return ProposalStore(state)
+
+
+def approved(store: ProposalStore, ip: str = "203.0.113.7") -> int:
+    proposal_id = store.propose(ip=ip, direction="both", actor="ahmad", at=T0)["proposal_id"]
+    store.record_preview(proposal_id, actor="ahmad", preview=PREVIEW, at=T0 + 1)
+    store.approve(proposal_id, actor="fiona", confirm_ip=ip, at=T0 + 2)
+    return proposal_id
+
+
+def actions(state: StateStore) -> list[str]:
+    return [row["action"] for row in reversed(state.list_audit())]
+
+
+def test_full_workflow_is_audited(store, state):
+    proposal_id = approved(store)
+    firewall = FakeEnforcer()
+    applied = store.mark_applied(proposal_id, actor="fiona", at=T0 + 3, enforcers=[firewall])
+    assert applied["state"] == "applied" and applied["method"] == "enforcer"
+    assert firewall.blocked == {"203.0.113.7"} and firewall.applied == 1
+    reverted = store.revert(proposal_id, actor="ahmad", at=T0 + 4, enforcers=[firewall])
+    assert reverted["state"] == "reverted"
+    assert firewall.blocked == set()  # revert removed the address
+    assert actions(state) == ["response.proposed", "response.previewed", "response.approved",
+                              "response.applied", "response.reverted"]
+    rows = list(reversed(state.list_audit()))
+    assert {row["target"] for row in rows} == {str(proposal_id)}
+    assert [row["at"] for row in rows] == [T0, T0 + 1, T0 + 2, T0 + 3, T0 + 4]
+    assert rows[2]["actor"] == "fiona"
+
+
+def test_proposal_shows_the_commands_and_their_undo(store):
+    proposal = store.propose(ip="2001:DB8::7", direction="inbound", actor="ahmad", at=T0)
+    assert proposal["ip"] == "2001:db8::7"
+    assert proposal["rules"]["nftables"]["undo"]
+    assert proposal["state"] == "proposed" and proposal["preview"] is None
+
+
+@pytest.mark.parametrize("text", ["1.2.3.4; rm -rf /", "127.0.0.1", "ff02::1", "0.0.0.0",
+                                  "169.254.1.1", "2001:db8::1%$(id)"])
+def test_bad_addresses_cannot_be_proposed(store, state, text):
+    with pytest.raises(ValueError):
+        store.propose(ip=text, direction="both", actor="ahmad", at=T0)
+    assert store.list_proposals() == [] and state.list_audit() == []
+
+
+@pytest.mark.parametrize("typed", [None, "", "203.0.113.8", "203.0.113.7; rm -rf /"])
+def test_approval_needs_the_same_ip_typed_again(store, state, typed):
+    proposal_id = store.propose(ip="203.0.113.7", direction="both", actor="a", at=T0)[
+        "proposal_id"]
+    store.record_preview(proposal_id, actor="a", preview=PREVIEW, at=T0)
+    with pytest.raises(ValueError, match="does not match"):
+        store.approve(proposal_id, actor="fiona", confirm_ip=typed, at=T0 + 1)
+    assert store.get(proposal_id)["state"] == "previewed"
+    assert actions(state)[-1] == "response.approve_refused"  # refusals are logged too
+
+
+def test_ipv6_typed_in_another_spelling_matches(store):
+    proposal_id = approved(store, ip="2001:db8::7")
+    assert store.get(proposal_id)["approved_by"] == "fiona"
+    other = store.propose(ip="2001:db8::8", direction="both", actor="a", at=T0)["proposal_id"]
+    store.record_preview(other, actor="a", preview=PREVIEW, at=T0)
+    assert store.approve(other, actor="b", confirm_ip="2001:DB8:0::8", at=T0)["state"] == \
+        "approved"
+
+
+def test_no_approval_without_a_preview(store):
+    proposal_id = store.propose(ip="203.0.113.7", direction="both", actor="a", at=T0)[
+        "proposal_id"]
+    with pytest.raises(WrongState):
+        store.approve(proposal_id, actor="a", confirm_ip="203.0.113.7", at=T0)
+
+
+def test_steps_out_of_order_are_refused(store):
+    proposal_id = store.propose(ip="203.0.113.7", direction="both", actor="a", at=T0)[
+        "proposal_id"]
+    with pytest.raises(WrongState):
+        store.mark_applied(proposal_id, actor="a", at=T0)       # not approved yet
+    with pytest.raises(WrongState):
+        store.revert(proposal_id, actor="a", at=T0)             # not applied yet
+    with pytest.raises(KeyError):
+        store.approve(999, actor="a", confirm_ip="203.0.113.7", at=T0)
+
+
+def test_approved_twice_is_refused(store):
+    proposal_id = approved(store)
+    with pytest.raises(WrongState):
+        store.approve(proposal_id, actor="b", confirm_ip="203.0.113.7", at=T0 + 5)
+
+
+def test_manual_apply_and_revert(store, state):
+    proposal_id = approved(store)
+    assert store.mark_applied(proposal_id, actor="a", at=T0 + 3)["method"] == "manual"
+    assert store.revert(proposal_id, actor="a", at=T0 + 4)["state"] == "reverted"
+    assert state.list_audit()[0]["details"] == {"ip": "203.0.113.7", "method": "manual"}
+
+
+def test_enforcer_failure_keeps_it_approved_and_is_audited(store, state):
+    proposal_id = approved(store)
+    with pytest.raises(EnforcerError):
+        store.mark_applied(proposal_id, actor="a", at=T0 + 3, enforcers=[FakeEnforcer(True)])
+    assert store.get(proposal_id)["state"] == "approved"
+    assert actions(state)[-1] == "response.apply_failed"
+
+
+def test_enforcer_block_needs_the_enforcer_to_revert(store):
+    proposal_id = approved(store)
+    store.mark_applied(proposal_id, actor="a", at=T0 + 3, enforcers=[FakeEnforcer()])
+    with pytest.raises(ValueError, match="connector"):
+        store.revert(proposal_id, actor="a", at=T0 + 4)
+    assert store.get(proposal_id)["state"] == "applied"
+
+
+def test_reject(store, state):
+    proposal_id = store.propose(ip="203.0.113.7", direction="both", actor="a", at=T0)[
+        "proposal_id"]
+    assert store.reject(proposal_id, actor="b", at=T0 + 1, reason="our VPN")["state"] == \
+        "rejected"
+    with pytest.raises(WrongState):
+        store.reject(proposal_id, actor="b", at=T0 + 2)
+    assert actions(state)[-1] == "response.rejected"
+
+
+def test_preview_is_kept_with_the_proposal(store):
+    proposal_id = approved(store)
+    assert store.get(proposal_id)["preview"] == PREVIEW
+```
+
+`tests/unit/test_opnsense.py` (a fake OPNsense: `http.server` on `127.0.0.1` wrapped in TLS with a throwaway test CA, so the tests also prove that an untrusted certificate is refused):
+
+```python
+"""Tests for the OPNsense enforcer (Ahmad, AHM-08).
+
+Never a real firewall: FakeOPNsense is a small HTTPS server on 127.0.0.1 that
+answers the three alias endpoints the way OPNsense's AliasUtilController and
+AliasController do. Its certificate comes from a test CA made here, so the tests
+also prove that TLS verification is on. test_response_routes.py reuses it.
+"""
+
+from __future__ import annotations
+
+import base64
+import datetime
+import ipaddress
+import json
+import socket
+import ssl
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+
+from maxguard import offline
+from maxguard.offline import OfflineViolation
+from maxguard.response.enforcers.base import EnforcerError
+from maxguard.response.enforcers.opnsense import OPNsenseEnforcer, from_env, read_api_key
+
+KEY = "test-key"
+SECRET = "test-secret=="          # real secrets are base64 and may end in "="
+FIREWALL_NAME = "fw.home.arpa"    # home.arpa is reserved for home networks (RFC 8375)
+
+
+# ---------- a test certificate authority and server certificate ----------
+
+def name(common_name: str) -> x509.Name:
+    return x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name)])
+
+
+def make_certificates(folder: Path) -> tuple[Path, Path, Path]:
+    """Returns (ca_file, server_cert_file, server_key_file)."""
+    now = datetime.datetime.now(datetime.UTC)
+    ca_key = ec.generate_private_key(ec.SECP256R1())
+    ca_cert = (
+        x509.CertificateBuilder().subject_name(name("MaxGuard test CA"))
+        .issuer_name(name("MaxGuard test CA")).public_key(ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(minutes=5))
+        .not_valid_after(now + datetime.timedelta(days=1))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .add_extension(x509.KeyUsage(digital_signature=False, content_commitment=False,
+                                     key_encipherment=False, data_encipherment=False,
+                                     key_agreement=False, key_cert_sign=True, crl_sign=True,
+                                     encipher_only=False, decipher_only=False), critical=True)
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()),
+                       critical=False)
+        .sign(ca_key, hashes.SHA256()))
+    server_key = ec.generate_private_key(ec.SECP256R1())
+    server_cert = (
+        x509.CertificateBuilder().subject_name(name(FIREWALL_NAME))
+        .issuer_name(ca_cert.subject).public_key(server_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(minutes=5))
+        .not_valid_after(now + datetime.timedelta(days=1))
+        .add_extension(x509.SubjectAlternativeName([
+            x509.DNSName(FIREWALL_NAME), x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]),
+            critical=False)
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+        .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),
+                       critical=False)
+        .sign(ca_key, hashes.SHA256()))
+    ca_file, cert_file, key_file = folder / "ca.pem", folder / "server.pem", folder / "key.pem"
+    ca_file.write_bytes(ca_cert.public_bytes(serialization.Encoding.PEM))
+    cert_file.write_bytes(server_cert.public_bytes(serialization.Encoding.PEM))
+    key_file.write_bytes(server_key.private_bytes(serialization.Encoding.PEM,
+                                                  serialization.PrivateFormat.PKCS8,
+                                                  serialization.NoEncryption()))
+    return ca_file, cert_file, key_file
+
+
+# ---------- the fake firewall ----------
+
+class FakeOPNsense:
+    """Remembers the alias contents and every request it was sent."""
+
+    def __init__(self, folder: Path):
+        self.aliases: dict[str, set[str]] = {"maxguard_block_in": set(),
+                                             "maxguard_block_out": set()}
+        self.requests: list[tuple[str, dict]] = []
+        self.reconfigures = 0
+        self.ca_file, cert_file, key_file = make_certificates(folder)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert_file, key_file)
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), self.handler_class())
+        self.server.socket = context.wrap_socket(self.server.socket, server_side=True)
+        self.port = self.server.server_address[1]
+        self.url = f"https://127.0.0.1:{self.port}"
+        # A short poll interval makes stop() quick (the default waits up to 0.5 s).
+        self.thread = threading.Thread(target=self.server.serve_forever, args=(0.05,),
+                                       daemon=True)
+        self.thread.start()
+
+    def stop(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+
+    def answer(self, path: str, body: dict) -> tuple[int, dict]:
+        """What OPNsense would answer (see AliasUtilController.php / AliasController.php)."""
+        self.requests.append((path, body))
+        parts = path.strip("/").split("/")
+        if parts[:3] == ["api", "firewall", "alias_util"] and len(parts) == 5:
+            action, alias = parts[3], parts[4]
+            if alias not in self.aliases or "address" not in body:
+                return 200, {"status": "failed"}
+            if action == "add":
+                self.aliases[alias].add(body["address"])
+                return 200, {"status": "done"}
+            if action == "delete":
+                self.aliases[alias].discard(body["address"])
+                return 200, {"status": "done"}
+        if parts == ["api", "firewall", "alias", "reconfigure"]:
+            self.reconfigures += 1
+            return 200, {"status": "ok"}
+        return 404, {"message": "not found"}
+
+    def handler_class(self):
+        fake = self
+        expected = "Basic " + base64.b64encode(f"{KEY}:{SECRET}".encode()).decode()
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):  # noqa: N802 (the name http.server expects)
+                length = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(length) or b"{}")
+                if self.headers.get("Authorization") != expected:
+                    status, answer = 401, {"message": "Authentication Failed"}
+                else:
+                    status, answer = fake.answer(self.path, body)
+                data = json.dumps(answer).encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, *args):  # keep the test output quiet
+                pass
+
+        return Handler
+
+
+@pytest.fixture
+def firewall(tmp_path):
+    fake = FakeOPNsense(tmp_path)
+    yield fake
+    fake.stop()
+
+
+def enforcer(fake: FakeOPNsense, alias: str = "maxguard_block_in", **kwargs):
+    options = {"ca_file": str(fake.ca_file), **kwargs}
+    return OPNsenseEnforcer(fake.url, KEY, SECRET, alias=alias, **options)
+
+
+# ---------- tests ----------
+
+def test_add_apply_remove(firewall):
+    client = enforcer(firewall)
+    client.add("203.0.113.7")
+    client.apply()
+    assert firewall.aliases["maxguard_block_in"] == {"203.0.113.7"}
+    assert firewall.reconfigures == 1
+    client.remove("203.0.113.7")
+    client.apply()
+    assert firewall.aliases["maxguard_block_in"] == set()
+    assert [path for path, _ in firewall.requests] == [
+        "/api/firewall/alias_util/add/maxguard_block_in",
+        "/api/firewall/alias/reconfigure",
+        "/api/firewall/alias_util/delete/maxguard_block_in",
+        "/api/firewall/alias/reconfigure",
+    ]
+
+
+def test_ipv6_is_sent_in_its_short_lower_case_form(firewall):
+    # OPNsense's addAction refuses characters outside [0-9a-f:./_] (no upper case).
+    enforcer(firewall, alias="maxguard_block_out").add("2001:DB8:0:0:0:0:0:7")
+    assert firewall.aliases["maxguard_block_out"] == {"2001:db8::7"}
+
+
+def test_tls_is_verified(firewall):
+    # Without the firewall's CA file the certificate is not trusted: refused.
+    client = OPNsenseEnforcer(firewall.url, KEY, SECRET, alias="maxguard_block_in")
+    with pytest.raises(EnforcerError, match="CERTIFICATE_VERIFY_FAILED|certificate verify"):
+        client.add("203.0.113.7")
+    assert firewall.requests == []
+
+
+def test_plain_http_is_refused():
+    with pytest.raises(ValueError, match="https"):
+        OPNsenseEnforcer("http://127.0.0.1:8443", KEY, SECRET, alias="maxguard_block_in")
+
+
+def test_bad_alias_name_is_refused():
+    with pytest.raises(ValueError):
+        OPNsenseEnforcer("https://127.0.0.1", KEY, SECRET, alias="x/../../core")
+
+
+def test_wrong_secret_is_an_error(firewall):
+    client = OPNsenseEnforcer(firewall.url, KEY, "wrong", alias="maxguard_block_in",
+                              ca_file=str(firewall.ca_file))
+    with pytest.raises(EnforcerError, match="401"):
+        client.add("203.0.113.7")
+    assert firewall.aliases["maxguard_block_in"] == set()
+
+
+def test_unknown_alias_is_an_error(firewall):
+    with pytest.raises(EnforcerError, match="failed"):
+        enforcer(firewall, alias="not_there").add("203.0.113.7")
+
+
+@pytest.mark.parametrize("text", ["1.2.3.4; rm -rf /", "127.0.0.1", "2001:db8::1%$(id)"])
+def test_hostile_input_never_reaches_the_firewall(firewall, text):
+    with pytest.raises(ValueError):
+        enforcer(firewall).add(text)
+    assert firewall.requests == []
+
+
+def test_unreachable_firewall_is_an_error(tmp_path):
+    with socket.socket() as probe:  # a port with nothing listening
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    client = OPNsenseEnforcer(f"https://127.0.0.1:{port}", KEY, SECRET,
+                              alias="maxguard_block_in")
+    with pytest.raises(EnforcerError, match="not reachable"):
+        client.add("203.0.113.7")
+
+
+def test_read_api_key(tmp_path):
+    key_file = tmp_path / "apikey.txt"
+    key_file.write_text(f"key={KEY}\nsecret={SECRET}\n")
+    assert read_api_key(key_file) == (KEY, SECRET)
+    key_file.write_text(f"key={KEY}\n")
+    with pytest.raises(EnforcerError, match="secret"):
+        read_api_key(key_file)
+
+
+def test_from_env(tmp_path, monkeypatch, firewall):
+    monkeypatch.delenv("MAXGUARD_OPNSENSE_URL", raising=False)
+    assert from_env(tmp_path, "maxguard_block_in") is None  # not configured: manual steps
+
+    monkeypatch.setenv("MAXGUARD_OPNSENSE_URL", firewall.url)
+    monkeypatch.setenv("MAXGUARD_OPNSENSE_CA", str(firewall.ca_file))
+    with pytest.raises(EnforcerError, match="apikey.txt"):
+        from_env(tmp_path, "maxguard_block_in")              # the key file is missing
+
+    (tmp_path / "opnsense").mkdir()
+    (tmp_path / "opnsense" / "apikey.txt").write_text(f"key={KEY}\nsecret={SECRET}\n")
+    from_env(tmp_path, "maxguard_block_in").add("198.51.100.20")
+    assert firewall.aliases["maxguard_block_in"] == {"198.51.100.20"}
+
+
+# ---------- with the offline guard on ----------
+
+@pytest.fixture
+def firewall_name(monkeypatch):
+    """Make fw.home.arpa resolve to 127.0.0.1 (as a home router's DNS would)."""
+    real_getaddrinfo = socket.getaddrinfo
+
+    def fake_getaddrinfo(host, *args, **kwargs):
+        if host == FIREWALL_NAME:
+            host = "127.0.0.1"
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    yield
+    offline.disable()  # before monkeypatch puts the real getaddrinfo back
+
+
+def test_works_with_the_guard_on_when_the_firewall_is_allowed(firewall, firewall_name):
+    # The same as MAXGUARD_OFFLINE=1 with MAXGUARD_OFFLINE_ALLOW=fw.home.arpa
+    offline.enable("http://127.0.0.1:11434", extra_allowed=[FIREWALL_NAME])
+    client = OPNsenseEnforcer(f"https://{FIREWALL_NAME}:{firewall.port}", KEY, SECRET,
+                              alias="maxguard_block_in", ca_file=str(firewall.ca_file))
+    client.add("203.0.113.7")  # only the firewall is contacted, never 203.0.113.7
+    client.apply()
+    assert firewall.aliases["maxguard_block_in"] == {"203.0.113.7"}
+
+
+def test_guard_stops_a_firewall_that_is_not_allowed(firewall, firewall_name):
+    offline.enable("http://127.0.0.1:11434")  # MAXGUARD_OFFLINE_ALLOW not set
+    client = OPNsenseEnforcer(f"https://{FIREWALL_NAME}:{firewall.port}", KEY, SECRET,
+                              alias="maxguard_block_in", ca_file=str(firewall.ca_file))
+    with pytest.raises(EnforcerError, match="MAXGUARD_OFFLINE_ALLOW") as caught:
+        client.add("203.0.113.7")
+    assert isinstance(caught.value.__cause__, OfflineViolation)
+    assert firewall.requests == []
+```
+
+and `tests/unit/test_response_routes.py`:
+
+```python
+"""Tests for the /api/response routes (Ahmad, AHM-08).
+
+The whole app from maxguard/api/app.py, with TestClient, and the fake OPNsense
+server from test_opnsense.py (never a real firewall).
+"""
+
+import time
+
+import pytest
+from fastapi.testclient import TestClient
+from test_opnsense import KEY, SECRET, FakeOPNsense
+
+from maxguard.api.app import create_app
+from maxguard.events.normalize import EVENT_KEYS
+
+BAD = "203.0.113.7"
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    monkeypatch.delenv("MAXGUARD_OPNSENSE_URL", raising=False)
+    monkeypatch.delenv("MAXGUARD_OFFLINE", raising=False)
+    return TestClient(create_app(tmp_path / "data", explain=False))
+
+
+@pytest.fixture
+def firewall(tmp_path, monkeypatch):
+    """A fake OPNsense, configured the way a user would: URL, CA file, key file."""
+    fake = FakeOPNsense(tmp_path)
+    monkeypatch.setenv("MAXGUARD_OPNSENSE_URL", fake.url)
+    monkeypatch.setenv("MAXGUARD_OPNSENSE_CA", str(fake.ca_file))
+    key_dir = tmp_path / "data" / "opnsense"
+    key_dir.mkdir(parents=True)
+    (key_dir / "apikey.txt").write_text(f"key={KEY}\nsecret={SECRET}\n")
+    yield fake
+    fake.stop()
+
+
+def propose(client, ip=BAD, direction="both") -> dict:
+    response = client.post("/api/response/proposals",
+                           json={"actor": "ahmad", "ip": ip, "direction": direction})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def step(client, proposal_id: int, name: str, **body):
+    return client.post(f"/api/response/proposals/{proposal_id}/{name}",
+                       json={"actor": "ahmad", **body})
+
+
+def response_audit(client) -> list[dict]:
+    rows = client.get("/api/audit").json()
+    return [row for row in reversed(rows) if row["action"].startswith("response.")]
+
+
+def test_manual_workflow(client):
+    proposal = propose(client)
+    pid = proposal["proposal_id"]
+    assert proposal["rules"]["nftables"]["block"]       # the commands are shown at once
+    assert step(client, pid, "preview").json()["preview"]["connections"] == 0
+    assert step(client, pid, "approve", confirm_ip=BAD).json()["state"] == "approved"
+    applied = step(client, pid, "apply").json()
+    assert applied["state"] == "applied" and applied["method"] == "manual"
+    assert step(client, pid, "revert").json()["state"] == "reverted"
+    assert [row["action"] for row in response_audit(client)] == [
+        "response.proposed", "response.previewed", "response.approved",
+        "response.applied", "response.reverted"]
+    assert {row["target"] for row in response_audit(client)} == {str(pid)}
+
+
+def test_approval_without_the_typed_ip_fails(client):
+    pid = propose(client)["proposal_id"]
+    step(client, pid, "preview")
+    assert step(client, pid, "approve").status_code == 400                  # missing
+    assert step(client, pid, "approve", confirm_ip="203.0.113.8").status_code == 400
+    assert client.post(f"/api/response/proposals/{pid}/approve",
+                       json={"confirm_ip": BAD}).status_code == 422          # no actor
+    assert client.get(f"/api/response/proposals/{pid}").json()["state"] == "previewed"
+    refused = [r for r in response_audit(client) if r["action"] == "response.approve_refused"]
+    assert len(refused) == 2
+
+
+@pytest.mark.parametrize("ip", ["1.2.3.4; rm -rf /", "127.0.0.1", "::1", "224.0.0.251",
+                                "0.0.0.0", "fe80::1", "2001:db8::1%$(id)"])
+def test_bad_addresses_are_refused(client, ip):
+    response = client.post("/api/response/proposals",
+                           json={"actor": "ahmad", "ip": ip, "direction": "both"})
+    assert response.status_code == 400
+    assert client.get("/api/response/proposals").json() == []
+
+
+def test_unknown_direction_is_refused(client):
+    response = client.post("/api/response/proposals",
+                           json={"actor": "ahmad", "ip": BAD, "direction": "sideways"})
+    assert response.status_code == 400
+
+
+def test_missing_proposal_and_wrong_order(client):
+    assert client.get("/api/response/proposals/42").status_code == 404
+    assert step(client, 42, "approve", confirm_ip=BAD).status_code == 404
+    pid = propose(client)["proposal_id"]
+    assert step(client, pid, "approve", confirm_ip=BAD).status_code == 409   # no preview yet
+    assert step(client, pid, "revert").status_code == 409                    # not applied
+
+
+def test_reject(client):
+    pid = propose(client)["proposal_id"]
+    assert step(client, pid, "reject", reason="our own VPN").json()["state"] == "rejected"
+    assert step(client, pid, "preview").status_code == 409
+
+
+def test_preview_counts_events_from_the_event_store(client):
+    now = time.time()
+    event = dict.fromkeys(EVENT_KEYS, "")
+    event.update(event_id="ev1", ts=now - 3600, sensor_id="pcap", source="zeek",
+                 log="conn.log", kind="conn", community_id="1:x=", src_ip=BAD,
+                 dst_ip="192.168.1.20", src_port=40000, dst_port=22, proto="tcp",
+                 service="ssh", bytes_out=1, bytes_in=1)
+    client.app.state.event_store.write([event])
+    pid = propose(client, direction="inbound")["proposal_id"]
+    summary = step(client, pid, "preview").json()["preview"]
+    assert summary["connections"] == 1 and summary["devices"] == ["192.168.1.20"]
+
+
+def test_cross_site_requests_are_refused(client):
+    response = client.post("/api/response/proposals",
+                           json={"actor": "x", "ip": BAD, "direction": "both"},
+                           headers={"Sec-Fetch-Site": "cross-site"})
+    assert response.status_code == 403
+
+
+def test_opnsense_apply_and_revert(client, firewall):
+    pid = propose(client, direction="both")["proposal_id"]
+    step(client, pid, "preview")
+    step(client, pid, "approve", confirm_ip=BAD)
+    applied = step(client, pid, "apply")
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["method"] == "enforcer"
+    assert firewall.aliases == {"maxguard_block_in": {BAD}, "maxguard_block_out": {BAD}}
+    assert firewall.reconfigures == 2
+    assert step(client, pid, "revert").json()["state"] == "reverted"
+    assert firewall.aliases == {"maxguard_block_in": set(), "maxguard_block_out": set()}
+    assert [row["action"] for row in response_audit(client)][-2:] == [
+        "response.applied", "response.reverted"]
+
+
+def test_firewall_error_is_502_and_nothing_changes(client, firewall):
+    firewall.aliases = {}  # the user has not created the aliases on the firewall
+    pid = propose(client)["proposal_id"]
+    step(client, pid, "preview")
+    step(client, pid, "approve", confirm_ip=BAD)
+    response = step(client, pid, "apply")
+    assert response.status_code == 502
+    assert client.get(f"/api/response/proposals/{pid}").json()["state"] == "approved"
+    assert response_audit(client)[-1]["action"] == "response.apply_failed"
+```
+
+Run them:
+
+```bash
+pytest tests/unit/test_response_approvals.py tests/unit/test_opnsense.py tests/unit/test_response_routes.py -q
+```
+
+Expected output:
+
+```text
+....................................................                                         [100%]
+52 passed in 3.36s
+```
+
+**Step 6.** Walk through the whole workflow against the API. Start the server in one terminal, then run the rest in a second one:
+
+```bash
+# terminal 1:
+uvicorn maxguard.api.app:create_app --factory --host 127.0.0.1 --port 8000
+# terminal 2:
+python -c "import shutil; shutil.make_archive('data/telnet', 'zip', 'tests/fixtures/zeek/telnet')"
+curl -s -F file=@data/telnet.zip http://127.0.0.1:8000/api/analyses; echo
+python - <<'EOF'
+import requests
+
+B = "http://127.0.0.1:8000/api/response/proposals"
+
+
+def step(path, **body):
+    """POST one step and print the answer in one line."""
+    answer = requests.post(B + path, json=body, timeout=60)
+    data = answer.json()
+    print(answer.status_code, data.get("detail") or f"proposal {data['proposal_id']}: {data['state']}")
+    return data
+
+
+step("", actor="ahmad", ip="1.2.3.4; rm -rf /", direction="both")
+p = step("", actor="ahmad", ip="172.18.0.3", direction="both", reason="Telnet client")
+print("\n".join(p["rules"]["nftables"]["block"] + p["rules"]["nftables"]["undo"]))
+seen = step("/1/preview", actor="ahmad")["preview"]
+print("preview:", seen["connections"], "connection(s), devices", seen["devices"],
+      "ports", [s["port"] for s in seen["services"]])
+step("/1/approve", actor="fiona")                          # the IP was not typed again
+step("/1/approve", actor="fiona", confirm_ip="172.18.0.3")
+step("/1/apply", actor="fiona")                            # no firewall connector: by hand
+step("/1/revert", actor="ahmad")
+for row in reversed(requests.get("http://127.0.0.1:8000/api/audit", timeout=10).json()):
+    print(row["actor"], row["action"], row["target"])
+EOF
+```
+
+Expected output:
+
+```text
+{"analysis_id":"20ba9a8122f51c5d","findings":1}
+400 '1.2.3.4; rm -rf /' does not appear to be an IPv4 or IPv6 address
+200 proposal 1: proposed
+sudo nft 'add element inet maxguard maxguard_block_in_v4 { 172.18.0.3 }'
+sudo nft 'add element inet maxguard maxguard_block_out_v4 { 172.18.0.3 }'
+sudo nft 'delete element inet maxguard maxguard_block_in_v4 { 172.18.0.3 }'
+sudo nft 'delete element inet maxguard maxguard_block_out_v4 { 172.18.0.3 }'
+200 proposal 1: previewed
+preview: 1 connection(s), devices ['172.18.0.2'] ports [23]
+400 the IP address you typed does not match the proposal
+200 proposal 1: approved
+200 proposal 1: applied
+200 proposal 1: reverted
+ahmad response.proposed 1
+ahmad response.previewed 1
+fiona response.approve_refused 1
+fiona response.approved 1
+fiona response.applied 1
+ahmad response.reverted 1
+```
+
+*The analysis ID depends on the moment of the upload, so yours differs. The preview counts only the 7 days before now: the fixture's traffic is from October 6, 2026, so on a later date your preview shows 0 connections. `apply` records a block made by hand because no firewall connector is configured.*
+
+**Step 7.** **On an OPNsense test VM** (*not run — verify on hardware*; never a real firewall):
+
+1. **Firewall > Aliases**: create `maxguard_block_in` and `maxguard_block_out`, type *Host(s)*, empty.
+2. **Firewall > Rules > WAN**: a *Block* rule with source `maxguard_block_in`. **Firewall > Rules > LAN**: a *Block* rule with source `maxguard_block_in` (a device on your own network) and one with destination `maxguard_block_out`. Apply.
+3. **System > Access > Users**: a user `maxguard` with only the privileges *Diagnostics: PF Table IP addresses* and *Firewall: Alias: Edit* (OPNsense's `ACL.xml`). In its API keys section click **+**; the browser downloads the key file once.
+4. On the MaxGuard machine, keep the key in the data folder (never in the repository) and point MaxGuard at the firewall:
+
+```bash
+mkdir -p data/opnsense
+mv ~/Downloads/<the downloaded key file>.txt data/opnsense/apikey.txt
+chmod 600 data/opnsense/apikey.txt
+export MAXGUARD_OPNSENSE_URL=https://fw.home.arpa      # your test firewall
+export MAXGUARD_OPNSENSE_CA=$PWD/data/opnsense/ca.pem  # if it uses its own CA
+export MAXGUARD_OFFLINE_ALLOW=fw.home.arpa             # with MAXGUARD_OFFLINE=1
+```
+
+5. Repeat the walk-through: `apply` now adds the address to the alias (check **Firewall > Diagnostics > Aliases**), and `revert` removes it. Without `MAXGUARD_OFFLINE_ALLOW`, apply answers 502 with the hint to add the firewall there.
+
+**Step 8.** Commit, push, and open the pull request:
 
 ```bash
 git add -A

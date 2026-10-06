@@ -274,8 +274,8 @@ How the team avoids waiting:
 | S4 | [KAR-06](karthik.md#kar-06-end-to-end-test-of-the-live-sensor-on-the-lab) | Karthik | End-to-end test of the live sensor on the lab | code, tested |
 | S8 | [JAK-09](jakub.md#jak-09-ja4-watchlist-rule) | Jakub | JA4 watchlist rule | code, tested |
 | S8 | [JAI-11](jaiden.md#jai-11-signed-offline-intel-bundles) | Jaiden | Signed offline intel bundles | code, tested |
-| S8 | [AHM-07](ahmad.md#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block) | Ahmad | Response: block proposals, generated rules, and preview before you block | design |
-| S8 | [AHM-08](ahmad.md#ahm-08-response-approvals-audit-revert-and-the-opnsense-connector) | Ahmad | Response: approvals, audit, revert, and the OPNsense connector | design |
+| S8 | [AHM-07](ahmad.md#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block) | Ahmad | Response: block proposals, generated rules, and preview before you block | code, tested |
+| S8 | [AHM-08](ahmad.md#ahm-08-response-approvals-audit-revert-and-the-opnsense-connector) | Ahmad | Response: approvals, audit, revert, and the OPNsense connector | code, tested |
 | S8 | [JON-06](jonattan.md#jon-06-prompt-injection-tests-for-the-ai-layer) | Jonattan | Prompt-injection tests for the AI layer | code, tested |
 | S8 | [ALI-05](ali.md#ali-05-re-evaluate-the-models-against-prompt-injection-and-the-spring-rules) | Ali | Re-evaluate the models against prompt injection and the spring rules | process |
 | S11 | [FIO-06](fiona.md#fio-06-decoys-fake-services-on-their-own-ip-address) | Fiona | Decoys: fake services on their own IP address | design |
