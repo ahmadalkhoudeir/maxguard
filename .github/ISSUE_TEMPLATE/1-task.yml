@@ -1,0 +1,62 @@
+name: Task
+description: New work agreed at a Friday review. Roadmap tasks already have issues (made by scripts/create_issues.sh).
+title: "Task: "
+labels: ["type:task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write the task the way `docs/roadmap/` does, so anyone on the team could pick it up:
+        a goal, the exact steps, and how to test it. Keep it small enough to finish in about a week.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - engine
+        - ai
+        - mapping
+        - ui
+        - api
+        - storage
+        - sensor
+        - response
+        - testing
+        - release
+        - program
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What will exist when this is done? One or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps
+      description: The files to create or change and the commands to run, in order.
+  - type: textarea
+    id: test
+    attributes:
+      label: How to test it
+      description: The commands and the expected output that prove it works.
+    validations:
+      required: true
+  - type: input
+    id: needs
+    attributes:
+      label: Needs first
+      description: Task IDs or issue numbers that must be merged before this one.
+      placeholder: "JAI-07, #12"
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: CLAUDE.md rules
+      options:
+        - label: This work keeps MaxGuard offline at runtime, deterministic, and defensive only (rules 1, 2 and 4).
+          required: true
+        - label: It adds no secrets, personal data, or captures from a real network (rule 6).
+          required: true

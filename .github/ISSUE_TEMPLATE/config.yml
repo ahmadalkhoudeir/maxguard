@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question in GitHub Discussions
+    url: https://github.com/ahmadalkhoudeir/maxguard/discussions
+    about: How-to questions go in Discussions (category Q&A), so the answers stay searchable.
+  - name: Report a security problem privately
+    url: https://github.com/ahmadalkhoudeir/maxguard/security/advisories/new
+    about: Never report a vulnerability in a public issue.

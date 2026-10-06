@@ -1,0 +1,30 @@
+name: Question
+description: Only for a question tied to one issue or pull request. Ask everything else in Discussions.
+title: "Question: "
+labels: ["type:question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most questions belong in **GitHub Discussions** (category *Q&A*), where the answer stays
+        easy to find for the next person. Use this form only when the question is about one
+        specific issue or pull request.
+  - type: input
+    id: task
+    attributes:
+      label: Task, issue, or file
+      placeholder: "FIO-01, #12, or maxguard/zeek/runner.py"
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you tried
+      description: The exact commands and their output.
+      render: shell
