@@ -140,11 +140,12 @@ built yet.
 | CLI | `cli/main.py` | Fiona | alpha | tested |
 | Docker image and Compose files | `docker/` | Jaiden | alpha | written (the image build needs Debian's package servers, which planning could not reach) |
 | CI | `.github/workflows/ci.yml` | Jaiden (integration job: Karthik) | alpha | written (first run on the first pull request) |
+| Release workflow | `.github/workflows/release.yml`, `docs/releases/` | Jaiden | alpha | written (actionlint clean; every action pinned to a verified commit SHA); first run on the first tag push |
 | Traffic lab and test captures | `lab/`, `tests/pcaps/` | Karthik | alpha | tested |
 | Test fixtures (Zeek and Suricata output) | `tests/fixtures/` | Karthik | alpha | tested |
 | Expected results and integration tests | `tests/expected/`, `tests/integration/` | Karthik | alpha | tested with Zeek 9.0.0 on all 14 captures, plus a determinism test; the check that Suricata ran (JAK-05) runs in the engine image |
 | Model evaluation | `scripts/benchmark_models.py`, `scripts/make_eval_set.py` | Ali | alpha | tested with a fake model; the real runs need the models (ALI-04) |
-| Offline bundle | `scripts/build-offline-bundle.sh`, `scripts/install.sh` | Jonattan | alpha | design |
+| Offline bundle | `scripts/build-offline-bundle.sh`, `scripts/install.sh`, `scripts/uninstall.sh`, `docs/OFFLINE-INSTALL.md` | Jonattan | alpha | tested (unit tests with a fake `docker`; a real build, install and tamper check with small stand-in images; ShellCheck clean); the real images and model, macOS, WSL 2 and an offline laptop not run |
 | Ed25519 signing | `maxguard/custody/signing.py` | Jaiden | alpha | tested |
 | Chain-of-custody log | `maxguard/custody/log.py` | Amory | spring | tested |
 | Response module | `maxguard/response/` | Ahmad | spring | tested (nftables and iptables commands loaded in a container; fake OPNsense server over TLS; API session); not run on a real firewall |
@@ -1076,6 +1077,8 @@ controlled. The main threats and the defenses:
 | Evidence is altered after the fact | Chain-of-custody log: a JSON Lines file where each entry holds the previous entry's hash and an Ed25519 signature over its own hash; `python -m maxguard.custody.log verify` names the first bad entry. A cut-off end still forms a valid chain, so `verify` prints the head hash, to be recorded elsewhere | `custody/log.py` |
 | Another website makes the user's browser send requests to the console (CSRF) | Changing requests are refused when `Sec-Fetch-Site` is `cross-site` or `same-site`, or `Origin` does not match `Host` (OWASP CSRF Prevention Cheat Sheet). DNS rebinding: requests for host names outside `MAXGUARD_ALLOWED_HOSTS` are refused | API |
 | Secrets end up in the repository | Keys and API keys live in the data folder; `.gitignore` and `.dockerignore` exclude key files; CLAUDE.md rule 6 is part of every review | repository |
+| A damaged or swapped offline bundle | `install.sh` verifies every file with `sha256sum -c --strict` and refuses unlisted files before loading anything (without `--strict`, a badly formatted line is skipped and an extra part slipped through in the review). `SHA256SUMS` is **not signed** yet, so it catches damage, not someone who replaces the whole bundle: signing it with the JAI-08 key is an open item for review | `scripts/install.sh` |
+| A release workflow is abused | Least privilege per job (`contents: read` at the top; only the image job may push packages, only the release job may write the release); every action pinned to a full commit SHA; `persist-credentials: false`; the tag name reaches shell commands only through environment variables | `.github/workflows/release.yml` |
 | A dependency is compromised or changes license | Pinned minimum versions, one vendored front-end file checked by SHA-256, every license in `docs/DEPENDENCIES.md` | repository |
 | Privacy of the people on the network | Uploads deleted after analysis; events meant to be kept 7 days (the call to `prune()` is still open, section 9); nothing leaves the machine | storage, section 12 |
 
@@ -1126,9 +1129,26 @@ Start it with `docker compose -f docker/compose.yaml -f docker/compose.lan.yaml
 up -d`, after putting `MAXGUARD_LAN_ADDRESS` and `MAXGUARD_INGEST_TOKEN` in
 `docker/.env` (ignored by git); Compose refuses to start it without both.
 
-The offline bundle (JON-05) contains the saved images, the model volume, the
-Compose file, `install.sh`, and a SHA-256 checksum file, split into parts under
-2 GiB so they fit on FAT32 USB sticks and GitHub Release assets.
+The offline bundle (JON-05) contains the saved images (`images.tar`), the model
+volume (`models.tar.gz`), the Compose file, `install.sh`, `uninstall.sh`,
+`OFFLINE-INSTALL.md`, three synthetic samples for the acceptance test
+(`sample-telnet.pcap`, `sample-clean-tls13.pcap`,
+`sample-telnet-zeek-logs.tar.gz`), and `SHA256SUMS`. Files over 1900 MiB are
+split into parts, so they fit on FAT32 USB sticks and under GitHub's 2 GiB
+limit for release files. A bundle holds one platform (`docker save
+--platform`); v2.0-alpha ships `linux/amd64`. `install.sh` checks every
+checksum with `--strict` and refuses any file `SHA256SUMS` does not list
+**before** loading anything, then streams the parts into `docker load` (no
+joined copy on disk), restores the model volume in a container with
+`--network none`, and starts Compose with `--pull never`.
+
+The release workflow (JAI-09) runs on a pushed `v*` tag: it builds the image
+for `linux/amd64` and `linux/arm64`, pushes it to
+`ghcr.io/<owner>/maxguard:<version>`, checks both platforms are in the
+manifest, and creates the GitHub Release with the notes from
+`docs/releases/<tag>.md`, the small bundle files and their `SHA256SUMS`. The
+large bundle is built by hand from the tagged commit and the CI-built image,
+then attached with `gh release upload ... --clobber`.
 
 ### The sensor (spring)
 
@@ -1225,7 +1245,7 @@ Zeek and Suricata.
 
 ## 17. Pinned tool versions
 
-Verified on October 6, 2026. Change a version only in a pull request that also
+Verified on October 6, 2026 (the GitHub Actions and goflow2 rows on October 8). Change a version only in a pull request that also
 re-generates the fixtures (when Zeek or Suricata change) and updates
 `docs/DEPENDENCIES.md`.
 
@@ -1241,6 +1261,7 @@ re-generates the fixtures (when Zeek or Suricata change) and updates
 | goflow2 (NetFlow collector) | v2.2.7 | `docker/netflow-compose.yaml` (tag and digest) | BSD-3-Clause; amd64 and arm64; on Docker Hub `latest` is the old v1.3.8 |
 | Lab images | `python:3.11-slim-bookworm`, `nicolaka/netshoot:v0.15` | `lab/` | Only for making test captures |
 | Development tools | ShellCheck 0.11.0 (`koalaman/shellcheck:v0.11.0`), actionlint 1.7.12 (`actionlint-py==1.7.12.25`) | the guides that use them (KAR-06, JON-05, JAI-09) | Never shipped; licenses in `docs/DEPENDENCIES.md` |
+| GitHub Actions (release workflow) | `actions/checkout` v7.0.1, `docker/setup-qemu-action` v4.4.0, `docker/setup-buildx-action` v4.4.1, `docker/login-action` v4.6.0, `docker/build-push-action` v7.4.0 | `.github/workflows/release.yml`, by commit SHA | Newest releases on October 8, 2026 (`git ls-remote`); the SHA is the source of truth, the version is a comment |
 
 Framework versions (PCI DSS 4.0.1, NIST SP 800-53 Rev. 5 Release 5.2.0, CISA CPG
 2.0, CJIS 6.1, MITRE ATT&CK v19) are locked in `docs/PROJECT_DECISIONS.md`
