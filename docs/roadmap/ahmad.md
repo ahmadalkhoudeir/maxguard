@@ -1089,7 +1089,9 @@ def test_pages_return_200_with_the_layout(client, path):
     assert "Your data never leaves this computer." in page.text
     assert '<script src="/static/htmx-2.0.11.min.js"' in page.text
     assert 'href="/static/app.css"' in page.text
-    assert "default-src 'self'" in page.headers["content-security-policy"]
+    csp = page.headers["content-security-policy"]
+    assert "default-src 'self'" in csp and "script-src 'self';" in csp
+    assert "unsafe" not in csp  # no inline scripts, no eval: a second wall behind escaping
     # not "no-referrer": Chrome then sends "Origin: null" on form posts, which the API refuses
     assert page.headers["referrer-policy"] == "same-origin"
 
@@ -1166,11 +1168,15 @@ def test_mode_switch_sets_the_cookie(client):
                          follow_redirects=False)
     assert answer.status_code == 303
     assert answer.headers["location"] == "/assets"
-    assert "mg_mode=home" in answer.headers["set-cookie"]
+    cookie = answer.headers["set-cookie"].lower()
+    assert "mg_mode=home" in cookie and "httponly" in cookie and "samesite=lax" in cookie
 
 
-def test_mode_switch_never_redirects_off_site(client):
-    answer = client.post("/mode", data={"mode": "home", "next": "//evil.example/"},
+# Browsers read /\evil.example like //evil.example: another website.
+@pytest.mark.parametrize("next_path", ["//evil.example/", "/\\evil.example/",
+                                       "https://evil.example/", "javascript:alert(1)"])
+def test_mode_switch_never_redirects_off_site(client, next_path):
+    answer = client.post("/mode", data={"mode": "home", "next": next_path},
                          follow_redirects=False)
     assert answer.headers["location"] == "/"
 
@@ -1197,8 +1203,8 @@ pytest tests/unit/test_web.py -q
 Expected output:
 
 ```text
-...............                                                                              [100%]
-15 passed in 1.69s
+..................                                                                           [100%]
+18 passed in 1.19s
 ```
 
 **Step 7.** Start the server and check the headers every page sends:
@@ -1301,6 +1307,7 @@ from __future__ import annotations
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -1366,8 +1373,15 @@ def mode_of(request: Request) -> str:
 
 
 def actor_of(request: Request) -> str:
-    """The display name stored in the mg_actor cookie ("" when not set yet)."""
-    return request.cookies.get("mg_actor", "").strip()[:MAX_NAME_LENGTH]
+    """The display name stored in the mg_actor cookie ("" when not set yet or not valid)."""
+    name = unquote(request.cookies.get("mg_actor", "")).strip()
+    return name if valid_name(name) else ""
+
+
+def valid_name(name: str) -> bool:
+    """1 to 100 printable characters. A line break or another control character
+    could fake an extra line in the audit trail, so it is refused."""
+    return 0 < len(name) <= MAX_NAME_LENGTH and name.isprintable()
 
 
 def render(request: Request, name: str, context: dict, status_code: int = 200) -> HTMLResponse:
@@ -1473,7 +1487,7 @@ async def change_status(request: Request, finding_id: str):
     alert = store.get_alert(finding_id)
     if alert is None:
         return error_page(request, 404, "No alert with this ID.")
-    if not actor or len(actor) > MAX_NAME_LENGTH:
+    if not valid_name(actor):
         return render(request, "_status.html", status_context(
             alert, "", f"Type your name (1 to {MAX_NAME_LENGTH} characters) first."), 400)
     try:
@@ -1485,7 +1499,9 @@ async def change_status(request: Request, finding_id: str):
         return render(request, "_status.html", status_context(alert, actor, str(err)), 400)
     notify_change(request.app)  # open queues refresh themselves
     response = render(request, "_status.html", status_context(alert, actor, "Saved."))
-    response.set_cookie("mg_actor", actor, max_age=YEAR_SECONDS, path="/",
+    # Percent-encoded ("Jos%C3%A9"): a cookie value may only hold plain ASCII
+    # (RFC 6265 section 4.1.1), and names such as "José" or "Łukasz" are not.
+    response.set_cookie("mg_actor", quote(actor, safe=""), max_age=YEAR_SECONDS, path="/",
                         samesite="lax", httponly=True)
     return response
 
@@ -1496,7 +1512,7 @@ def favicon() -> Response:
     return Response(status_code=204)
 ```
 
-`update_alert()` needs `at=now()`: the stores never read the clock, the web layer does, in one place (`now()`), so tests can replace it. After a change, `notify_change()` makes every open queue refresh itself.
+`update_alert()` needs `at=now()`: the stores never read the clock, the web layer does, in one place (`now()`), so tests can replace it. After a change, `notify_change()` makes every open queue refresh itself. The person's name is checked **before** anything is saved (`valid_name()`: 1 to 100 printable characters) and kept in the `mg_actor` cookie percent-encoded: a cookie can only hold Latin-1 text, so a name such as *Łukasz* or *علي* used to crash the page *after* the change was saved (found by the security review).
 
 **Step 3.** Create `maxguard/web/templates/alert.html`:
 
@@ -1803,7 +1819,9 @@ def test_pages_return_200_with_the_layout(client, path):
     assert "Your data never leaves this computer." in page.text
     assert '<script src="/static/htmx-2.0.11.min.js"' in page.text
     assert 'href="/static/app.css"' in page.text
-    assert "default-src 'self'" in page.headers["content-security-policy"]
+    csp = page.headers["content-security-policy"]
+    assert "default-src 'self'" in csp and "script-src 'self';" in csp
+    assert "unsafe" not in csp  # no inline scripts, no eval: a second wall behind escaping
     # not "no-referrer": Chrome then sends "Origin: null" on form posts, which the API refuses
     assert page.headers["referrer-policy"] == "same-origin"
 
@@ -1880,11 +1898,15 @@ def test_mode_switch_sets_the_cookie(client):
                          follow_redirects=False)
     assert answer.status_code == 303
     assert answer.headers["location"] == "/assets"
-    assert "mg_mode=home" in answer.headers["set-cookie"]
+    cookie = answer.headers["set-cookie"].lower()
+    assert "mg_mode=home" in cookie and "httponly" in cookie and "samesite=lax" in cookie
 
 
-def test_mode_switch_never_redirects_off_site(client):
-    answer = client.post("/mode", data={"mode": "home", "next": "//evil.example/"},
+# Browsers read /\evil.example like //evil.example: another website.
+@pytest.mark.parametrize("next_path", ["//evil.example/", "/\\evil.example/",
+                                       "https://evil.example/", "javascript:alert(1)"])
+def test_mode_switch_never_redirects_off_site(client, next_path):
+    answer = client.post("/mode", data={"mode": "home", "next": next_path},
                          follow_redirects=False)
     assert answer.headers["location"] == "/"
 
@@ -2018,6 +2040,34 @@ def test_unknown_status_is_refused(app, client, telnet_report):
     assert answer.status_code == 400
 
 
+def test_status_change_refreshes_open_queues(app, client, telnet_report):
+    save(app, telnet_report)
+    before = app.state.changes  # /api/stream sends alerts-changed when this goes up
+    client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                 data={"actor": "Ahmad", "status": "investigating"})
+    assert app.state.changes == before + 1
+
+
+@pytest.mark.parametrize("name", ["José", "Łukasz", "علي", "Ann Lee"])
+def test_any_name_works_and_is_remembered(app, client, telnet_report, name):
+    save(app, telnet_report)
+    path = f"/alerts/{telnet_id(telnet_report)}/status"
+    first = client.patch(path, data={"actor": name, "status": "investigating"})
+    assert first.status_code == 200
+    second = client.patch(path, data={"status": "resolved"})  # the name now comes from the cookie
+    assert second.status_code == 200
+    assert [row["actor"] for row in app.state.state_store.list_audit()] == [name, name]
+
+
+@pytest.mark.parametrize("name", ["Ann\nAdmin approved", "Ann\x00", " ", "x" * 101])
+def test_bad_names_are_refused(app, client, telnet_report, name):
+    save(app, telnet_report)
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"actor": name, "status": "resolved"})
+    assert answer.status_code == 400
+    assert app.state.state_store.list_audit() == []
+
+
 def test_cross_site_status_change_is_refused(app, client, telnet_report):
     save(app, telnet_report)
     answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
@@ -2036,8 +2086,8 @@ pytest tests/unit/test_web.py -q
 Expected output:
 
 ```text
-...........................                                                                  [100%]
-27 passed in 3.34s
+.......................................                                                      [100%]
+39 passed in 2.64s
 ```
 
 **Step 6.** Open an alert in both modes and change its status with the keyboard only. Then ask someone who is not technical to read the Home view of the Telnet alert and say what they would do.
@@ -2386,6 +2436,7 @@ import ipaddress
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -2455,8 +2506,15 @@ def mode_of(request: Request) -> str:
 
 
 def actor_of(request: Request) -> str:
-    """The display name stored in the mg_actor cookie ("" when not set yet)."""
-    return request.cookies.get("mg_actor", "").strip()[:MAX_NAME_LENGTH]
+    """The display name stored in the mg_actor cookie ("" when not set yet or not valid)."""
+    name = unquote(request.cookies.get("mg_actor", "")).strip()
+    return name if valid_name(name) else ""
+
+
+def valid_name(name: str) -> bool:
+    """1 to 100 printable characters. A line break or another control character
+    could fake an extra line in the audit trail, so it is refused."""
+    return 0 < len(name) <= MAX_NAME_LENGTH and name.isprintable()
 
 
 def render(request: Request, name: str, context: dict, status_code: int = 200) -> HTMLResponse:
@@ -2562,7 +2620,7 @@ async def change_status(request: Request, finding_id: str):
     alert = store.get_alert(finding_id)
     if alert is None:
         return error_page(request, 404, "No alert with this ID.")
-    if not actor or len(actor) > MAX_NAME_LENGTH:
+    if not valid_name(actor):
         return render(request, "_status.html", status_context(
             alert, "", f"Type your name (1 to {MAX_NAME_LENGTH} characters) first."), 400)
     try:
@@ -2574,7 +2632,9 @@ async def change_status(request: Request, finding_id: str):
         return render(request, "_status.html", status_context(alert, actor, str(err)), 400)
     notify_change(request.app)  # open queues refresh themselves
     response = render(request, "_status.html", status_context(alert, actor, "Saved."))
-    response.set_cookie("mg_actor", actor, max_age=YEAR_SECONDS, path="/",
+    # Percent-encoded ("Jos%C3%A9"): a cookie value may only hold plain ASCII
+    # (RFC 6265 section 4.1.1), and names such as "José" or "Łukasz" are not.
+    response.set_cookie("mg_actor", quote(actor, safe=""), max_age=YEAR_SECONDS, path="/",
                         samesite="lax", httponly=True)
     return response
 
@@ -2618,9 +2678,14 @@ def alert_for_event(event: dict, links: dict[str, list[dict]]) -> dict | None:
     return None
 
 
+# The last second Python's datetime can show (9999-12-31 23:59:59 UTC). A larger
+# end=, or "nan" or "inf", gets FastAPI's 422 instead of crashing the page.
+LAST_TIME = 253402300799
+
+
 @router.get("/timeline", response_class=HTMLResponse)
 def timeline(request: Request, ip: str = "", hours: int = Query(24, ge=1, le=168),
-             end: float | None = None):
+             end: float | None = Query(None, ge=0, le=LAST_TIME)):
     """Everything one address did in a time window (default: the last 24 hours).
     end (Unix seconds) moves the window back, for captures recorded earlier."""
     context = {"ip": ip, "hours": hours, "hour_choices": TIMELINE_HOURS, "end": end,
@@ -2974,6 +3039,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from maxguard.api.app import STATIC_DIR, create_app
+from maxguard.events.normalize import EVENT_KEYS
 from maxguard.pipeline import analyze
 from maxguard.sensor.attribution import build_device_table
 from maxguard.web import routes
@@ -3043,7 +3109,9 @@ def test_pages_return_200_with_the_layout(client, path):
     assert "Your data never leaves this computer." in page.text
     assert '<script src="/static/htmx-2.0.11.min.js"' in page.text
     assert 'href="/static/app.css"' in page.text
-    assert "default-src 'self'" in page.headers["content-security-policy"]
+    csp = page.headers["content-security-policy"]
+    assert "default-src 'self'" in csp and "script-src 'self';" in csp
+    assert "unsafe" not in csp  # no inline scripts, no eval: a second wall behind escaping
     # not "no-referrer": Chrome then sends "Origin: null" on form posts, which the API refuses
     assert page.headers["referrer-policy"] == "same-origin"
 
@@ -3121,11 +3189,15 @@ def test_mode_switch_sets_the_cookie(client):
                          follow_redirects=False)
     assert answer.status_code == 303
     assert answer.headers["location"] == "/assets"
-    assert "mg_mode=home" in answer.headers["set-cookie"]
+    cookie = answer.headers["set-cookie"].lower()
+    assert "mg_mode=home" in cookie and "httponly" in cookie and "samesite=lax" in cookie
 
 
-def test_mode_switch_never_redirects_off_site(client):
-    answer = client.post("/mode", data={"mode": "home", "next": "//evil.example/"},
+# Browsers read /\evil.example like //evil.example: another website.
+@pytest.mark.parametrize("next_path", ["//evil.example/", "/\\evil.example/",
+                                       "https://evil.example/", "javascript:alert(1)"])
+def test_mode_switch_never_redirects_off_site(client, next_path):
+    answer = client.post("/mode", data={"mode": "home", "next": next_path},
                          follow_redirects=False)
     assert answer.headers["location"] == "/"
 
@@ -3259,6 +3331,34 @@ def test_unknown_status_is_refused(app, client, telnet_report):
     assert answer.status_code == 400
 
 
+def test_status_change_refreshes_open_queues(app, client, telnet_report):
+    save(app, telnet_report)
+    before = app.state.changes  # /api/stream sends alerts-changed when this goes up
+    client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                 data={"actor": "Ahmad", "status": "investigating"})
+    assert app.state.changes == before + 1
+
+
+@pytest.mark.parametrize("name", ["José", "Łukasz", "علي", "Ann Lee"])
+def test_any_name_works_and_is_remembered(app, client, telnet_report, name):
+    save(app, telnet_report)
+    path = f"/alerts/{telnet_id(telnet_report)}/status"
+    first = client.patch(path, data={"actor": name, "status": "investigating"})
+    assert first.status_code == 200
+    second = client.patch(path, data={"status": "resolved"})  # the name now comes from the cookie
+    assert second.status_code == 200
+    assert [row["actor"] for row in app.state.state_store.list_audit()] == [name, name]
+
+
+@pytest.mark.parametrize("name", ["Ann\nAdmin approved", "Ann\x00", " ", "x" * 101])
+def test_bad_names_are_refused(app, client, telnet_report, name):
+    save(app, telnet_report)
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"actor": name, "status": "resolved"})
+    assert answer.status_code == 400
+    assert app.state.state_store.list_audit() == []
+
+
 def test_cross_site_status_change_is_refused(app, client, telnet_report):
     save(app, telnet_report)
     answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
@@ -3319,8 +3419,25 @@ def test_timeline_end_moves_the_window(app, client, telnet_report):
     assert "tcp/23 SF out=23 in=40" in page
 
 
+def test_timeline_finds_ipv6_typed_in_any_form(app, client):
+    """Zeek writes IPv6 in short lower-case form; a user may type 2001:DB8:0::1."""
+    event = dict.fromkeys(EVENT_KEYS, "")
+    event.update(event_id="v6-1", ts=RECEIVED_AT, sensor_id="lab", source="zeek",
+                 log="conn.log", kind="conn", uid="Cv6", src_ip="2001:db8::1",
+                 dst_ip="2001:db8::2", src_port=50000, dst_port=22, proto="tcp",
+                 service="ssh", bytes_out=10, bytes_in=20, summary="tcp/22 ipv6 test")
+    app.state.event_store.write([event])
+    page = client.get("/timeline", params={"ip": "2001:DB8:0::1", "end": RECEIVED_AT + 1}).text
+    assert "tcp/22 ipv6 test" in page
+
+
 def test_timeline_window_is_at_most_7_days(client):
     assert client.get("/timeline", params={"ip": "192.0.2.1", "hours": 169}).status_code == 422
+
+
+@pytest.mark.parametrize("end", ["nan", "inf", "-1", "1e20"])
+def test_timeline_refuses_an_impossible_end(client, end):
+    assert client.get("/timeline", params={"ip": "192.0.2.1", "end": end}).status_code == 422
 
 
 def test_assets_join_the_device_table(app, client, tmp_path):
@@ -3355,8 +3472,8 @@ pytest tests/unit/test_web.py tests/unit/test_pipeline.py -q
 Expected output:
 
 ```text
-............................................                                                 [100%]
-44 passed in 4.41s
+.............................................................                                [100%]
+61 passed in 3.65s
 ```
 
 **Step 7.** Check both pages at 375 px and with the keyboard only.
@@ -3588,6 +3705,10 @@ def opnsense_steps(ip, direction: str) -> dict:
         "(stops connections a device on your network starts through the firewall), and "
         "a Block rule with destination maxguard_block_out (stops connections your devices "
         "start toward that address).",
+        # Rules are "quick" by default: the first rule that matches wins. A Block rule
+        # below the LAN page's default allow rule would never match anything.
+        "Once: on both pages, move these Block rules above every Pass rule "
+        "(OPNsense uses the first rule that matches), then click Apply.",
     ]
     return {"setup": setup, "block": block, "undo": undo}
 
@@ -3827,8 +3948,10 @@ def test_every_block_command_has_an_undo():
     for method in ("nftables", "opnsense"):
         assert len(rules[method]["block"]) == len(rules[method]["undo"]) == 2  # in + out
     assert len(rules["iptables"]["block"]) == len(rules["iptables"]["undo"]) == 4
+    assert all(" -D " in c for c in rules["iptables"]["undo"])  # -D deletes, -I inserts
     undo = [c.replace(" -D ", " -I ") for c in rules["iptables"]["undo"]]
     assert undo == rules["iptables"]["block"]  # the same rule, deleted instead of inserted
+    assert all("'delete element " in c for c in rules["nftables"]["undo"])
 
 
 def test_ipv6_uses_the_v6_sets_and_ip6tables():
@@ -3860,6 +3983,13 @@ def test_setup_declares_every_set_the_commands_use():
 
 def test_same_input_same_output():
     assert rules_for("203.0.113.7", "both") == rules_for("203.0.113.7", "both")
+
+
+def test_opnsense_setup_puts_the_block_rules_first():
+    # OPNsense rules are "quick": the first match wins, so a Block rule below the
+    # default allow rule would never match.
+    setup = rules_for("203.0.113.7", "both")["opnsense"]["setup"]
+    assert any("above every Pass rule" in step for step in setup)
 ```
 
 and `tests/unit/test_response_preview.py`:
@@ -3970,8 +4100,8 @@ pytest tests/unit/test_response_generate.py tests/unit/test_response_preview.py 
 Expected output:
 
 ```text
-......................................                                                       [100%]
-38 passed in 0.78s
+.......................................                                                      [100%]
+39 passed in 0.73s
 ```
 
 **Step 6.** Commit, push, and open the pull request:
@@ -4050,6 +4180,11 @@ and is logged. The steps (docs/ARCHITECTURE.md section 13):
   (action "response.<step>", target = the proposal id). A state change and its
   audit row are written in ONE transaction (storage.state.insert_audit), so a
   crash can never leave a change without its audit row.
+- One open proposal per address: a second proposal for an address that is still
+  proposed, previewed, approved or applied is refused. Otherwise reverting one of
+  them would quietly remove the block the other one still shows as applied.
+- If an enforcer fails half way, the address is taken off the firewall again, so
+  the firewall never keeps a block that MaxGuard does not show as applied.
 - Times are passed in by the caller (the API reads the clock, this module never does).
 
 Proposals live in their own table in state.db, created here with
@@ -4061,6 +4196,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import sqlite3
+import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
@@ -4069,6 +4205,12 @@ from maxguard.response.generate import check_direction, parse_ip, rules_for
 from maxguard.storage.state import StateStore, insert_audit
 
 STATES = ("proposed", "previewed", "approved", "applied", "reverted", "rejected")
+OPEN_STATES = ("proposed", "previewed", "approved", "applied")  # not finished yet
+
+# One firewall change at a time. Without it, a double click on "apply" sends the
+# address to the firewall twice before either request can change the state, and
+# OPNsense can then keep a second copy that a later revert leaves behind.
+FIREWALL_LOCK = threading.Lock()
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS response_proposals (
@@ -4133,14 +4275,24 @@ class ProposalStore:
                 finding_id: str | None = None) -> dict:
         address = str(parse_ip(ip))  # ValueError for anything that is not a plain address
         check_direction(direction)
+        open_states = ", ".join("?" for _ in OPEN_STATES)
         with self._connect() as conn:  # the proposal and its audit row: one transaction
+            # INSERT ... WHERE NOT EXISTS checks and inserts in one statement, so two
+            # people proposing the same address at the same moment cannot both succeed.
             cur = conn.execute(
                 "INSERT INTO response_proposals (ip, direction, reason, finding_id, state, "
-                "created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'proposed', ?, ?, ?)",
-                (address, direction, reason, finding_id, actor, at, at))
-            proposal_id = cur.lastrowid
-            audit(conn, actor, "proposed", proposal_id, at,
-                  {"ip": address, "direction": direction, "finding_id": finding_id})
+                "created_by, created_at, updated_at) "
+                "SELECT ?, ?, ?, ?, 'proposed', ?, ?, ? WHERE NOT EXISTS ("
+                "SELECT 1 FROM response_proposals "
+                f"WHERE ip = ? AND state IN ({open_states}))",
+                (address, direction, reason, finding_id, actor, at, at, address, *OPEN_STATES))
+            if cur.rowcount == 1:
+                proposal_id = cur.lastrowid
+                audit(conn, actor, "proposed", proposal_id, at,
+                      {"ip": address, "direction": direction, "finding_id": finding_id})
+        if cur.rowcount == 0:
+            raise WrongState(f"{address} already has an open proposal: "
+                             "revert or reject it before proposing it again")
         return self.get(proposal_id)
 
     def record_preview(self, proposal_id: int, *, actor: str, preview: dict,
@@ -4168,37 +4320,43 @@ class ProposalStore:
     def mark_applied(self, proposal_id: int, *, actor: str, at: float,
                      enforcers: Sequence[Enforcer] = ()) -> dict:
         """Apply an approved block: by the enforcers if given, else the person ran the
-        commands by hand and says so. If an enforcer fails, the state stays 'approved'."""
-        proposal = self.require_state(proposal_id, "approved")
-        method = "enforcer" if enforcers else "manual"
-        try:
-            for enforcer in enforcers:
-                enforcer.add(proposal["ip"])
-                enforcer.apply()
-        except Exception as err:
-            self.audit_only(actor, "apply_failed", proposal_id, at, {"error": str(err)})
-            raise
-        self.move(proposal_id, ("approved",), "applied", at, actor,
-                  {"ip": proposal["ip"], "method": method}, method=method)
+        commands by hand and says so. If an enforcer fails, the state stays 'approved'
+        and the address is taken off every enforcer again (nothing stays half-blocked)."""
+        with FIREWALL_LOCK:
+            proposal = self.require_state(proposal_id, "approved")
+            method = "enforcer" if enforcers else "manual"
+            try:
+                for enforcer in enforcers:
+                    enforcer.add(proposal["ip"])
+                    enforcer.apply()
+            except Exception as err:
+                undone = remove_everywhere(enforcers, proposal["ip"])
+                self.audit_only(actor, "apply_failed", proposal_id, at,
+                                {"error": str(err), "undone": undone})
+                raise
+            self.move(proposal_id, ("approved",), "applied", at, actor,
+                      {"ip": proposal["ip"], "method": method}, method=method)
         return self.get(proposal_id)
 
     def revert(self, proposal_id: int, *, actor: str, at: float,
                enforcers: Sequence[Enforcer] = ()) -> dict:
         """Undo the block the same way it was applied."""
-        proposal = self.require_state(proposal_id, "applied")
-        if proposal["method"] == "enforcer":
-            if not enforcers:
-                raise ValueError("this block was applied by the firewall connector, "
-                                 "which is not configured now")
-            try:
-                for enforcer in enforcers:
-                    enforcer.remove(proposal["ip"])
-                    enforcer.apply()
-            except Exception as err:
-                self.audit_only(actor, "revert_failed", proposal_id, at, {"error": str(err)})
-                raise
-        self.move(proposal_id, ("applied",), "reverted", at, actor,
-                  {"ip": proposal["ip"], "method": proposal["method"]})
+        with FIREWALL_LOCK:
+            proposal = self.require_state(proposal_id, "applied")
+            if proposal["method"] == "enforcer":
+                if not enforcers:
+                    raise ValueError("this block was applied by the firewall connector, "
+                                     "which is not configured now")
+                try:
+                    for enforcer in enforcers:
+                        enforcer.remove(proposal["ip"])
+                        enforcer.apply()
+                except Exception as err:
+                    self.audit_only(actor, "revert_failed", proposal_id, at,
+                                    {"error": str(err)})
+                    raise
+            self.move(proposal_id, ("applied",), "reverted", at, actor,
+                      {"ip": proposal["ip"], "method": proposal["method"]})
         return self.get(proposal_id)
 
     def reject(self, proposal_id: int, *, actor: str, at: float, reason: str = "") -> dict:
@@ -4249,6 +4407,21 @@ def audit(conn: sqlite3.Connection, actor: str, step: str, proposal_id: int, at:
                  details=details, at=at)
 
 
+def remove_everywhere(enforcers: Sequence[Enforcer], ip: str) -> bool:
+    """After a failed apply, take ip off every enforcer again, so a retry starts clean.
+
+    Removing an address that is not there is harmless (OPNsense answers "done").
+    Returns False when this failed too (for example, the firewall is unreachable):
+    the audit row then tells the person to check the firewall by hand."""
+    try:
+        for enforcer in enforcers:
+            enforcer.remove(ip)
+            enforcer.apply()
+    except Exception:
+        return False
+    return True
+
+
 def same_address(typed: str | None, expected: str) -> bool:
     """'2001:DB8::7' and '2001:db8::7' are the same address; '' or 'abc' never match."""
     try:
@@ -4265,6 +4438,8 @@ def row_to_proposal(row: sqlite3.Row) -> dict:
 ```
 
 The steps are `proposed → previewed → approved → applied → reverted`, and a proposed or previewed block can be `rejected`. Approve is allowed only after a preview, needs the person's name and the IP address typed again, and a refused approval is audited too. Each check and state change is **one** SQL `UPDATE ... WHERE state IN (...)`, so two people clicking at the same moment cannot both approve. The proposals table is created here with `CREATE TABLE IF NOT EXISTS`, so `storage/state.py` does not change. Each state change and its audit row are written in **one** transaction (`insert_audit(conn, ...)` from `storage/state.py`), so a crash can never leave a block without its record; the last test proves it by making the audit write fail.
+
+Three more guards came out of the security review. Only **one** open proposal per address: `propose()` checks and inserts in a single `INSERT ... SELECT ... WHERE NOT EXISTS`, because reverting one of two blocks on the same address would take it off the firewall while the other still said *applied*. Only **one** firewall change at a time (`FIREWALL_LOCK`), so a double click on Apply reaches the firewall once. And if a block with direction `both` fails half-way, `remove_everywhere()` takes the address off every list again, so the firewall never stays half-blocked while MaxGuard says *approved*.
 
 **Step 3.** Create the enforcer interface `maxguard/response/enforcers/__init__.py` and `maxguard/response/enforcers/base.py`:
 
@@ -4454,7 +4629,8 @@ like the rest of the API; approvals.py and preview.py never do.
 apply uses the OPNsense enforcer when MAXGUARD_OPNSENSE_URL is set; otherwise
 it records that the person ran the generated commands by hand.
 Errors: 400 bad input or wrong typed IP, 404 no such proposal, 409 step not
-allowed now, 502 the firewall refused or could not be reached.
+allowed now (or the address already has an open proposal), 502 the firewall
+refused or could not be reached.
 """
 
 from __future__ import annotations
@@ -4589,7 +4765,7 @@ def reject_proposal(request: Request, proposal_id: int, body: Step) -> dict:
         proposal_id, actor=body.actor, at=time.time(), reason=body.reason))
 ```
 
-`create_app()` (JAI-07) includes this router automatically now that the module exists. It is part of the dashboard's app on `127.0.0.1` only, never the ingest-only app that sensors reach. Errors: 400 bad input or a wrong typed IP, 404 no such proposal, 409 a step that is not allowed now, 502 the firewall refused or could not be reached.
+`create_app()` (JAI-07) includes this router automatically now that the module exists. It is part of the dashboard's app on `127.0.0.1` only, never the ingest-only app that sensors reach. Errors: 400 bad input or a wrong typed IP, 404 no such proposal, 409 a step that is not allowed now (or the address already has an open proposal), 502 the firewall refused or could not be reached. The `actor` name is typed by the person, not checked by a login: that is acceptable only because this API listens on `127.0.0.1`.
 
 **Step 5.** Create the tests `tests/unit/test_response_approvals.py`:
 
@@ -4597,6 +4773,7 @@ def reject_proposal(request: Request, proposal_id: int, body: Step) -> dict:
 """Tests for maxguard.response.approvals (Ahmad, AHM-08)."""
 
 import sqlite3
+import threading
 
 import pytest
 
@@ -4615,6 +4792,7 @@ class FakeEnforcer:
     def __init__(self, fail: bool = False):
         self.blocked: set[str] = set()
         self.applied = 0
+        self.removed = 0
         self.fail = fail
 
     def add(self, ip: str) -> None:
@@ -4623,6 +4801,7 @@ class FakeEnforcer:
         self.blocked.add(ip)
 
     def remove(self, ip: str) -> None:
+        self.removed += 1
         self.blocked.discard(ip)
 
     def apply(self) -> None:
@@ -4777,6 +4956,69 @@ def test_a_state_change_and_its_audit_row_are_one_transaction(store, state, monk
     # The UPDATE was rolled back with the failed audit row: no change without its record.
     assert store.get(proposal_id)["state"] == "proposed"
     assert actions(state) == ["response.proposed"]
+
+
+def test_one_open_proposal_per_address(store, state):
+    first = store.propose(ip="203.0.113.7", direction="inbound", actor="a", at=T0)
+    # Two open proposals for one address: reverting one would silently remove the
+    # block the other still shows as applied. So the second one is refused.
+    with pytest.raises(WrongState, match="open proposal"):
+        store.propose(ip="203.0.113.7", direction="both", actor="b", at=T0 + 1)
+    store.reject(first["proposal_id"], actor="a", at=T0 + 2)
+    again = store.propose(ip="203.0.113.7", direction="both", actor="b", at=T0 + 3)
+    assert again["state"] == "proposed"
+    assert actions(state) == ["response.proposed", "response.rejected", "response.proposed"]
+
+
+def test_a_failed_apply_takes_the_address_off_the_other_firewall_lists(store, state):
+    proposal_id = approved(store)
+    inbound, outbound = FakeEnforcer(), FakeEnforcer(fail=True)
+    with pytest.raises(EnforcerError):
+        store.mark_applied(proposal_id, actor="a", at=T0 + 3, enforcers=[inbound, outbound])
+    # The first list had the address; it was removed again, so nothing stays half-blocked.
+    assert inbound.blocked == set() and inbound.removed == 1
+    assert store.get(proposal_id)["state"] == "approved"
+    assert state.list_audit()[0]["details"] == {"error": "firewall said no", "undone": True}
+
+
+class SlowEnforcer(FakeEnforcer):
+    """add() waits until the test says go, like a slow firewall."""
+
+    def __init__(self):
+        super().__init__()
+        self.adds = 0
+        self.entered = threading.Event()
+        self.go = threading.Event()
+
+    def add(self, ip: str) -> None:
+        self.adds += 1
+        self.entered.set()
+        self.go.wait(5)
+        super().add(ip)
+
+
+def test_a_double_click_on_apply_reaches_the_firewall_once(store):
+    proposal_id = approved(store)
+    firewall = SlowEnforcer()
+    results = []
+
+    def click():
+        try:
+            store.mark_applied(proposal_id, actor="a", at=T0 + 3, enforcers=[firewall])
+            results.append("applied")
+        except WrongState:
+            results.append("refused")
+
+    first, second = threading.Thread(target=click), threading.Thread(target=click)
+    first.start()
+    assert firewall.entered.wait(5)  # the first click is talking to the firewall
+    second.start()
+    second.join(0.2)                 # the second click waits for the first one
+    firewall.go.set()
+    first.join(5)
+    second.join(5)
+    assert firewall.adds == 1
+    assert sorted(results) == ["applied", "refused"]
 ```
 
 `tests/unit/test_opnsense.py` (a fake OPNsense: `http.server` on `127.0.0.1` wrapped in TLS with a throwaway test CA, so the tests also prove that an untrusted certificate is refused):
@@ -4875,6 +5117,7 @@ class FakeOPNsense:
                                              "maxguard_block_out": set()}
         self.requests: list[tuple[str, dict]] = []
         self.reconfigures = 0
+        self.redirects: dict[str, str] = {}  # path -> where to send the client instead
         self.ca_file, cert_file, key_file = make_certificates(folder)
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(cert_file, key_file)
@@ -4918,6 +5161,13 @@ class FakeOPNsense:
             def do_POST(self):  # noqa: N802 (the name http.server expects)
                 length = int(self.headers.get("Content-Length", 0))
                 body = json.loads(self.rfile.read(length) or b"{}")
+                if self.path in fake.redirects:
+                    fake.requests.append((self.path, body))
+                    self.send_response(307)
+                    self.send_header("Location", fake.redirects[self.path])
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
                 if self.headers.get("Authorization") != expected:
                     status, answer = 401, {"message": "Authentication Failed"}
                 else:
@@ -4996,6 +5246,16 @@ def test_wrong_secret_is_an_error(firewall):
     with pytest.raises(EnforcerError, match="401"):
         client.add("203.0.113.7")
     assert firewall.aliases["maxguard_block_in"] == set()
+
+
+def test_redirects_are_not_followed(firewall):
+    # A redirect could send the request (and the API key) somewhere else: refuse it.
+    firewall.redirects["/api/firewall/alias_util/add/maxguard_block_in"] = (
+        firewall.url + "/api/firewall/alias_util/add/maxguard_block_out")
+    with pytest.raises(EnforcerError, match="307"):
+        enforcer(firewall).add("203.0.113.7")
+    assert len(firewall.requests) == 1
+    assert firewall.aliases["maxguard_block_out"] == set()
 
 
 def test_unknown_alias_is_an_error(firewall):
@@ -5239,6 +5499,14 @@ def test_firewall_error_is_502_and_nothing_changes(client, firewall):
     assert response.status_code == 502
     assert client.get(f"/api/response/proposals/{pid}").json()["state"] == "approved"
     assert response_audit(client)[-1]["action"] == "response.apply_failed"
+
+
+def test_a_second_open_proposal_for_the_same_address_is_409(client):
+    propose(client)
+    response = client.post("/api/response/proposals",
+                           json={"actor": "fiona", "ip": BAD, "direction": "inbound"})
+    assert response.status_code == 409
+    assert len(client.get("/api/response/proposals").json()) == 1
 ```
 
 Run them:
@@ -5250,8 +5518,8 @@ pytest tests/unit/test_response_approvals.py tests/unit/test_opnsense.py tests/u
 Expected output:
 
 ```text
-.....................................................                                        [100%]
-53 passed in 3.40s
+..........................................................                                   [100%]
+58 passed in 3.68s
 ```
 
 **Step 6.** Walk through the whole workflow against the API. Start the server in one terminal, then run the rest in a second one:
@@ -5294,7 +5562,7 @@ EOF
 Expected output:
 
 ```text
-{"analysis_id":"4423386c532f1b46","findings":1}
+{"analysis_id":"37b6bfbdbdf5f1fb","findings":1}
 400 '1.2.3.4; rm -rf /' does not appear to be an IPv4 or IPv6 address
 200 proposal 1: proposed
 sudo nft 'add element inet maxguard maxguard_block_in_v4 { 172.18.0.3 }'
@@ -5320,7 +5588,7 @@ ahmad response.reverted 1
 **Step 7.** **On an OPNsense test VM** (*not run — verify on hardware*; never a real firewall):
 
 1. **Firewall > Aliases**: create `maxguard_block_in` and `maxguard_block_out`, type *Host(s)*, empty.
-2. **Firewall > Rules > WAN**: a *Block* rule with source `maxguard_block_in`. **Firewall > Rules > LAN**: a *Block* rule with source `maxguard_block_in` (a device on your own network) and one with destination `maxguard_block_out`. Apply.
+2. **Firewall > Rules > WAN**: a *Block* rule with source `maxguard_block_in`. **Firewall > Rules > LAN**: a *Block* rule with source `maxguard_block_in` (a device on your own network) and one with destination `maxguard_block_out`. On both pages, drag these Block rules **above** every Pass rule (such as *Default allow LAN to any rule*): OPNsense uses the first rule that matches, so a Block rule below a Pass rule never blocks anything. Apply.
 3. **System > Access > Users**: a user `maxguard` with only the privileges *Diagnostics: PF Table IP addresses* and *Firewall: Alias: Edit* (OPNsense's `ACL.xml`). In its API keys section click **+**; the browser downloads the key file once.
 4. On the MaxGuard machine, keep the key in the data folder (never in the repository) and point MaxGuard at the firewall:
 
@@ -5333,7 +5601,7 @@ export MAXGUARD_OPNSENSE_CA=$PWD/data/opnsense/ca.pem  # if it uses its own CA
 export MAXGUARD_OFFLINE_ALLOW=fw.home.arpa             # with MAXGUARD_OFFLINE=1
 ```
 
-5. Repeat the walk-through: `apply` now adds the address to the alias (check **Firewall > Diagnostics > Aliases**), and `revert` removes it. Without `MAXGUARD_OFFLINE_ALLOW`, apply answers 502 with the hint to add the firewall there.
+5. Repeat the walk-through: `apply` now adds the address to the alias (check **Firewall > Diagnostics > Aliases**), and `revert` removes it. Without `MAXGUARD_OFFLINE_ALLOW`, apply answers 502 with the hint to add the firewall there. Two limits to know: `pf` is stateful, so a connection that was already open keeps working until its state ends (check **Firewall > Diagnostics > States**); and a port forward whose *Filter rule association* is *Pass* skips all filter rules (OPNsense manual, *Firewall: Processing order*).
 
 **Step 8.** Commit, push, and open the pull request:
 

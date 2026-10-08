@@ -13,7 +13,7 @@ This is your part of the MaxGuard v2.0 roadmap. Read [the roadmap overview](READ
 | [JON-02](#jon-02-ollama-client-one-evidence-citing-explanation-per-finding) | W2 | Ollama client: one evidence-citing explanation per finding | [JON-01](#jon-01-citation-validator-no-evidence-no-sentence), [JAI-03](jaiden.md#jai-03-common-event-schema-the-normalizer-and-record-lookup), [JAK-03](jakub.md#jak-03-cleartext-and-rdp-rules-the-rule-set-is-complete) | code, tested |
 | [JON-03](#jon-03-offline-guard-make-accidental-network-access-fail-loudly) | W3 | Offline guard: make accidental network access fail loudly | [JON-02](#jon-02-ollama-client-one-evidence-citing-explanation-per-finding) | code, tested |
 | [JON-04](#jon-04-home-mode-text-for-every-rule) | W4 | Home mode text for every rule | [JON-01](#jon-01-citation-validator-no-evidence-no-sentence), [JAK-03](jakub.md#jak-03-cleartext-and-rdp-rules-the-rule-set-is-complete) | code, tested |
-| [JON-05](#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) | W6 | Offline bundle: install MaxGuard on a machine with no internet | [JAI-04](jaiden.md#jai-04-the-engine-image-and-the-compose-files), [ALI-04](ali.md#ali-04-run-the-benchmark-on-both-tiers-and-propose-the-default-models) | design |
+| [JON-05](#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) | W6 | Offline bundle: install MaxGuard on a machine with no internet | [JAI-04](jaiden.md#jai-04-the-engine-image-and-the-compose-files), [ALI-04](ali.md#ali-04-run-the-benchmark-on-both-tiers-and-propose-the-default-models) | code, tested |
 | [JON-06](#jon-06-prompt-injection-tests-for-the-ai-layer) | S8 | Prompt-injection tests for the AI layer | [JON-02](#jon-02-ollama-client-one-evidence-citing-explanation-per-finding), [ALI-03](ali.md#ali-03-benchmark-script-speed-citations-and-unsupported-details) | code, tested |
 
 **Kind:** *code, tested* — the complete code below was run with its tests during planning; copy it exactly, then improve it in a later pull request if you like. *code, written* — written in planning, but part of it needs a machine planning did not have. *design* — you write the code from the steps. *process* — no code: setup, review, testing or release work.
@@ -498,7 +498,7 @@ Expected output:
 
 ```text
 ........                                                                                     [100%]
-8 passed in 0.03s
+8 passed in 0.02s
 ```
 
 **Step 6.** Try it on an answer with one good and one made-up citation:
@@ -1069,7 +1069,7 @@ Expected output:
 
 ```text
 ..............                                                                               [100%]
-14 passed in 0.29s
+14 passed in 0.26s
 ```
 
 **Step 5.** **On your laptop, with a real model** (not run in planning: the model registry was unreachable). Install Ollama from https://ollama.com/download, then:
@@ -1581,7 +1581,7 @@ Expected output:
 
 ```text
 .............                                                                                [100%]
-13 passed in 0.11s
+13 passed in 0.10s
 ```
 
 **Step 5.** See the guard stop a connection before any DNS query is sent:
@@ -1789,7 +1789,7 @@ Expected output:
 
 ```text
 ...............                                                                              [100%]
-15 passed in 0.05s
+15 passed in 0.06s
 ```
 
 **Step 6.** Read one entry the way the dashboard will:
@@ -1836,15 +1836,15 @@ A home user does not know what "SC-8(1)" or "TLSv10" means, but can follow "turn
 
 ### JON-05: Offline bundle: install MaxGuard on a machine with no internet
 
-**Due:** Week 6 (due Fri Nov 20) · **Milestone:** `W6 Release candidate` · **Needs first:** [JAI-04](jaiden.md#jai-04-the-engine-image-and-the-compose-files), [ALI-04](ali.md#ali-04-run-the-benchmark-on-both-tiers-and-propose-the-default-models) · **Kind:** design
+**Due:** Week 6 (due Fri Nov 20) · **Milestone:** `W6 Release candidate` · **Needs first:** [JAI-04](jaiden.md#jai-04-the-engine-image-and-the-compose-files), [ALI-04](ali.md#ali-04-run-the-benchmark-on-both-tiers-and-propose-the-default-models) · **Kind:** code, tested
 
-**Issue labels:** `type:task` `phase:alpha` `owner:jonattan` `area:release` `critical-path`
+**Issue labels:** `type:task` `phase:alpha` `owner:jonattan` `area:release` `critical-path` `needs-hardware`
 
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
+> **Needs hardware.** Steps that use the Raspberry Pi, the switch or other devices were not run during planning; they are marked *not run — verify on hardware*.
 
 #### Goal
 
-Write `scripts/build-offline-bundle.sh` and `scripts/install.sh` so a user can install MaxGuard and its AI model from a USB stick or the GitHub Release without the internet: the images, the model, the Compose file, and a checksum file, split into parts smaller than 2 GiB.
+Write `scripts/build-offline-bundle.sh` and `scripts/install.sh` so a user can install MaxGuard and its AI model from a USB stick or the GitHub Release without the internet: the images, the model, the Compose file, sample data, and a checksum file, split into parts smaller than 2 GiB.
 
 #### Prerequisites
 
@@ -1863,17 +1863,930 @@ git checkout -b jonattan/offline-bundle
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** `scripts/build-offline-bundle.sh` (run on a machine **with** internet): build or load the MaxGuard image; pull `ollama/ollama:0.35.1`; pull the chosen model into the volume `maxguard-ollama-models` with a temporary Ollama container; then write into `dist/`: `images.tar` (`docker save` of both images), `models.tar.gz` (the volume's files), `compose.yaml`, `install.sh`, `OFFLINE-INSTALL.md`, and `SHA256SUMS`. Split anything over 2 GiB with `split -b 1900M`. Read the image names and the model from variables (`MG_IMAGE`, `OLLAMA_IMAGE`, `MAXGUARD_MODEL`) so it can be tested with small stand-ins.
+**Step 2.** Create `scripts/build-offline-bundle.sh` (run on a machine **with** internet, from the repository root):
 
-**Step 3.** `scripts/install.sh` (run on the machine **without** internet): check every file with `sha256sum -c SHA256SUMS` (macOS: `shasum -a 256 -c SHA256SUMS`) **before** loading anything; stop on any mismatch; join the parts; `docker load`; restore the model volume; `docker compose up -d`; print the dashboard address.
+```bash
+#!/usr/bin/env bash
+# Build the MaxGuard offline bundle (Jonattan, JON-05).
+#
+# Run this on a machine WITH internet, from the repository root:
+#
+#   scripts/build-offline-bundle.sh
+#
+# It writes into dist/ everything a machine WITHOUT internet needs:
+#   images.tar          the MaxGuard and Ollama images (docker save)
+#   models.tar.gz       the files of the model volume (the AI model)
+#   compose.yaml        docker/compose.yaml
+#   install.sh          scripts/install.sh
+#   uninstall.sh        scripts/uninstall.sh
+#   OFFLINE-INSTALL.md  the instructions for the user
+#   sample-*            three synthetic lab samples for the acceptance test
+#   SHA256SUMS          the SHA-256 checksum of every file above
+# Any file bigger than PART_BYTES is split into parts (images.tar.part-aa,
+# images.tar.part-ab, ...) so each one fits GitHub's 2 GiB limit for release
+# files and a FAT32 USB stick (4 GiB limit per file).
+#
+# Settings (environment variables; the defaults build the real bundle):
+#   MG_IMAGE          MaxGuard image; must match docker/compose.yaml (maxguard:2.0.0a0)
+#   OLLAMA_IMAGE      Ollama image (ollama/ollama:0.35.1)
+#   MAXGUARD_MODEL    the model to pull (qwen3:4b until Ali's evaluation picks the default)
+#   MODEL_VOLUME      the Docker volume that holds the models (maxguard-ollama-models)
+#   MODEL_SOURCE_DIR  if set, fill MODEL_VOLUME from this folder instead of pulling
+#                     a model (used to test the bundle with a small fake model)
+#   OFFLINE_DOC       the user instructions to ship (docs/OFFLINE-INSTALL.md)
+#   DIST_DIR          where to write the bundle (dist)
+#   PART_BYTES        split files bigger than this (1992294400 bytes = 1900 MiB)
+#   BUNDLE_PLATFORM   the platform to save (default: this machine's, e.g. linux/amd64)
+#
+# A bundle holds the images for ONE platform: build one bundle per platform.
+# Needs Docker Engine 28 or newer (docker save --platform).
+set -euo pipefail
 
-**Step 4.** `scripts/uninstall.sh`: stop and remove the containers; ask before deleting the data and model volumes.
+MG_IMAGE="${MG_IMAGE:-maxguard:2.0.0a0}"
+OLLAMA_IMAGE="${OLLAMA_IMAGE:-ollama/ollama:0.35.1}"
+MAXGUARD_MODEL="${MAXGUARD_MODEL:-qwen3:4b}"
+MODEL_VOLUME="${MODEL_VOLUME:-maxguard-ollama-models}"
+MODEL_SOURCE_DIR="${MODEL_SOURCE_DIR:-}"
+OFFLINE_DOC="${OFFLINE_DOC:-docs/OFFLINE-INSTALL.md}"
+DIST_DIR="${DIST_DIR:-dist}"
+PART_BYTES="${PART_BYTES:-1992294400}"
+BUNDLE_PLATFORM="${BUNDLE_PLATFORM:-}"
 
-**Step 5.** Test the mechanics with small stand-in images (for example `MG_IMAGE=alpine:3.20`), then change one byte in a part and check that `install.sh` refuses. Run `shellcheck` on all three scripts.
+# Synthetic lab data (tests/pcaps/, tests/fixtures/), so a tester with no
+# internet has something to upload: never a real capture (CLAUDE.md rule 6).
+SAMPLES="tests/pcaps/telnet.pcap tests/pcaps/clean_tls13.pcap tests/fixtures/zeek/telnet"
 
-**Step 6.** With Karthik, run the real bundle on a laptop with Wi-Fi off (this is step 4 of the acceptance test in `docs/roadmap/README.md`).
+# A short-lived Ollama container that downloads the model into the volume.
+PULL_CONTAINER="maxguard-bundle-ollama"
 
-**Step 7.** Commit, push, and open the pull request:
+die() {
+    echo "ERROR: $*" >&2
+    exit 1
+}
+
+# Linux has sha256sum; macOS has shasum. Both write the same file format.
+sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$@"
+    else
+        shasum -a 256 "$@"
+    fi
+}
+
+check_inputs() {
+    command -v docker >/dev/null 2>&1 || die "docker is not installed"
+    [ -f docker/compose.yaml ] || die "run this script from the repository root"
+    [ -f "$OFFLINE_DOC" ] || die "missing $OFFLINE_DOC"
+    for sample in $SAMPLES; do
+        [ -e "$sample" ] || die "missing $sample"
+    done
+    if [ -n "$MODEL_SOURCE_DIR" ] && [ ! -d "$MODEL_SOURCE_DIR" ]; then
+        die "MODEL_SOURCE_DIR $MODEL_SOURCE_DIR is not a folder"
+    fi
+    # Old parts left in dist/ would end up in SHA256SUMS and be joined into
+    # the new images, so refuse to mix two builds.
+    if [ -d "$DIST_DIR" ] && [ -n "$(ls -A "$DIST_DIR")" ]; then
+        die "$DIST_DIR is not empty: move or delete it first (rm -r $DIST_DIR)"
+    fi
+    mkdir -p "$DIST_DIR"
+    if [ -z "$BUNDLE_PLATFORM" ]; then
+        BUNDLE_PLATFORM="$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')"
+    fi
+    echo "Building a bundle for $BUNDLE_PLATFORM"
+}
+
+# Use the MaxGuard image if this machine has it, otherwise build it.
+ensure_maxguard_image() {
+    if docker image inspect "$MG_IMAGE" >/dev/null 2>&1; then
+        echo "Using the image $MG_IMAGE that is already on this machine"
+    else
+        echo "Building $MG_IMAGE from docker/Dockerfile"
+        # --target runtime: the same stage the release workflow builds (the
+        # Dockerfile also has a "test" stage).
+        docker build -f docker/Dockerfile --target runtime -t "$MG_IMAGE" .
+    fi
+}
+
+ensure_ollama_image() {
+    if docker image inspect "$OLLAMA_IMAGE" >/dev/null 2>&1; then
+        echo "Using the image $OLLAMA_IMAGE that is already on this machine"
+    else
+        docker pull --platform "$BUNDLE_PLATFORM" "$OLLAMA_IMAGE"
+    fi
+}
+
+remove_pull_container() {
+    docker rm -f "$PULL_CONTAINER" >/dev/null 2>&1 || true
+}
+
+# Start a temporary Ollama server on the model volume and ask it to pull the model.
+pull_model_into_volume() {
+    echo "Pulling the model $MAXGUARD_MODEL into the volume $MODEL_VOLUME"
+    remove_pull_container
+    trap remove_pull_container EXIT
+    docker run -d --name "$PULL_CONTAINER" -v "$MODEL_VOLUME":/root/.ollama "$OLLAMA_IMAGE" >/dev/null
+    # The server needs a moment to start; "ollama list" works once it answers.
+    local tries=0
+    until docker exec "$PULL_CONTAINER" ollama list >/dev/null 2>&1; do
+        tries=$((tries + 1))
+        [ "$tries" -le 30 ] || die "the temporary Ollama server did not start"
+        sleep 1
+    done
+    docker exec "$PULL_CONTAINER" ollama pull "$MAXGUARD_MODEL"
+    echo "Models now in the volume (all of them go into the bundle):"
+    docker exec "$PULL_CONTAINER" ollama list
+    remove_pull_container
+}
+
+# Tests use a small fake model folder instead of downloading gigabytes.
+copy_model_folder_into_volume() {
+    echo "Filling the volume $MODEL_VOLUME from $MODEL_SOURCE_DIR (no model pull)"
+    # tar streams through stdin, so nothing is bind-mounted and every file in
+    # the volume is written by the container (no root-owned files on the host).
+    tar -C "$MODEL_SOURCE_DIR" -cf - . |
+        docker run --rm -i --network none --user 0:0 -v "$MODEL_VOLUME":/models \
+            --entrypoint tar "$MG_IMAGE" -xf - -C /models
+}
+
+save_images() {
+    echo "Saving $MG_IMAGE and $OLLAMA_IMAGE ($BUNDLE_PLATFORM) to $DIST_DIR/images.tar"
+    # --platform: with Docker's containerd image store an image can hold
+    # several platforms; the bundle must carry exactly the one it is for.
+    docker save --platform "$BUNDLE_PLATFORM" -o "$DIST_DIR/images.tar" "$MG_IMAGE" "$OLLAMA_IMAGE"
+}
+
+# The MaxGuard image has tar; the volume is read-only and the archive is
+# written to stdout, so the file on the host belongs to you, not to root.
+save_model_volume() {
+    echo "Saving the volume $MODEL_VOLUME to $DIST_DIR/models.tar.gz"
+    docker run --rm --network none --user 0:0 -v "$MODEL_VOLUME":/models:ro \
+        --entrypoint tar "$MG_IMAGE" -czf - -C /models . >"$DIST_DIR/models.tar.gz"
+}
+
+copy_small_files() {
+    cp docker/compose.yaml "$DIST_DIR/compose.yaml"
+    cp scripts/install.sh "$DIST_DIR/install.sh"
+    cp scripts/uninstall.sh "$DIST_DIR/uninstall.sh"
+    cp "$OFFLINE_DOC" "$DIST_DIR/OFFLINE-INSTALL.md"
+    chmod +x "$DIST_DIR/install.sh" "$DIST_DIR/uninstall.sh"
+    cp tests/pcaps/telnet.pcap "$DIST_DIR/sample-telnet.pcap"
+    cp tests/pcaps/clean_tls13.pcap "$DIST_DIR/sample-clean-tls13.pcap"
+    tar -czf "$DIST_DIR/sample-telnet-zeek-logs.tar.gz" -C tests/fixtures/zeek telnet
+}
+
+# Split a file into numbered parts if it is bigger than PART_BYTES.
+split_if_big() {
+    local file="$1"
+    local size
+    size="$(wc -c <"$file" | tr -d ' ')"
+    if [ "$size" -gt "$PART_BYTES" ]; then
+        echo "Splitting $file ($size bytes) into parts of $PART_BYTES bytes"
+        split -b "$PART_BYTES" "$file" "$file.part-"
+        rm "$file"
+    fi
+}
+
+write_checksums() {
+    echo "Writing $DIST_DIR/SHA256SUMS"
+    # Run inside dist/ so SHA256SUMS holds plain file names, not paths. The
+    # sums are computed first, so SHA256SUMS never lists itself.
+    (
+        cd "$DIST_DIR"
+        local sums
+        sums="$(sha256 -- *)"
+        printf '%s\n' "$sums" >SHA256SUMS
+    )
+}
+
+main() {
+    check_inputs
+    ensure_maxguard_image
+    ensure_ollama_image
+    if [ -n "$MODEL_SOURCE_DIR" ]; then
+        copy_model_folder_into_volume
+    else
+        pull_model_into_volume
+    fi
+    save_images
+    save_model_volume
+    copy_small_files
+    split_if_big "$DIST_DIR/images.tar"
+    split_if_big "$DIST_DIR/models.tar.gz"
+    write_checksums
+    echo "Done. The bundle is in $DIST_DIR/:"
+    ls -l "$DIST_DIR"
+}
+
+main "$@"
+```
+
+What to notice. Every setting is a variable, so the same script can be tested with small stand-in images. `docker save --platform` writes the images for one processor type (Docker Engine 28 or newer needs the flag), so a bundle is for one platform. `PART_BYTES` is 1900 MiB written in bytes, because GNU `split` and macOS's `split` read size suffixes differently. The script refuses a `dist/` folder that is not empty: old parts would otherwise be listed in `SHA256SUMS` and joined into the new images. Three synthetic samples from `tests/` go into the bundle, so a tester with no internet has something to upload.
+
+**Step 3.** Create `scripts/install.sh` (run on the machine **without** internet, inside the bundle folder):
+
+```bash
+#!/usr/bin/env bash
+# Install MaxGuard from the offline bundle (Jonattan, JON-05).
+#
+# Run this on the machine WITHOUT internet, inside the folder that holds all
+# the bundle files (the parts, compose.yaml and SHA256SUMS):
+#
+#   bash install.sh
+#
+# Order matters: every file is checked against SHA256SUMS BEFORE anything is
+# loaded, so a damaged or swapped file is caught before it can run.
+#
+# Settings (environment variables; the defaults install the real bundle):
+#   MG_IMAGE             MaxGuard image in the bundle (maxguard:2.0.0a0); it
+#                        also unpacks the model volume, because it has tar
+#   MODEL_VOLUME         the volume for the AI model (maxguard-ollama-models)
+#   MAXGUARD_SKIP_START  1 = load everything but do not run "docker compose up"
+#                        (used to test the bundle with small stand-in images)
+set -euo pipefail
+
+MG_IMAGE="${MG_IMAGE:-maxguard:2.0.0a0}"
+MODEL_VOLUME="${MODEL_VOLUME:-maxguard-ollama-models}"
+MAXGUARD_SKIP_START="${MAXGUARD_SKIP_START:-0}"
+DASHBOARD_URL="http://127.0.0.1:8000"
+
+die() {
+    echo "ERROR: $*" >&2
+    exit 1
+}
+
+# Linux has sha256sum; macOS has shasum. Both read the same file format.
+sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$@"
+    else
+        shasum -a 256 "$@"
+    fi
+}
+
+check_tools() {
+    command -v docker >/dev/null 2>&1 || die "docker is not installed"
+    docker compose version >/dev/null 2>&1 || die "the docker compose plugin is missing"
+    docker info >/dev/null 2>&1 || die "Docker is not running: start Docker and try again"
+}
+
+verify_checksums() {
+    [ -f SHA256SUMS ] || die "SHA256SUMS is missing: copy every bundle file into this folder"
+    echo "Checking the SHA-256 checksum of every file..."
+    # --strict: a badly formatted line is an error. Without it sha256sum only
+    # warns, skips the line and still says everything is fine.
+    if ! sha256 -c --strict SHA256SUMS; then
+        die "a file is damaged or was changed. Nothing was installed. Download the bundle again."
+    fi
+}
+
+# Put the files that make up one bundle file into the array PARTS: the whole
+# file, or its parts in order (aa, ab, ...; the shell sorts the names). An
+# array keeps every file name in one piece, even one with a space in it.
+find_parts() {
+    local name="$1"
+    PARTS=()
+    if [ -f "$name" ]; then
+        PARTS=("$name")
+        return 0
+    fi
+    local part
+    for part in "$name".part-*; do
+        if [ -f "$part" ]; then
+            PARTS+=("$part")
+        fi
+    done
+    [ "${#PARTS[@]}" -gt 0 ] || die "$name is missing from this folder"
+}
+
+# sha256sum -c only checks the files that SHA256SUMS lists, so an extra file
+# (for example an added images.tar.part-zz) would pass unnoticed. Refuse any
+# file we are about to use that SHA256SUMS does not list.
+require_listed() {
+    find_parts "$1"
+    # Each line is "<64 hex digits><2 characters><file name>": keep the names.
+    local listed
+    listed="$(cut -c 67- SHA256SUMS)"
+    local file
+    for file in "${PARTS[@]}"; do
+        # <<< instead of a pipe: with pipefail, "cut | grep -q" can fail by
+        # chance when grep stops reading early.
+        grep -Fxq -- "$file" <<<"$listed" ||
+            die "$file is not listed in SHA256SUMS. Nothing was installed."
+    done
+}
+
+# Print a bundle file to stdout, joining its parts in order (aa, ab, ...).
+# Streaming means the joined file never needs extra disk space.
+stream_bundle_file() {
+    find_parts "$1"
+    cat "${PARTS[@]}"
+}
+
+load_images() {
+    echo "Loading the images (this takes a few minutes)..."
+    stream_bundle_file images.tar | docker load
+}
+
+# Unpack the model files into the volume Ollama reads, before the first start.
+restore_models() {
+    echo "Restoring the AI model into the volume $MODEL_VOLUME..."
+    docker volume create "$MODEL_VOLUME" >/dev/null
+    stream_bundle_file models.tar.gz |
+        docker run --rm -i --network none --user 0:0 -v "$MODEL_VOLUME":/models \
+            --entrypoint tar "$MG_IMAGE" -xzf - -C /models
+}
+
+start_maxguard() {
+    if [ "$MAXGUARD_SKIP_START" = "1" ]; then
+        echo "MAXGUARD_SKIP_START=1: not starting MaxGuard."
+        return
+    fi
+    # --pull never: everything must come from the bundle; never download.
+    docker compose -f compose.yaml up -d --pull never
+    echo
+    echo "MaxGuard is running. Open the dashboard: $DASHBOARD_URL"
+}
+
+main() {
+    # Work in the folder that holds this script and the bundle files.
+    cd "$(dirname "$0")"
+    check_tools
+    verify_checksums
+    require_listed images.tar
+    require_listed models.tar.gz
+    require_listed compose.yaml
+    load_images
+    restore_models
+    start_maxguard
+}
+
+main "$@"
+```
+
+Three checks happen **before** anything is loaded. `sha256sum -c --strict`: without `--strict`, a badly formatted line is skipped with a warning and the check still passes, and the security review used exactly that to slip an extra part into `docker load`. Every file the script is about to use must be listed in `SHA256SUMS` (`sha256sum -c` only checks the files the list names). And the parts are kept in a bash array, so a file name with a space cannot be split into two names. The parts are then streamed (`cat parts | docker load`), so the user never needs disk space for the joined file. The model is unpacked by a container with `--network none`, using the MaxGuard image's GNU tar, which refuses `..` paths and writing through links.
+
+**Step 4.** Create `scripts/uninstall.sh`. It deletes the data and model volumes only after someone types `yes` (pressing Enter, or no keyboard at all, keeps them), or with `--yes` for scripts:
+
+```bash
+#!/usr/bin/env bash
+# Remove MaxGuard from this machine (Jonattan, JON-05).
+#
+#   bash uninstall.sh          stop MaxGuard, then ASK before deleting its data
+#   bash uninstall.sh --yes    stop MaxGuard and delete its data without asking
+#
+# Stopping removes the containers and networks. The volumes hold your alerts,
+# reports, audit log (maxguard-data) and the AI model (maxguard-ollama-models);
+# they are deleted only after you type "yes" (or with --yes), because that
+# cannot be undone. The images stay; the script prints how to remove them.
+#
+# Settings (environment variables, used by the tests):
+#   COMPOSE_PROJECT_NAME  the Compose project to stop (maxguard)
+#   DATA_VOLUME           the data volume (maxguard-data)
+#   MODEL_VOLUME          the model volume (maxguard-ollama-models)
+set -euo pipefail
+
+PROJECT="${COMPOSE_PROJECT_NAME:-maxguard}"
+DATA_VOLUME="${DATA_VOLUME:-maxguard-data}"
+MODEL_VOLUME="${MODEL_VOLUME:-maxguard-ollama-models}"
+
+usage() {
+    echo "usage: bash uninstall.sh [--yes]" >&2
+    exit 2
+}
+
+# --yes is for scripts and tests; without it a person must confirm.
+parse_args() {
+    ASSUME_YES=0
+    if [ "$#" -gt 1 ]; then
+        usage
+    fi
+    if [ "$#" -eq 1 ]; then
+        [ "$1" = "--yes" ] || usage
+        ASSUME_YES=1
+    fi
+}
+
+stop_maxguard() {
+    echo "Stopping MaxGuard (project $PROJECT)..."
+    # Compose finds the containers by project name, so no compose file is needed.
+    docker compose -p "$PROJECT" down
+}
+
+# Anything except a typed "yes" keeps the data, including an empty answer or
+# no keyboard at all (for example when the script runs from cron).
+confirm_delete() {
+    if [ "$ASSUME_YES" = "1" ]; then
+        return 0
+    fi
+    local answer=""
+    echo "Delete the volumes $DATA_VOLUME and $MODEL_VOLUME?"
+    echo "This deletes all alerts, reports, the audit log and the AI model. It cannot be undone."
+    printf 'Type yes to delete them: '
+    read -r answer || answer=""
+    [ "$answer" = "yes" ]
+}
+
+remove_volume() {
+    local volume="$1"
+    if docker volume inspect "$volume" >/dev/null 2>&1; then
+        docker volume rm "$volume" >/dev/null
+        echo "Deleted the volume $volume"
+    else
+        echo "The volume $volume does not exist"
+    fi
+}
+
+main() {
+    parse_args "$@"
+    command -v docker >/dev/null 2>&1 || {
+        echo "ERROR: docker is not installed" >&2
+        exit 1
+    }
+    stop_maxguard
+    if confirm_delete; then
+        remove_volume "$DATA_VOLUME"
+        remove_volume "$MODEL_VOLUME"
+    else
+        echo
+        echo "Kept the volumes $DATA_VOLUME and $MODEL_VOLUME."
+    fi
+    echo "The images are still on this machine. To remove them too:"
+    echo "  docker image rm maxguard:2.0.0a0 ollama/ollama:0.35.1"
+}
+
+main "$@"
+```
+
+**Step 5.** Create the user's instructions `docs/OFFLINE-INSTALL.md`; the bundle ships them:
+
+````markdown
+# Install MaxGuard without the internet
+
+This folder is the MaxGuard **offline bundle**. It holds everything MaxGuard
+needs, including its local AI model, so you can install it on a computer that
+has no internet connection. (Jonattan, JON-05)
+
+| File | What it is |
+|---|---|
+| `images.tar.part-aa`, `images.tar.part-ab`, ... | The MaxGuard and Ollama Docker images, split into parts under 2 GiB |
+| `models.tar.gz.part-aa`, ... (or `models.tar.gz`) | The AI model (the files of the `maxguard-ollama-models` volume) |
+| `compose.yaml` | Tells Docker how to run MaxGuard |
+| `install.sh` | Checks every file, loads the images and the model, starts MaxGuard |
+| `uninstall.sh` | Stops MaxGuard and, only if you confirm, deletes its data |
+| `sample-telnet.pcap`, `sample-clean-tls13.pcap`, `sample-telnet-zeek-logs.tar.gz` | Small test data recorded on the team's own lab network, to try MaxGuard: the Telnet capture gives one alert, the TLS 1.3 capture gives none |
+| `SHA256SUMS` | The SHA-256 checksum of every file above |
+| `OFFLINE-INSTALL.md` | This file |
+
+The bundle is built for one kind of processor (`linux/amd64`, that is Intel or
+AMD, unless the release says otherwise). Check the release notes before you
+copy it to an Apple Silicon Mac or a Raspberry Pi.
+
+## What you need
+
+- Linux, macOS, or Windows with WSL 2 (run every command in the Ubuntu terminal).
+- Docker Engine or Docker Desktop with the `docker compose` plugin, already
+  installed and running. Check: `docker compose version` prints a version.
+- About three times the bundle's size in free disk space (the parts, the loaded
+  images, and the model).
+- 8 GB of memory or more for the AI model.
+
+## Steps
+
+1. Copy **every** bundle file into one empty folder, for example `~/maxguard-bundle`.
+   Keep the part names exactly as they are.
+
+2. Open a terminal in that folder and check the files yourself:
+
+   ```bash
+   cd ~/maxguard-bundle
+   sha256sum -c SHA256SUMS          # Linux and WSL
+   shasum -a 256 -c SHA256SUMS      # macOS
+   ```
+
+   Every line must end in `OK`. If one says `FAILED`, copy or download that
+   file again. **Why:** a damaged or swapped file must never be loaded.
+   `SHA256SUMS` itself is not signed yet. If someone handed you the bundle on
+   a USB stick, compare its `SHA256SUMS` with the copy on the GitHub Release
+   page: a swapped file only shows up if `SHA256SUMS` is the real one.
+
+3. (Optional) Unplug the network cable or switch Wi-Fi off. MaxGuard installs
+   and runs without it.
+
+4. Install:
+
+   ```bash
+   bash install.sh
+   ```
+
+   `install.sh` checks every checksum again **before** it loads anything, and
+   stops if any file fails or a line of `SHA256SUMS` is badly formatted. It
+   also refuses a part that `SHA256SUMS` does not list. Then it loads the
+   images, puts the AI model into the
+   `maxguard-ollama-models` volume, and starts MaxGuard with
+   `docker compose up -d --pull never` (`--pull never` means Docker may not
+   download anything). The last line is:
+
+   ```text
+   MaxGuard is running. Open the dashboard: http://127.0.0.1:8000
+   ```
+
+5. Open http://127.0.0.1:8000 in your browser. Only this computer can open it.
+
+6. Try it: on the **Upload** page choose `sample-telnet.pcap`. After a few
+   seconds the queue shows a high alert, "Telnet session in cleartext", with an explanation
+   from the local AI.
+
+If a checksum is wrong, `install.sh` prints
+`ERROR: a file is damaged or was changed. Nothing was installed.` and stops
+before `docker load`: nothing has changed on your computer.
+
+## Stop, start, and remove MaxGuard
+
+```bash
+docker compose -f compose.yaml down      # stop (your data is kept)
+docker compose -f compose.yaml up -d     # start again
+bash uninstall.sh                        # stop and remove; asks before deleting data
+```
+
+`uninstall.sh` deletes the volumes `maxguard-data` (alerts, reports, audit log)
+and `maxguard-ollama-models` (the AI model) only after you type `yes`. Anything
+else, even pressing Enter, keeps them. The images stay on the computer; the
+script prints the command that removes them.
+
+## Troubleshooting
+
+| Message | What to do |
+|---|---|
+| `ERROR: docker is not installed` / `Docker is not running` | Install or start Docker Desktop / Docker Engine, then run `bash install.sh` again. |
+| `ERROR: SHA256SUMS is missing` or `... is missing from this folder` | Copy every bundle file into the folder. |
+| `<file>: FAILED` | That file is damaged. Copy or download it again. |
+| `... is not listed in SHA256SUMS` | A file in the folder does not belong to the bundle. Start again with an empty folder. |
+| A warning that the volume `maxguard-ollama-models` "already exists but was not created by Docker Compose" | Expected: `install.sh` creates that volume before the first start so the model is in place. |
+````
+
+**Step 6.** Create the tests `tests/unit/test_bundle_scripts.py`. They put a fake `docker` command first on `PATH`, so they run in a second and never touch your real images:
+
+```python
+"""Tests for the offline bundle scripts (Jonattan, JON-05).
+
+These are unit tests, so they never call the real Docker: each test puts a
+fake "docker" program first on PATH. The fake writes every call to a log file
+and keeps what the scripts stream into it ("docker load", "tar -x"), so a
+test can check what happened, and in which order, in well under a second.
+The same scripts were also run against the real Docker with small stand-in
+images (see the JON-05 guide).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BUILD = REPO_ROOT / "scripts" / "build-offline-bundle.sh"
+INSTALL = REPO_ROOT / "scripts" / "install.sh"
+UNINSTALL = REPO_ROOT / "scripts" / "uninstall.sh"
+
+# Small sizes so that splitting is exercised with tiny files.
+PART_BYTES = 1000
+FAKE_IMAGES = b"fake docker save output " * 100  # 2400 bytes -> 3 parts
+FAKE_MODELS = b"fake model archive " * 30  # 570 bytes -> not split
+
+# The fake docker. It answers just enough for the three scripts:
+#   save -o FILE ...       writes FAKE_IMAGES to FILE
+#   run ... -czf - ...     prints FAKE_MODELS (the model volume as tar.gz)
+#   run ... (with stdin)   keeps stdin in restored-models.bin (tar -x)
+#   load                   keeps stdin in loaded-images.bin
+#   anything else          succeeds and prints nothing
+FAKE_DOCKER = """#!/usr/bin/env bash
+echo "$*" >>"$FAKE_DIR/docker.log"
+case "$1" in
+    save)
+        while [ "$#" -gt 0 ]; do
+            if [ "$1" = "-o" ]; then printf '%s' "$FAKE_IMAGES" >"$2"; fi
+            shift
+        done
+        ;;
+    load)
+        cat >"$FAKE_DIR/loaded-images.bin"
+        ;;
+    version)
+        echo "linux/amd64"
+        ;;
+    run)
+        case "$*" in
+            *"-czf -"*) printf '%s' "$FAKE_MODELS" ;;
+            *" -i "*) cat >"$FAKE_DIR/restored-models.bin" ;;
+        esac
+        ;;
+esac
+exit 0
+"""
+
+
+def make_fake_docker(tmp_path: Path) -> dict[str, str]:
+    """Write the fake docker into tmp_path/bin and return an env that uses it."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    docker = bin_dir / "docker"
+    docker.write_text(FAKE_DOCKER)
+    docker.chmod(0o755)
+    env = dict(os.environ)
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    env["FAKE_DIR"] = str(tmp_path)
+    env["FAKE_IMAGES"] = FAKE_IMAGES.decode()
+    env["FAKE_MODELS"] = FAKE_MODELS.decode()
+    return env
+
+
+def docker_calls(tmp_path: Path) -> list[str]:
+    log = tmp_path / "docker.log"
+    return log.read_text().splitlines() if log.exists() else []
+
+
+def run_script(
+    script: Path, env: dict[str, str], *args: str, cwd: Path, stdin: str = ""
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash", str(script), *args],
+        cwd=cwd, env=env, input=stdin, capture_output=True, text=True, timeout=30,
+    )
+
+
+def build_bundle(tmp_path: Path, env: dict[str, str]) -> Path:
+    """Run build-offline-bundle.sh with the fake docker; return the dist folder."""
+    model_dir = tmp_path / "fake-model"
+    (model_dir / "blobs").mkdir(parents=True)
+    (model_dir / "blobs" / "sha256-fake").write_bytes(b"not a real model")
+    offline_doc = tmp_path / "OFFLINE-INSTALL.md"
+    offline_doc.write_text("# Install MaxGuard without the internet\n")
+    dist = tmp_path / "dist"
+    build_env = dict(env)
+    build_env.update(
+        MG_IMAGE="alpine:3.20",
+        OLLAMA_IMAGE="hello-world:latest",
+        MODEL_SOURCE_DIR=str(model_dir),
+        MODEL_VOLUME="test-models",
+        OFFLINE_DOC=str(offline_doc),
+        DIST_DIR=str(dist),
+        PART_BYTES=str(PART_BYTES),
+    )
+    result = run_script(BUILD, build_env, cwd=REPO_ROOT)
+    assert result.returncode == 0, result.stderr
+    return dist
+
+
+@pytest.fixture
+def bundle(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+    """A freshly built bundle (fake images) and the env with the fake docker."""
+    if shutil.which("bash") is None:
+        pytest.skip("bash is not installed")
+    env = make_fake_docker(tmp_path)
+    dist = build_bundle(tmp_path, env)
+    (tmp_path / "docker.log").unlink()  # tests check only the install's calls
+    env["MAXGUARD_SKIP_START"] = "1"
+    return dist, env
+
+
+def sha256_lines(folder: Path) -> dict[str, str]:
+    """SHA256SUMS as {file name: hex digest}."""
+    lines = (folder / "SHA256SUMS").read_text().splitlines()
+    return {line[66:]: line[:64] for line in lines}
+
+
+def test_build_splits_big_files_and_lists_every_file(bundle):
+    dist, _ = bundle
+    names = sorted(p.name for p in dist.iterdir())
+    assert names == [
+        "OFFLINE-INSTALL.md", "SHA256SUMS", "compose.yaml",
+        "images.tar.part-aa", "images.tar.part-ab", "images.tar.part-ac",
+        "install.sh", "models.tar.gz", "sample-clean-tls13.pcap",
+        "sample-telnet-zeek-logs.tar.gz", "sample-telnet.pcap", "uninstall.sh",
+    ]
+    sums = sha256_lines(dist)
+    assert sorted(sums) == [n for n in names if n != "SHA256SUMS"]
+    for name, digest in sums.items():
+        assert hashlib.sha256((dist / name).read_bytes()).hexdigest() == digest
+    parts = sorted(dist.glob("images.tar.part-*"))
+    assert b"".join(p.read_bytes() for p in parts) == FAKE_IMAGES
+
+
+def test_build_refuses_a_dist_folder_that_is_not_empty(tmp_path):
+    env = make_fake_docker(tmp_path)
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "images.tar.part-zz").write_text("left over from an old build")
+    offline_doc = tmp_path / "OFFLINE-INSTALL.md"
+    offline_doc.write_text("# Install MaxGuard without the internet\n")
+    env.update(DIST_DIR=str(dist), OFFLINE_DOC=str(offline_doc))
+    result = run_script(BUILD, env, cwd=REPO_ROOT)
+    assert result.returncode != 0
+    assert "is not empty" in result.stderr
+    assert "save" not in "\n".join(docker_calls(tmp_path))
+
+
+def test_install_loads_the_joined_parts_and_restores_the_model(bundle, tmp_path):
+    dist, env = bundle
+    result = run_script(dist / "install.sh", env, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "loaded-images.bin").read_bytes() == FAKE_IMAGES
+    assert (tmp_path / "restored-models.bin").read_bytes() == FAKE_MODELS
+    calls = docker_calls(tmp_path)
+    assert any(call.startswith("load") for call in calls)
+    assert not any(call.startswith("compose -f") for call in calls)  # start skipped
+
+
+def test_install_starts_compose_without_pulling(bundle, tmp_path):
+    dist, env = bundle
+    env["MAXGUARD_SKIP_START"] = "0"
+    result = run_script(dist / "install.sh", env, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert "compose -f compose.yaml up -d --pull never" in docker_calls(tmp_path)
+    assert "http://127.0.0.1:8000" in result.stdout
+
+
+def test_install_refuses_a_changed_byte_before_loading(bundle, tmp_path):
+    dist, env = bundle
+    part = dist / "images.tar.part-ab"
+    data = bytearray(part.read_bytes())
+    data[10] ^= 0x01  # flip one bit of one byte
+    part.write_bytes(bytes(data))
+    result = run_script(dist / "install.sh", env, cwd=tmp_path)
+    assert result.returncode != 0
+    assert "images.tar.part-ab: FAILED" in result.stdout
+    assert "Nothing was installed" in result.stderr
+    calls = docker_calls(tmp_path)
+    assert not any(c.startswith(("load", "run", "volume", "compose -f")) for c in calls)
+
+
+def test_install_refuses_a_part_that_sha256sums_does_not_list(bundle, tmp_path):
+    dist, env = bundle
+    (dist / "images.tar.part-ad").write_bytes(b"an extra part")
+    result = run_script(dist / "install.sh", env, cwd=tmp_path)
+    assert result.returncode != 0
+    assert "images.tar.part-ad is not listed in SHA256SUMS" in result.stderr
+    assert not any(c.startswith("load") for c in docker_calls(tmp_path))
+
+
+def test_install_refuses_a_badly_formatted_checksum_line(bundle, tmp_path):
+    # Without --strict, sha256sum skips a bad line with a warning and still
+    # succeeds, and the "is it listed?" check would then accept the extra part.
+    dist, env = bundle
+    (dist / "images.tar.part-ad").write_bytes(b"an extra part")
+    with (dist / "SHA256SUMS").open("a") as sums:
+        sums.write("z" * 64 + "  images.tar.part-ad\n")
+    result = run_script(dist / "install.sh", env, cwd=tmp_path)
+    assert result.returncode != 0
+    assert "Nothing was installed" in result.stderr
+    assert not any(c.startswith("load") for c in docker_calls(tmp_path))
+
+
+def test_install_unpacks_the_model_without_network(bundle, tmp_path):
+    dist, env = bundle
+    result = run_script(dist / "install.sh", env, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    tar_runs = [c for c in docker_calls(tmp_path) if c.startswith("run") and "tar" in c]
+    assert tar_runs and all("--network none" in c for c in tar_runs)
+
+
+def test_install_refuses_a_missing_part(bundle, tmp_path):
+    dist, env = bundle
+    (dist / "images.tar.part-ac").unlink()
+    result = run_script(dist / "install.sh", env, cwd=tmp_path)
+    assert result.returncode != 0
+    assert not any(c.startswith("load") for c in docker_calls(tmp_path))
+
+
+def test_uninstall_keeps_the_volumes_unless_you_type_yes(tmp_path):
+    env = make_fake_docker(tmp_path)
+    result = run_script(UNINSTALL, env, cwd=tmp_path, stdin="\n")
+    assert result.returncode == 0, result.stderr
+    calls = docker_calls(tmp_path)
+    assert "compose -p maxguard down" in calls
+    assert not any(call.startswith("volume rm") for call in calls)
+    assert "Kept the volumes" in result.stdout
+
+
+def test_uninstall_keeps_the_volumes_without_a_keyboard(tmp_path):
+    # No input at all (end of file), for example when run from cron.
+    env = make_fake_docker(tmp_path)
+    result = run_script(UNINSTALL, env, cwd=tmp_path, stdin="")
+    assert result.returncode == 0, result.stderr
+    assert not any(call.startswith("volume rm") for call in docker_calls(tmp_path))
+    assert "Kept the volumes" in result.stdout
+
+
+def test_uninstall_yes_flag_deletes_both_volumes(tmp_path):
+    env = make_fake_docker(tmp_path)
+    result = run_script(UNINSTALL, env, "--yes", cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    calls = docker_calls(tmp_path)
+    assert "volume rm maxguard-data" in calls
+    assert "volume rm maxguard-ollama-models" in calls
+
+
+def test_uninstall_typed_yes_deletes_both_volumes(tmp_path):
+    env = make_fake_docker(tmp_path)
+    result = run_script(UNINSTALL, env, cwd=tmp_path, stdin="yes\n")
+    assert result.returncode == 0, result.stderr
+    assert "volume rm maxguard-data" in docker_calls(tmp_path)
+
+
+def test_uninstall_rejects_an_unknown_flag(tmp_path):
+    env = make_fake_docker(tmp_path)
+    result = run_script(UNINSTALL, env, "--force", cwd=tmp_path)
+    assert result.returncode == 2
+    assert docker_calls(tmp_path) == []
+```
+
+Run them, and check the three scripts with ShellCheck:
+
+```bash
+pytest tests/unit/test_bundle_scripts.py -q
+```
+
+Expected output:
+
+```text
+..............                                                                               [100%]
+14 passed in 1.00s
+```
+
+```bash
+docker run --rm --network none -v "$PWD/scripts:/s:ro" koalaman/shellcheck:v0.11.0 \
+  /s/build-offline-bundle.sh /s/install.sh /s/uninstall.sh && echo "ShellCheck: clean"
+```
+
+Expected output:
+
+```text
+ShellCheck: clean
+```
+
+**Step 7.** Prove the mechanics with real Docker and small stand-ins: `alpine:3.20` plays the MaxGuard image, a second tag of it plays Ollama, a 17-byte file plays the model, and `PART_BYTES` is small so the images really get split. Then remove the stand-in image and the volume, install from the bundle, and change one byte in a part:
+
+```bash
+mkdir -p data/fake-model/blobs && printf 'not a real model\n' > data/fake-model/blobs/sha256-fake
+docker tag alpine:3.20 maxguard-test/ollama:stand-in
+docker volume rm -f maxguard-test-models > /dev/null; rm -rf data/dist-test
+MG_IMAGE=alpine:3.20 OLLAMA_IMAGE=maxguard-test/ollama:stand-in MODEL_SOURCE_DIR=data/fake-model \
+  MODEL_VOLUME=maxguard-test-models DIST_DIR=data/dist-test PART_BYTES=3000000 \
+  bash scripts/build-offline-bundle.sh > data/build.log 2>&1 && echo "bundle built"
+ls data/dist-test
+echo "--- a clean machine: no stand-in image, no model volume"
+docker rmi maxguard-test/ollama:stand-in > /dev/null && docker volume rm maxguard-test-models > /dev/null
+cd data/dist-test
+MG_IMAGE=alpine:3.20 MODEL_VOLUME=maxguard-test-models MAXGUARD_SKIP_START=1 bash install.sh 2>&1 | tail -n 4
+docker image inspect maxguard-test/ollama:stand-in --format 'image loaded: {{.Id}}' | cut -c 1-28
+docker run --rm --network none -v maxguard-test-models:/m:ro alpine:3.20 cat /m/blobs/sha256-fake
+echo "--- one changed byte"
+printf 'X' | dd of=images.tar.part-ab bs=1 seek=1000 conv=notrunc 2> /dev/null
+MG_IMAGE=alpine:3.20 MODEL_VOLUME=maxguard-test-models MAXGUARD_SKIP_START=1 bash install.sh 2>&1 | grep -v ': OK$'
+cd ../..
+docker rmi maxguard-test/ollama:stand-in > /dev/null; docker volume rm maxguard-test-models > /dev/null
+```
+
+Expected output:
+
+```text
+bundle built
+OFFLINE-INSTALL.md
+SHA256SUMS
+compose.yaml
+images.tar.part-aa
+images.tar.part-ab
+install.sh
+models.tar.gz
+sample-clean-tls13.pcap
+sample-telnet-zeek-logs.tar.gz
+sample-telnet.pcap
+uninstall.sh
+--- a clean machine: no stand-in image, no model volume
+Loaded image: alpine:3.20
+Loaded image: maxguard-test/ollama:stand-in
+Restoring the AI model into the volume maxguard-test-models...
+MAXGUARD_SKIP_START=1: not starting MaxGuard.
+image loaded: sha256:c64c687
+not a real model
+--- one changed byte
+Checking the SHA-256 checksum of every file...
+images.tar.part-ab: FAILED
+sha256sum: WARNING: 1 computed checksum did NOT match
+ERROR: a file is damaged or was changed. Nothing was installed. Download the bundle again.
+```
+
+*Your image ID differs. If `docker tag` fails, pull the stand-in first: `docker pull alpine:3.20`.*
+
+`MAXGUARD_SKIP_START=1` loads everything but skips `docker compose up`, because the stand-ins are not a real MaxGuard.
+
+**Step 8.** **With Karthik, on a real laptop** (*not run — verify on hardware*): build the real bundle (it pulls `ollama/ollama:0.35.1` and the model chosen in ALI-04, several GB), copy it to a laptop, switch Wi-Fi off, and run the acceptance test in `docs/roadmap/README.md`. The bundle includes every model in your `maxguard-ollama-models` volume (the script prints `ollama list`), so build on a machine whose volume holds only the chosen model. macOS (bash 3.2, `shasum`) and Windows WSL 2 were not run in planning either.
+
+**Step 9.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -1890,7 +2803,7 @@ A tampered part makes `install.sh` stop before `docker load`; a clean bundle ins
 
 #### What you just did and why
 
-"Offline" has to include the install: a tool that needs the internet to install is not usable on an isolated network. Checking the checksums before loading anything means a damaged or swapped file is caught before it can run. Parts under 2 GiB fit GitHub's limit for release files.
+"Offline" has to include the install: a tool that needs the internet to install is not usable on an isolated network. Checking the checksums before loading anything means a damaged or swapped file is caught before it can run. Parts under 2 GiB fit GitHub's limit for release files. `SHA256SUMS` is not signed yet, so it catches damage, not someone who replaces the whole bundle: signing it with the JAI-08 key is a spring follow-up.
 
 #### Pull request checklist
 
@@ -1900,7 +2813,7 @@ A tampered part makes `install.sh` stop before `docker load`; a clean bundle ins
 - [ ] No secrets, passwords, email addresses, personal data, or captures from a real network (CLAUDE.md rule 6)
 - [ ] Any new dependency has a row in `docs/DEPENDENCIES.md` with its license
 - [ ] CI is green and your reviewer approved
-- [ ] `shellcheck` is clean
+- [ ] ShellCheck is clean
 - [ ] The tamper test is in the pull request
 
 ## Spring 2027: v2.0
@@ -2349,7 +3262,7 @@ Expected output:
 
 ```text
 ..........................                                                                   [100%]
-26 passed in 1.57s
+26 passed in 1.34s
 ```
 
 **Step 7.** Read `test_a_lie_that_cites_the_hostile_record_is_kept_but_changes_no_finding` twice: it shows the limit of the citation check. A sentence that cites the hostile record itself has a valid citation, so it is kept. The AI still cannot hide a finding or change its severity, because those come from the rules, and the dashboard always shows the rule's title and severity next to the AI text.

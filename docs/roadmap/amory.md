@@ -823,7 +823,7 @@ Expected output:
 
 ```text
 ..............................                                                               [100%]
-30 passed in 0.21s
+30 passed in 0.18s
 ```
 
 **Step 7.** Count the NIST rows per rule:
@@ -1470,7 +1470,7 @@ Expected output:
 
 ```text
 ................                                                                             [100%]
-16 passed in 0.10s
+16 passed in 0.11s
 ```
 
 **Step 5.** Make the three files for the Telnet fixture and look at the CSV:
@@ -1987,7 +1987,7 @@ Expected output:
 
 ```text
 .....................                                                                        [100%]
-21 passed in 0.23s
+21 passed in 0.18s
 ```
 
 **Step 5.** Try the command line: make a key pair, log one capture, verify the log, change one word in it, and verify again:

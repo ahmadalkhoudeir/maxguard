@@ -795,7 +795,7 @@ Expected output:
 
 ```text
 ................                                                                             [100%]
-16 passed in 0.64s
+16 passed in 0.08s
 ```
 
 **Step 8.** See the TSV conversion work on a hand-made fixture:
@@ -1328,7 +1328,7 @@ Expected output:
 
 ```text
 ............................................................                                 [100%]
-60 passed in 0.70s
+60 passed in 0.26s
 ```
 
 **Step 8.** Run all registered rules on one fixture folder, the way the pipeline will:
@@ -1568,7 +1568,7 @@ Expected output:
 
 ```text
 ..........................s..........                                                        [100%]
-36 passed, 1 skipped in 0.32s
+36 passed, 1 skipped in 0.26s
 ```
 
 **Step 4.** See the techniques the loader adds to the Telnet finding:
@@ -1894,7 +1894,7 @@ Expected output:
 
 ```text
 .........                                                                                    [100%]
-9 passed in 0.34s
+9 passed in 0.27s
 ```
 
 **Step 5.** Analyze a fixture log folder (no Zeek needed) and look at the start of the report:
@@ -2303,7 +2303,7 @@ Expected output:
 
 ```text
 ............                                                                                 [100%]
-12 passed in 0.50s
+12 passed in 0.41s
 ```
 
 **Step 5.** Try the CSV format:
@@ -3282,7 +3282,7 @@ Expected output:
 
 ```text
 ...........                                                                                  [100%]
-11 passed in 0.08s
+11 passed in 0.07s
 ```
 
 **Step 4.** Nothing calls `run_stateful()` yet: where the baseline is stored and when the learning period ends is an open decision (`docs/ARCHITECTURE.md` section 5). Propose it in GitHub Discussions with Jaiden.

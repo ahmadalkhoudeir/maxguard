@@ -17,7 +17,7 @@ This is your part of the MaxGuard v2.0 roadmap. Read [the roadmap overview](READ
 | [JAI-06](#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files) | W3 | Storage: alerts in SQLite, events in hourly Parquet files | [JAI-03](#jai-03-common-event-schema-the-normalizer-and-record-lookup) | code, tested |
 | [JAI-07](#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | W3 | The API: uploads, alerts, events, live updates, sensor ingest | [JAI-05](#jai-05-the-pipeline-one-function-from-input-to-report), [JAI-06](#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files), [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly) | code, tested |
 | [JAI-08](#jai-08-ed25519-signing-library) | W5 | Ed25519 signing library | [JAI-01](#jai-01-restructure-the-repository-add-packaging-and-ci) | code, tested |
-| [JAI-09](#jai-09-release-workflow-and-v20-alpha-rc1) | W6 | Release workflow and v2.0-alpha-rc1 | [JAI-04](#jai-04-the-engine-image-and-the-compose-files), [KAR-04](karthik.md#kar-04-ci-runs-the-integration-tests-plus-a-determinism-test), [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) | design |
+| [JAI-09](#jai-09-release-workflow-and-v20-alpha-rc1) | W6 | Release workflow and v2.0-alpha-rc1 | [JAI-04](#jai-04-the-engine-image-and-the-compose-files), [KAR-04](karthik.md#kar-04-ci-runs-the-integration-tests-plus-a-determinism-test), [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) | code, tested |
 | [JAI-10](#jai-10-release-v20-alpha) | W8 | Release v2.0-alpha | [JAI-09](#jai-09-release-workflow-and-v20-alpha-rc1), [KAR-05](karthik.md#kar-05-release-candidate-test-with-an-outside-tester) | process |
 | [JAI-11](#jai-11-signed-offline-intel-bundles) | S8 | Signed offline intel bundles | [JAI-08](#jai-08-ed25519-signing-library), [JAK-09](jakub.md#jak-09-ja4-watchlist-rule) | code, tested |
 | [JAI-12](#jai-12-release-v20-rc1-and-v20) | S13 | Release v2.0-rc1 and v2.0 | [JAI-11](#jai-11-signed-offline-intel-bundles), [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console), [AHM-08](ahmad.md#ahm-08-response-approvals-audit-revert-and-the-opnsense-connector) | process |
@@ -1769,7 +1769,7 @@ Expected output:
 
 ```text
 ................................................                                             [100%]
-48 passed in 0.17s
+48 passed in 0.19s
 ```
 
 **Step 6.** Commit, push, and open the pull request:
@@ -2303,7 +2303,7 @@ Expected output:
 
 ```text
 ......                                                                                       [100%]
-6 passed in 0.24s
+6 passed in 0.14s
 ```
 
 **Step 5.** Try it yourself on a fixture folder (Zeek-log input needs no Zeek):
@@ -3218,7 +3218,7 @@ Expected output:
 
 ```text
 ..............................                                                               [100%]
-30 passed in 1.17s
+30 passed in 1.05s
 ```
 
 **Step 7.** Look inside the event store with DuckDB's own Python API (handy for debugging):
@@ -4236,7 +4236,7 @@ Expected output:
 
 ```text
 .......................................                                                      [100%]
-39 passed in 3.87s
+39 passed in 3.57s
 ```
 
 **Step 7.** Create the integration test `tests/integration/test_api_upload.py`, which uploads a real capture, so Zeek runs:
@@ -4312,7 +4312,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -F file=@data/telnet.zip http://127.0.0
 Expected output:
 
 ```text
-{"analysis_id":"0c0036ba63bb7644","findings":1}
+{"analysis_id":"b3e059d7d4844f2f","findings":1}
 cleartext.telnet high 172.18.0.3 -> 172.18.0.2 23 new
 404
 ```
@@ -4621,7 +4621,7 @@ Expected output:
 
 ```text
 ..............                                                                               [100%]
-14 passed in 0.16s
+14 passed in 0.07s
 ```
 
 **Step 5.** Commit, push, and open the pull request:
@@ -4655,15 +4655,15 @@ A hash proves a file did not change *if* you trust where the hash came from. A s
 
 ### JAI-09: Release workflow and v2.0-alpha-rc1
 
-**Due:** Week 6 (due Fri Nov 20) · **Milestone:** `W6 Release candidate` · **Needs first:** [JAI-04](#jai-04-the-engine-image-and-the-compose-files), [KAR-04](karthik.md#kar-04-ci-runs-the-integration-tests-plus-a-determinism-test), [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) · **Kind:** design
+**Due:** Week 6 (due Fri Nov 20) · **Milestone:** `W6 Release candidate` · **Needs first:** [JAI-04](#jai-04-the-engine-image-and-the-compose-files), [KAR-04](karthik.md#kar-04-ci-runs-the-integration-tests-plus-a-determinism-test), [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) · **Kind:** code, tested
 
-**Issue labels:** `type:task` `phase:alpha` `owner:jaiden` `area:release` `critical-path`
+**Issue labels:** `type:task` `phase:alpha` `owner:jaiden` `area:release` `critical-path` `needs-hardware`
 
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
+> **Needs hardware.** Steps that use the Raspberry Pi, the switch or other devices were not run during planning; they are marked *not run — verify on hardware*.
 
 #### Goal
 
-Add `.github/workflows/release.yml`: when a tag `v*` is pushed, build the image for `linux/amd64` and `linux/arm64`, push it to the GitHub Container Registry, and create a GitHub Release with a `SHA256SUMS` file. Then tag `v2.0-alpha-rc1` and attach the offline bundle.
+Add `.github/workflows/release.yml`: when a tag `v*` is pushed, build the image for `linux/amd64` and `linux/arm64`, push it to the GitHub Container Registry, and create a GitHub Release with the small bundle files and a `SHA256SUMS` file. Then tag `v2.0-alpha-rc1` and attach the offline bundle.
 
 #### Prerequisites
 
@@ -4682,11 +4682,277 @@ git checkout -b jaiden/release-workflow
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** Write `release.yml` with `on: push: tags: ["v*"]`, `permissions: contents: write, packages: write`, and the official Docker actions (`docker/setup-qemu-action`, `docker/setup-buildx-action`, `docker/login-action` with `GITHUB_TOKEN`, `docker/build-push-action` with `platforms: linux/amd64,linux/arm64`). On October 6, 2026 the newest major versions were `actions/checkout@v7`, `docker/setup-qemu-action@v4`, `docker/setup-buildx-action@v4`, `docker/login-action@v4` and `docker/build-push-action@v7` (read with `git ls-remote --tags https://github.com/<owner>/<action>`); check again and pin the newest.
+**Step 2.** Create `.github/workflows/release.yml`:
 
-**Step 3.** Validate the file with `actionlint` before merging (`pip install actionlint-py==1.7.12.25` in a throwaway virtual environment).
+```yaml
+# Release workflow (Jaiden, JAI-09).
+#
+# Runs when a tag starting with "v" is pushed, for example:
+#   git tag -a v2.0-alpha-rc1 -m "MaxGuard v2.0-alpha release candidate 1"
+#   git push origin v2.0-alpha-rc1
+#
+# "image": builds the engine image for linux/amd64 and linux/arm64 and pushes
+#          it to the GitHub Container Registry as ghcr.io/<owner>/maxguard:<tag without v>.
+# "release": creates the GitHub Release with the notes from
+#          docs/releases/<tag>.md, the small offline-bundle files (compose.yaml,
+#          install.sh, uninstall.sh, OFFLINE-INSTALL.md) and SHA256SUMS for them.
+#
+# The large bundle parts (images and AI model, several GB) are built by hand
+# with scripts/build-offline-bundle.sh and added afterwards with
+#   gh release upload <tag> dist/* --clobber
+# --clobber replaces the small files with identical copies and replaces
+# SHA256SUMS with the bundle's, which lists every file of the release.
+name: Release
 
-**Step 4.** After merging: write the release notes in `docs/releases/v2.0-alpha-rc1.md` (what works, known limits, how to install offline), then:
+on:
+  push:
+    tags: ["v*"]
+
+# Least privilege: by default a job may only read the code. Each job below
+# asks for the one extra right it needs (packages: write to push to ghcr.io,
+# contents: write to create the release), so neither job holds both.
+permissions:
+  contents: read
+
+# Two pushes of the same tag must not build at the same time.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    # The arm64 image is built under QEMU emulation, which is slow.
+    timeout-minutes: 120
+    outputs:
+      image: ${{ steps.names.outputs.image }}
+      version: ${{ steps.names.outputs.version }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      # Actions are pinned to a full commit SHA (the version is in the comment):
+      # a tag such as v7 can be moved to other code, a commit SHA cannot.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # nothing here runs git push; do not keep the token in .git
+
+      # Fail in seconds, not after an hour of building, if a file the
+      # "release" job needs is missing.
+      - name: Check the release notes and install guide exist
+        run: |
+          for file in "docs/releases/${GITHUB_REF_NAME}.md" docs/OFFLINE-INSTALL.md; do
+            test -f "$file" || { echo "::error::$file is missing"; exit 1; }
+          done
+
+      # Registry names must be lowercase; the tag v2.0-alpha-rc1 becomes 2.0-alpha-rc1.
+      - name: Work out the image name and version
+        id: names
+        run: |
+          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/maxguard" >> "$GITHUB_OUTPUT"
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # QEMU lets the x86-64 runner build the arm64 image (Raspberry Pi 5, Apple Silicon).
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # GITHUB_TOKEN is created for this run only; no stored password is needed.
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.names.outputs.image }}:${{ steps.names.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.names.outputs.version }}
+
+      # Prove both architectures are in the pushed image before releasing it.
+      - name: Check the image has amd64 and arm64
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          docker buildx imagetools inspect "$IMAGE" | tee manifest.txt
+          grep -q "linux/amd64" manifest.txt
+          grep -q "linux/arm64" manifest.txt
+
+  release:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Collect the release files and write SHA256SUMS
+        run: |
+          mkdir release
+          cp docker/compose.yaml scripts/install.sh scripts/uninstall.sh release/
+          cp docs/OFFLINE-INSTALL.md release/
+          cd release
+          sha256sum -- * > ../SHA256SUMS
+          mv ../SHA256SUMS .
+          cat SHA256SUMS
+
+      # The notes from the repository, plus the exact image digest so anyone
+      # can pull exactly what this run built.
+      - name: Write the release notes
+        env:
+          IMAGE: ${{ needs.image.outputs.image }}
+          VERSION: ${{ needs.image.outputs.version }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          cp "docs/releases/${GITHUB_REF_NAME}.md" notes.md
+          {
+            echo
+            echo "## Container image"
+            echo
+            echo "\`${IMAGE}:${VERSION}\` for linux/amd64 and linux/arm64, digest \`${DIGEST}\`:"
+            echo
+            echo "    docker pull ${IMAGE}@${DIGEST}"
+          } >> notes.md
+
+      # A tag with a "-" (v2.0-alpha-rc1) is marked as a pre-release.
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          prerelease=false
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then prerelease=true; fi
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --verify-tag \
+            --title "MaxGuard ${GITHUB_REF_NAME}" \
+            --notes-file notes.md \
+            --prerelease="$prerelease"
+```
+
+Four security choices, all from GitHub's *Secure use reference* for Actions. The top level grants only `contents: read`; the `image` job adds `packages: write` and the `release` job adds `contents: write`, so neither job holds both. Every action is pinned to a full commit SHA with its version in a comment, because a tag such as `v7` can be moved to other code and a commit cannot (GitHub: pinning to a full-length commit SHA is "the only way to use an action as an immutable release"). `persist-credentials: false` keeps the token out of `.git/config`. And the tag name reaches shell commands only through environment variables, never pasted in with `${{ }}`.
+
+**Step 3.** Find the newest release of each action and the commit it points to. On October 8, 2026 they were the ones in the file; check again before you merge:
+
+```bash
+for repo in actions/checkout docker/setup-qemu-action docker/setup-buildx-action docker/login-action docker/build-push-action; do
+  tag=$(git ls-remote --tags --refs "https://github.com/$repo" | sed 's#.*refs/tags/##' \
+        | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+  sha=$(git ls-remote "https://github.com/$repo" "refs/tags/$tag^{}" "refs/tags/$tag" | head -n 1 | cut -f 1)
+  echo "$repo@$sha # $tag"
+done
+```
+
+Expected output:
+
+```text
+actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+```
+
+*`^{}` asks for the commit an annotated tag points to; for a plain tag only the second name exists. Newer releases after October 8, 2026 change this output.*
+
+When a newer version exists, put its SHA and version comment in the file. (A Dependabot `github-actions` update would keep them current; ask Ahmad first.)
+
+**Step 4.** Validate the workflow with `actionlint` in a throwaway virtual environment (it is a development tool, never shipped; `docs/DEPENDENCIES.md`):
+
+```bash
+python -m venv /tmp/actionlint-venv
+/tmp/actionlint-venv/bin/pip install -q actionlint-py==1.7.12.25
+/tmp/actionlint-venv/bin/actionlint .github/workflows/release.yml .github/workflows/ci.yml && echo "actionlint: clean"
+```
+
+Expected output:
+
+```text
+actionlint: clean
+```
+
+*Installing actionlint-py downloads the actionlint program from GitHub.*
+
+**Step 5.** Create the release notes `docs/releases/v2.0-alpha-rc1.md`. The workflow refuses to run without `docs/releases/<tag>.md`, and fails in seconds (before the hour of building) when it or `docs/OFFLINE-INSTALL.md` is missing. Replace every TODO with what the acceptance test showed:
+
+````markdown
+# MaxGuard v2.0-alpha-rc1
+
+<!-- Draft for docs/releases/v2.0-alpha-rc1.md (Jaiden, JAI-09 step 4).
+     The release workflow refuses to run without docs/releases/<tag>.md and
+     copies this file into the GitHub Release page. Replace every TODO with
+     what the acceptance test (docs/roadmap/README.md) actually showed. -->
+
+Release candidate 1 of the MaxGuard v2.0 alpha. It is for testing by the team
+and one outside tester (KAR-05) before `v2.0-alpha` on December 4, 2026.
+Do not use it to protect a real network yet.
+
+## What works
+
+- Upload a capture (`.pcap`, `.pcapng`) or Zeek logs (`.zip` or `.tar.gz`) on the
+  dashboard at http://127.0.0.1:8000. Zeek 9.0.0 and Suricata analyze it on
+  your own computer.
+- 13 deterministic detection rules: cleartext FTP, Telnet, HTTP, HTTP on port
+  8080, POP3 and IMAP; RDP standard security; weak TLS versions and ciphers;
+  expired, self-signed, weak-key and SHA-1 certificates. The same capture
+  always gives the same alerts with the same IDs.
+- Alerts are mapped to MITRE ATT&CK techniques and to the controls of PCI DSS
+  4.0.1, NIST SP 800-53 Rev. 5 (Release 5.2.0), CISA CPG 2.0 and CJIS 6.1 that
+  the mapping files list for that rule.
+- A local AI model (Ollama) explains each alert. Every sentence cites the log
+  records it is based on; sentences without valid citations are removed.
+- Alert queue with statuses, assignee and audit log; Analyst and Home modes;
+  JSON, CSV and HTML reports.
+- TODO: confirm each line above against the acceptance test results.
+
+## Install without the internet
+
+Download every file of this release into one empty folder, then:
+
+```bash
+sha256sum -c SHA256SUMS        # macOS: shasum -a 256 -c SHA256SUMS
+bash install.sh
+```
+
+Every line must say `OK`. `install.sh` checks the checksums again before it
+loads anything, loads the images and the AI model, and starts MaxGuard. Open
+http://127.0.0.1:8000. `OFFLINE-INSTALL.md` has the details and
+troubleshooting; `bash uninstall.sh` removes MaxGuard and asks before
+deleting your data.
+
+With internet, the engine image is also on the GitHub Container Registry
+(digest below).
+
+## Known limits
+
+- The offline bundle is for **linux/amd64** (Intel and AMD computers). It was
+  not tested on an Apple Silicon Mac or a Raspberry Pi (Docker would have to
+  emulate amd64 there, which is slow if it works at all). TODO: attach an
+  arm64 bundle or keep this line.
+- The AI model is `qwen3:4b`, a stand-in until Ali's evaluation (ALI-04)
+  picks the default model for each hardware tier.
+- `SHA256SUMS` proves the files were not damaged, but it is not signed yet:
+  compare it with the copy on this release page.
+- Not in this release (planned for spring 2027): the live network sensor,
+  NetFlow, the host agent, decoys, device baselines, JA4 watchlist alerts,
+  blocking through the response module, and signed intel updates.
+- TODO: add any problem found in the acceptance test.
+````
+
+**Step 6.** After merging, tag the release from `main`:
 
 ```bash
 git checkout main && git pull
@@ -4694,15 +4960,27 @@ git tag -a v2.0-alpha-rc1 -m "MaxGuard v2.0-alpha release candidate 1"
 git push origin v2.0-alpha-rc1
 ```
 
-**Step 5.** When the workflow is green, build the offline bundle (JON-05) and attach its parts and `SHA256SUMS` to the release with `gh release upload v2.0-alpha-rc1 dist/*`. Hand it to Karthik for KAR-05.
+*Not run — verify on GitHub*: GitHub Actions cannot run in planning. The first tag push is the test: the run must be green and the release page must show the image digest. A package on a personal account is **private** the first time it is published: in the package's settings, make `maxguard` public once (GitHub warns that this cannot be undone).
+
+**Step 7.** When the workflow is green, build the offline bundle (JON-05) from the tagged commit, with the image CI built, and attach it:
+
+```bash
+git checkout v2.0-alpha-rc1
+docker pull --platform linux/amd64 ghcr.io/<owner>/maxguard:2.0-alpha-rc1@<digest from the release page>
+docker tag ghcr.io/<owner>/maxguard:2.0-alpha-rc1@<digest> maxguard:2.0.0a0
+rm -rf dist && scripts/build-offline-bundle.sh
+gh release upload v2.0-alpha-rc1 dist/* --clobber
+```
+
+`--clobber` is needed because the release already has `SHA256SUMS` and the small files: they are replaced by identical copies, and `SHA256SUMS` by the bundle's, which lists every file. Hand the release to Karthik for KAR-05.
 
 #### How to test
 
-The release page shows both architectures in the image's manifest and the bundle parts with their checksums.
+`actionlint` is clean; on the first tag push the release page shows both architectures in the image's manifest and the bundle parts with their checksums.
 
 #### What you just did and why
 
-Releases built by CI from a tag are reproducible: anyone can see exactly which commit and which steps made them. The ARM64 image is what the Raspberry Pi sensor and Apple Silicon laptops run.
+Releases built by CI from a tag are reproducible: anyone can see exactly which commit and which steps made them. The ARM64 image is what the Raspberry Pi sensor and Apple Silicon laptops run. A release workflow holds a token that can publish code, so it gets the fewest rights and only actions that cannot change under it.
 
 #### Pull request checklist
 
@@ -4713,6 +4991,7 @@ Releases built by CI from a tag are reproducible: anyone can see exactly which c
 - [ ] Any new dependency has a row in `docs/DEPENDENCIES.md` with its license
 - [ ] CI is green and your reviewer approved
 - [ ] `actionlint` is clean
+- [ ] Every action is pinned to a commit SHA
 - [ ] The release has `SHA256SUMS`
 
 ### JAI-10: Release v2.0-alpha
@@ -5383,7 +5662,7 @@ Expected output:
 
 ```text
 ......................                                                                       [100%]
-22 passed in 0.24s
+22 passed in 0.19s
 ```
 
 **Step 5.** Try it end to end with a throwaway key pair (JAI-08's helper names the files `custody_ed25519_*.pem`; the real bundle key stays on the maintainer's machine, and only its public key ships with MaxGuard):

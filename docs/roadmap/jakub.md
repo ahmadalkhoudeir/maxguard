@@ -18,8 +18,8 @@ This is your part of the MaxGuard v2.0 roadmap. Read [the roadmap overview](READ
 | [JAK-08](#jak-08-device-attribution-which-device-is-behind-each-ip-address) | S4 | Device attribution: which device is behind each IP address | [JAK-04](#jak-04-asset-inventory), [KAR-02](karthik.md#kar-02-test-fixtures-zeek-and-suricata-output-for-every-capture) | code, tested |
 | [JAK-07](#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) | S4 | Live sensor: capture, rotation, and shipping to the console | [JAK-06](#jak-06-build-the-reference-lab-and-prove-the-mirror-works), [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JAK-08](#jak-08-device-attribution-which-device-is-behind-each-ip-address) | code, tested |
 | [JAK-09](#jak-09-ja4-watchlist-rule) | S8 | JA4 watchlist rule | [JAK-05](#jak-05-suricata-in-the-pipeline) | code, tested |
-| [JAK-10](#jak-10-netflow-and-ipfix-input) | S11 | NetFlow and IPFIX input | [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JAI-03](jaiden.md#jai-03-common-event-schema-the-normalizer-and-record-lookup) | design |
-| [JAK-11](#jak-11-host-agent-for-one-computer) | S12 | Host agent for one computer | [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | design |
+| [JAK-10](#jak-10-netflow-and-ipfix-input) | S11 | NetFlow and IPFIX input | [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JAI-03](jaiden.md#jai-03-common-event-schema-the-normalizer-and-record-lookup), [AHM-06](ahmad.md#ahm-06-ip-timeline-and-device-inventory-pages) | code, tested |
+| [JAK-11](#jak-11-host-agent-for-one-computer) | S12 | Host agent for one computer | [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | code, tested |
 
 **Kind:** *code, tested* — the complete code below was run with its tests during planning; copy it exactly, then improve it in a later pull request if you like. *code, written* — written in planning, but part of it needs a machine planning did not have. *design* — you write the code from the steps. *process* — no code: setup, review, testing or release work.
 
@@ -1003,7 +1003,7 @@ Expected output:
 
 ```text
 ...............................................                                              [100%]
-47 passed in 0.55s
+47 passed in 0.08s
 ```
 
 **Step 6.** Run every rule on every lab fixture and count the findings:
@@ -1348,7 +1348,7 @@ Expected output:
 
 ```text
 ........................                                                                     [100%]
-24 passed in 0.11s
+24 passed in 0.07s
 ```
 
 **Step 5.** Build the inventory for the plain-HTTP fixture:
@@ -1578,7 +1578,7 @@ Expected output:
 
 ```text
 ...                                                                                          [100%]
-3 passed in 1.45s
+3 passed in 0.06s
 ```
 
 ```bash
@@ -1588,12 +1588,13 @@ pytest -m "not integration" -q
 Expected output:
 
 ```text
-............................................................................................ [ 20%]
-........................................................................................s... [ 40%]
-............................................................................................ [ 60%]
-............................................................................................ [ 80%]
-........................................................................................     [100%]
-455 passed, 1 skipped, 31 deselected in 6.94s
+............................................................................................ [ 19%]
+..........................................................................................s. [ 38%]
+............................................................................................ [ 57%]
+............................................................................................ [ 77%]
+............................................................................................ [ 96%]
+................                                                                             [100%]
+475 passed, 1 skipped, 31 deselected in 7.17s
 ```
 
 **Step 7.** Add the integration test that proves Suricata now runs next to Zeek, `tests/integration/test_suricata_pipeline.py`. Where Suricata is missing it shows as skipped, with the reason, instead of passing:
@@ -1648,7 +1649,7 @@ Expected output:
 s                                                                        [100%]
 =========================== short test summary info ============================
 SKIPPED [1] tests/integration/test_suricata_pipeline.py:22: suricata is not installed here; the engine image has it
-1 skipped in 0.08s
+1 skipped in 0.06s
 ```
 
 *In planning this ran in `zeek/zeek:9.0.0`, which has no Suricata, so it was skipped as shown. With Zeek and Suricata both available it passed: the Suricata TLS event had a JA4 and the same Community ID as Zeek's. In the engine image you should see `1 passed`.*
@@ -1988,7 +1989,7 @@ Expected output:
 
 ```text
 ........                                                                                     [100%]
-8 passed in 0.08s
+8 passed in 0.04s
 ```
 
 **Step 5.** Build the device table for the hand-made DNS and DHCP fixture:
@@ -3482,7 +3483,7 @@ Expected output:
 
 ```text
 ..........................................                                                   [100%]
-42 passed in 1.21s
+42 passed in 1.28s
 ```
 
 **Step 10.** **The console side.** The dashboard listens only on `127.0.0.1`, so nobody on the network can read alerts or approve a block. Sensors get their own door: a second container that serves nothing but `POST /api/ingest` on port 8001 of the console's LAN address (`create_ingest_app()` from JAI-07). Create `docker/compose.lan.yaml`:
@@ -3539,7 +3540,7 @@ Expected output:
 
 ```text
 maxguard.api.app:create_ingest_app 192.168.50.20 8001
-error while interpolating services.maxguard-ingest.ports.[]: required variable MAXGUARD_LAN_ADDRESS is missing a value: set MAXGUARD_LAN_ADDRESS in docker/.env
+error while interpolating services.maxguard-ingest.environment.MAXGUARD_INGEST_TOKEN: required variable MAXGUARD_INGEST_TOKEN is missing a value: set MAXGUARD_INGEST_TOKEN in docker/.env
 ```
 
 *The first command shows the ingest app published only on the LAN address, port 8001. The second fails on purpose (exit code 1): without the two settings, Compose refuses to start the ingest container.*
@@ -3955,7 +3956,7 @@ Expected output:
 
 ```text
 .................                                                                            [100%]
-17 passed in 0.10s
+17 passed in 0.14s
 ```
 
 ```bash
@@ -3965,13 +3966,15 @@ pytest -m "not integration" -q
 Expected output:
 
 ```text
-............................................................................................ [ 19%]
-............................................................................................ [ 38%]
-.................................................s.......................................... [ 57%]
-............................................................................................ [ 76%]
-............................................................................................ [ 96%]
+............................................................................................ [ 13%]
+............................................................................................ [ 27%]
+............................................................................................ [ 41%]
+.........s.................................................................................. [ 55%]
+............................................................................................ [ 69%]
+............................................................................................ [ 83%]
+............................................................................................ [ 97%]
 ...................                                                                          [100%]
-478 passed, 1 skipped, 1 deselected in 7.46s
+662 passed, 1 skipped, 31 deselected in 12.43s
 ```
 
 **Step 7.** Add the rule's Home text (Jonattan reviews it) and ask Amory and Fiona whether a mapping row or ATT&CK row fits; add them in the same pull request if so.
@@ -4007,11 +4010,11 @@ A fingerprint list is only as trustworthy as its source, and copying a third-par
 
 ### JAK-10: NetFlow and IPFIX input
 
-**Due:** Spring S9-S11 (due Fri Apr 16, 2027) · **Milestone:** `S9-S11 Detect more` · **Needs first:** [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JAI-03](jaiden.md#jai-03-common-event-schema-the-normalizer-and-record-lookup) · **Kind:** design
+**Due:** Spring S9-S11 (due Fri Apr 16, 2027) · **Milestone:** `S9-S11 Detect more` · **Needs first:** [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest), [JAI-03](jaiden.md#jai-03-common-event-schema-the-normalizer-and-record-lookup), [AHM-06](ahmad.md#ahm-06-ip-timeline-and-device-inventory-pages) · **Kind:** code, tested
 
-**Issue labels:** `type:task` `phase:spring` `owner:jakub` `area:sensor`
+**Issue labels:** `type:task` `phase:spring` `owner:jakub` `area:sensor` `contract-change` `needs-hardware`
 
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
+> **Needs hardware.** Steps that use the Raspberry Pi, the switch or other devices were not run during planning; they are marked *not run — verify on hardware*.
 
 #### Goal
 
@@ -4019,7 +4022,7 @@ Let a router that exports NetFlow v5/v9 or IPFIX feed MaxGuard: a collector cont
 
 #### Prerequisites
 
-JAI-07 is merged. Ask Ahmad which collector to use if you prefer another one.
+JAI-07 is merged. This task adds a `source` value to the event schema, a contract change: the pull request needs Jaiden's review and Ahmad's approval.
 
 #### Steps
 
@@ -4034,17 +4037,1076 @@ git checkout -b jakub/netflow
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** Pick the collector: `netsampler/goflow2` (check the image tag, its license, and that it is published for arm64 and amd64; record it in `docs/DEPENDENCIES.md`). Write `docker/netflow-compose.yaml` that listens on UDP 2055 and writes JSON lines to `/data/netflow/`.
+**Step 2.** The collector is `netsampler/goflow2` (BSD-3-Clause, already in `docs/DEPENDENCIES.md`). Pin the version **and** the digest: on Docker Hub the tag `latest` still points at the old v1.3.8, not v2. Check the newest tag with `git ls-remote --tags https://github.com/netsampler/goflow2` (on October 8, 2026 it was `v2.2.7`, published for `linux/amd64` and `linux/arm64`). Create `docker/netflow-compose.yaml`:
 
-**Step 3.** Write `maxguard/adapters/netflow.py` with `NetflowAdapter`: `accepts()` is true for a folder of the collector's JSON files; `to_zeek_logs()` writes `conn.log` with `ts`, `uid` (a deterministic hash of the flow record), `id.orig_h`, `id.orig_p`, `id.resp_h`, `id.resp_p`, `proto`, `orig_bytes`, `resp_bytes`, `duration`, and `mg_source: netflow`.
+```yaml
+# NetFlow / IPFIX collector for MaxGuard (Jakub, JAK-10).
+#
+# A router on YOUR network exports NetFlow v5, NetFlow v9 or IPFIX to UDP port
+# 2055 of the computer that runs this file. goflow2 writes one JSON line per
+# flow to /data/netflow/goflow2.json; MaxGuard reads that folder:
+#
+#   maxguard analyze /data/netflow          (NetflowAdapter, maxguard/adapters/netflow.py)
+#
+# or upload one finished flow file on the dashboard (it then shows on the timeline).
+#
+# Once:   sudo mkdir -p /data/netflow && sudo chown 1000:1000 /data/netflow
+# Start:  MAXGUARD_NETFLOW_ADDRESS=192.168.50.20 docker compose -f docker/netflow-compose.yaml up -d
+# Stop:   docker compose -f docker/netflow-compose.yaml down    (the flow files stay)
+#
+# Settings (environment variables or docker/.env, which git ignores):
+#   MAXGUARD_NETFLOW_ADDRESS   this computer's LAN address that the router sends to (required)
+#   MAXGUARD_NETFLOW_DATA      the folder for the flow files (default /data/netflow)
+#   MAXGUARD_UID / MAXGUARD_GID  who owns the flow files (default 1000:1000, the first user)
+#
+# Start a new file (for example once an hour), so each analysis covers one period:
+#   mv /data/netflow/goflow2.json /data/netflow-done/2026-10-06-1400.json
+#   docker compose -f docker/netflow-compose.yaml kill -s HUP goflow2
+# goflow2 closes and reopens its output file when it gets SIGHUP.
+#
+# The collector only listens: it never sends anything to the router or anywhere else
+# (CLAUDE.md rules 1 and 5). Its built-in HTTP server (metrics) is switched off.
 
-**Step 4.** Add it to `ADAPTERS` in `maxguard/pipeline.py` and `netflow` as a `source` value in the normalizer (a contract change: label the pull request).
+services:
+  goflow2:
+    # v2.2.7 for linux/amd64 and linux/arm64 (Raspberry Pi 5). BSD-3-Clause.
+    # Pin the version tag: on Docker Hub "latest" is the old v1.3.8, not v2.
+    image: netsampler/goflow2:v2.2.7@sha256:b8fdc8f3666b05b0022ada3a3c8c50dcde97f7d19e3f42d050695fa0571fb952
+    command:
+      - "-listen=netflow://:2055"    # NetFlow v5, v9 and IPFIX; no sFlow
+      - "-format=json"
+      - "-transport=file"
+      - "-transport.file=/data/netflow/goflow2.json"
+      - "-addr="                     # empty: no HTTP server
+    ports:
+      - "${MAXGUARD_NETFLOW_ADDRESS:?set MAXGUARD_NETFLOW_ADDRESS (this computer's LAN address)}:2055:2055/udp"
+    volumes:
+      - ${MAXGUARD_NETFLOW_DATA:-/data/netflow}:/data/netflow
+    user: "${MAXGUARD_UID:-1000}:${MAXGUARD_GID:-1000}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+```
 
-**Step 5.** Write `tests/unit/test_netflow.py` with a few hand-written collector records using documentation addresses (RFC 5737, e.g. `192.0.2.10`): the conversion, the deterministic `uid`, and the normalizer reading the result.
+It listens on UDP 2055 of the address you give it, writes one JSON line per flow, runs as a normal user with a read-only file system and no capabilities, and its HTTP metrics server is switched off (`-addr=`), because nothing should be listening that MaxGuard does not need. Check it; the second command fails on purpose, because the listening address has no default:
 
-**Step 6.** Prove it end to end: a short Python script that sends NetFlow v5 packets (`struct`-packed header and records, fake addresses) to the collector on your laptop, then `maxguard analyze` on the output folder.
+```bash
+MAXGUARD_NETFLOW_ADDRESS=127.0.0.1 \
+  docker compose -f docker/netflow-compose.yaml config --format json | python -c "import json, sys; s = json.load(sys.stdin)['services']['goflow2']; print(s['image'].split('@')[0], s['user'], s['read_only'], s['cap_drop'], [(p['host_ip'], p['published'], p['protocol']) for p in s['ports']])"
+docker compose -f docker/netflow-compose.yaml config --quiet
+```
 
-**Step 7.** Commit, push, and open the pull request:
+Expected output:
+
+```text
+netsampler/goflow2:v2.2.7 1000:1000 True ['ALL'] [('127.0.0.1', '2055', 'udp')]
+error while interpolating services.goflow2.ports.[]: required variable MAXGUARD_NETFLOW_ADDRESS is missing a value: set MAXGUARD_NETFLOW_ADDRESS (this computer's LAN address)
+```
+
+**Step 3.** Create `maxguard/adapters/netflow.py`:
+
+```python
+"""NetflowAdapter: flow records from a router -> conn.log (Jakub, JAK-10).
+
+A router that exports NetFlow v5, NetFlow v9 or IPFIX sends its flow records
+over UDP to the goflow2 collector (docker/netflow-compose.yaml). goflow2 v2.2.7
+writes one JSON object per flow, one per line, for example (shortened):
+
+    {"type": "NETFLOW_V5", "time_received_ns": 1791323155565530742,
+     "sequence_num": 0, "sampling_rate": 0, "sampler_address": "203.0.113.1",
+     "time_flow_start_ns": 1791295190000000000, "time_flow_end_ns": 1791295192000000000,
+     "bytes": 900, "packets": 12, "src_addr": "192.0.2.10", "dst_addr": "198.51.100.20",
+     "proto": "TCP", "src_port": 49152, "dst_port": 23, "icmp_type": 0, "icmp_code": 0, ...}
+
+This adapter turns each flow into a record shaped like a line of Zeek's
+conn.log, plus "mg_source": "netflow", so the normalizer, the timeline and the
+inventory work unchanged. Rules that need the payload (cleartext protocols,
+TLS versions, certificates, JA4) find nothing, because a flow record has no
+payload.
+
+It accepts a folder of goflow2 JSON files (for example /data/netflow) or one
+such file (what the dashboard upload and POST /api/ingest receive).
+
+Differences from Zeek's conn.log, on purpose:
+- A flow is one direction only (A -> B); a Zeek connection has both. So
+  orig_bytes is the flow's byte count and resp_bytes is always 0; the answer
+  B -> A is a separate flow record.
+- There is no "service" (Zeek guesses it from the payload) and no conn_state.
+- Byte counts are what the router reported. With packet sampling
+  ("sampling_rate" > 1) the real traffic is about that many times larger.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import ipaddress
+import json
+from pathlib import Path
+
+# goflow2's "type" values for NetFlow v5, NetFlow v9 and IPFIX (its pb/flow.proto).
+# sFlow ("SFLOW_5") is left out: it carries sampled packets, not flow records.
+FLOW_TYPES = ("NETFLOW_V5", "NETFLOW_V9", "IPFIX")
+
+# goflow2 writes the protocol by name. Zeek's conn.log uses "tcp", "udp", "icmp"
+# (also for ICMPv6) and "unknown_transport" for everything else.
+ZEEK_PROTOS = {"TCP": "tcp", "UDP": "udp", "ICMP": "icmp", "IPv6-ICMP": "icmp"}
+
+# When the collector received the record is not part of the flow itself. Leaving
+# it out of the hash gives a flow the same uid however often it is read.
+NOT_PART_OF_FLOW = ("time_received_ns",)
+
+# A goflow2 line is about 1.2 KB. Reading at most this much of a first line means
+# a large binary file (a capture without newlines) is never read into memory.
+MAX_FIRST_LINE = 64 * 1024
+
+# The largest whole number the event store (SQLite INTEGER) can hold. goflow2's
+# counters and nanosecond times always fit; a bigger value was not written by goflow2.
+MAX_NUMBER = 2**63 - 1
+MAX_PORT = 65535
+
+
+def is_flow_record(rec: object) -> bool:
+    return isinstance(rec, dict) and rec.get("type") in FLOW_TYPES and "src_addr" in rec
+
+
+def first_record(path: Path) -> object:
+    """The first non-empty line of a file, parsed as JSON (None if it is not JSON)."""
+    with path.open("rb") as f:
+        for _ in range(10):  # skip a few blank lines, never scan a whole file
+            line = f.readline(MAX_FIRST_LINE)
+            if not line:
+                return None
+            if line.strip():
+                try:
+                    return json.loads(line)
+                except (ValueError, RecursionError):  # not JSON, not text, or absurdly nested
+                    return None
+    return None
+
+
+def is_flow_file(path: Path) -> bool:
+    return path.is_file() and is_flow_record(first_record(path))
+
+
+def flow_files(path: Path) -> list[Path]:
+    """The collector's files: the file itself, or a folder's *.json files that hold flows.
+
+    Sorted, so the order never depends on how the disk lists the folder."""
+    if path.is_file():
+        return [path]
+    return sorted(p for p in path.glob("*.json") if is_flow_file(p))
+
+
+def read_flows(path: Path) -> list[dict]:
+    """Every flow record of one file. Other lines (sFlow, a half-written last line) are skipped."""
+    flows = []
+    with path.open(errors="replace") as f:
+        for line in f:
+            try:
+                rec = json.loads(line)
+            except (ValueError, RecursionError):
+                continue  # the collector may still be writing the last line
+            if is_flow_record(rec):
+                flows.append(rec)
+    return flows
+
+
+def flow_uid(flow: dict) -> str:
+    """A deterministic uid: the same flow record always gets the same uid.
+
+    Zeek's uids are random ("C" + 17 characters); this one is "N" (for NetFlow)
+    + the first 17 hex digits of a SHA-256 of the record, so it has the same length."""
+    stable = {k: v for k, v in flow.items() if k not in NOT_PART_OF_FLOW}
+    text = json.dumps(stable, sort_keys=True, separators=(",", ":"))
+    return "N" + hashlib.sha256(text.encode()).hexdigest()[:17]
+
+
+def whole_number(value: object, largest: int = MAX_NUMBER) -> int:
+    """A count, port or time from a flow record: a whole number from 0 to largest.
+
+    goflow2 always writes these as JSON numbers; a missing one counts as 0.
+    Anything else (text, a list, 1e400, a negative or huge number) means the line
+    was not written by goflow2. ValueError then makes the caller skip the record,
+    so a damaged or hostile upload cannot crash the analysis."""
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= largest:
+        raise ValueError(f"not a whole number from 0 to {largest}: {value!r}")
+    return value
+
+
+def ip_text(value: object) -> str:
+    """An IPv4 or IPv6 address as text; ValueError for anything else.
+
+    The isinstance check matters: ipaddress also turns a plain number into an address."""
+    if not isinstance(value, str):
+        raise ValueError(f"not an IP address: {value!r}")
+    return str(ipaddress.ip_address(value))
+
+
+def seconds(nanoseconds: object) -> float:
+    """goflow2 times are nanoseconds since 1970; Zeek's are seconds with 6 decimals."""
+    return round(whole_number(nanoseconds) / 1e9, 6)
+
+
+def ports(flow: dict, proto: str) -> tuple[int, int]:
+    """Like Zeek: for ICMP the "ports" are the ICMP type and code."""
+    if proto != "icmp":
+        return (whole_number(flow.get("src_port"), MAX_PORT),
+                whole_number(flow.get("dst_port"), MAX_PORT))
+    if flow.get("type") == "NETFLOW_V5":
+        # NetFlow v5 has no ICMP fields: the usual exporter convention puts
+        # type * 256 + code in the destination port, and goflow2 passes that
+        # number on unchanged (its producer_nflegacy.go copies the port).
+        dst_port = whole_number(flow.get("dst_port"), MAX_PORT)
+        return dst_port // 256, dst_port % 256
+    return (whole_number(flow.get("icmp_type"), 255),
+            whole_number(flow.get("icmp_code"), 255))
+
+
+def to_conn(flow: dict) -> dict:
+    """One goflow2 flow record -> one conn.log-shaped record.
+
+    Raises ValueError if a field is not what goflow2 writes (see whole_number)."""
+    start = seconds(flow.get("time_flow_start_ns"))
+    end = seconds(flow.get("time_flow_end_ns"))
+    if start == 0:  # some exporters leave the flow times out
+        start = end = seconds(flow.get("time_received_ns"))
+    proto = ZEEK_PROTOS.get(str(flow.get("proto")), "unknown_transport")
+    orig_p, resp_p = ports(flow, proto)
+    return {
+        "ts": start,
+        "uid": flow_uid(flow),
+        "id.orig_h": ip_text(flow.get("src_addr")),
+        "id.orig_p": orig_p,
+        "id.resp_h": ip_text(flow.get("dst_addr")),
+        "id.resp_p": resp_p,
+        "proto": proto,
+        "duration": round(max(end - start, 0.0), 6),
+        "orig_bytes": whole_number(flow.get("bytes")),
+        "resp_bytes": 0,  # one direction only: the answer is its own flow record
+        "mg_source": "netflow",
+    }
+
+
+class NetflowAdapter:
+    name = "netflow"
+
+    def accepts(self, path: Path) -> bool:
+        """goflow2 output (a file, or a folder of files), and nothing else.
+
+        A Zeek log folder (it has conn.log) and a live sensor folder (it has
+        zeek/) belong to the other adapters, even if a .json file is in them.
+        A capture or an eve.json file fails the first-line check."""
+        if path.is_file():
+            return is_flow_file(path)
+        if not path.is_dir() or (path / "conn.log").exists() or (path / "zeek").is_dir():
+            return False
+        return bool(flow_files(path))
+
+    def to_zeek_logs(self, path: Path, workdir: Path) -> Path:
+        conns: dict[str, dict] = {}
+        for flow_file in flow_files(path):
+            for flow in read_flows(flow_file):
+                try:
+                    conn = to_conn(flow)
+                except (ValueError, RecursionError):
+                    continue  # not what goflow2 writes: skip it, like a half-written line
+                conns[conn["uid"]] = conn  # a record that appears twice is kept once
+        out = workdir / "zeek_logs"
+        out.mkdir(parents=True, exist_ok=True)
+        with (out / "conn.log").open("w") as f:
+            # Sorted by time, then uid: the same files always give the same conn.log.
+            for conn in sorted(conns.values(), key=lambda c: (c["ts"], c["uid"])):
+                f.write(json.dumps(conn) + "\n")
+        return out
+```
+
+Things to notice. A flow record has one direction, so `orig_bytes` is the flow's byte count and `resp_bytes` is 0; the answer is its own record. The `uid` is `N` plus 17 hex digits of a SHA-256 over the record without the time goflow2 received it, so the same flow always gets the same uid and a file copied twice is counted once. ICMP type and code go into the port fields, as Zeek does. `accepts()` also takes a single goflow2 file, recognised by its first line: the dashboard and `/api/ingest` save uploads under a random name with no `.json` suffix, so a folder can never arrive that way. It never takes a folder that has `conn.log` or `zeek/`, so it cannot steal a Zeek log folder or a sensor folder. An uploaded file is attacker-controlled, so every number and address is checked (`whole_number()`, `ip_text()`) and a damaged record is skipped, not fatal: before the security review, one bad line made the upload answer HTTP 500.
+
+**Step 4.** Add the adapter **last** in `ADAPTERS` in `maxguard/pipeline.py` (the other three always get the first look):
+
+```python
+"""The one function the CLI, the API, and the tests all call.
+
+analyze() turns a capture file or a folder of Zeek logs into a report dict
+(schema "maxguard.report/2", see docs/ARCHITECTURE.md). It never reads the
+clock, so the same input always gives the same report.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+from pathlib import Path
+
+import maxguard.rules  # noqa: F401  (importing registers every rule)
+from maxguard.adapters.live import LiveSensorAdapter
+from maxguard.adapters.netflow import NetflowAdapter
+from maxguard.adapters.pcap import PcapAdapter
+from maxguard.adapters.zeeklogs import ZeekLogAdapter
+from maxguard.mapping.loader import ATTACK, apply, load_all
+from maxguard.models import SEVERITIES, Finding
+from maxguard.rules.base import run_all
+
+# Order matters only for clarity: each adapter accepts a different kind of input
+# (a capture file; a folder with conn.log; a sensor folder with zeek/<interval>/;
+# a folder of goflow2 flow files without conn.log or zeek/). NetflowAdapter is last
+# so the other three always get the first look.
+ADAPTERS = [PcapAdapter(), ZeekLogAdapter(), LiveSensorAdapter(), NetflowAdapter()]
+REPO_MAPPINGS_DIR = Path(__file__).resolve().parent.parent / "mappings"
+
+
+class UnsupportedInput(ValueError):
+    pass
+
+
+class MappingsNotFound(RuntimeError):
+    pass
+
+
+def mappings_dir() -> Path:
+    """Where the mapping YAML files live: $MAXGUARD_MAPPINGS_DIR, else the repo's mappings/.
+
+    The Docker image copies mappings/ to /opt/maxguard/mappings and sets the variable.
+    """
+    folder = Path(os.environ.get("MAXGUARD_MAPPINGS_DIR", REPO_MAPPINGS_DIR))
+    if not any(folder.glob("*.yaml")):
+        raise MappingsNotFound(f"no mapping files (*.yaml) in {folder}; "
+                               "set MAXGUARD_MAPPINGS_DIR to the mappings/ folder")
+    return folder
+
+
+def pick_adapter(path: Path):
+    for adapter in ADAPTERS:
+        if adapter.accepts(path):
+            return adapter
+    raise UnsupportedInput(f"{path.name}: not a pcap/pcapng file, a Zeek log folder/archive, "
+                           "or a goflow2 flow file")
+
+
+def sha256_of(path: Path) -> str:
+    if path.is_dir():
+        return ""
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def sort_key(f: Finding):
+    return (SEVERITIES.index(f.severity), f.rule_id, f.src_ip, f.dst_ip, f.dst_port)
+
+
+def analyze(path, workdir, frameworks=None, explain=True, mapping_dir=None,
+            sensor_id=None) -> dict:
+    """1) pick adapter  2) get logs  3) run rules  4) apply mappings
+    5) build inventory and events  6) ask the local AI  7) return report dict
+
+    sensor_id names where the data came from in every event: by default "pcap" for
+    a capture and "import" for Zeek logs; the API passes the sensor's name for data
+    a sensor or host agent sent to POST /api/ingest."""
+    path, workdir = Path(path), Path(workdir)
+    adapter = pick_adapter(path)
+    log_dir = adapter.to_zeek_logs(path, workdir)
+
+    findings = sorted(run_all(log_dir), key=sort_key)
+
+    fw_files = load_all(Path(mapping_dir) if mapping_dir else mappings_dir())
+    apply(findings, fw_files, set(frameworks) if frameworks else None)
+
+    from maxguard.events.normalize import normalize
+    from maxguard.inventory import build as build_inventory
+    from maxguard.sensor.attribution import build_device_table
+
+    if sensor_id is None:
+        sensor_id = "pcap" if adapter.name == "pcap" else "import"
+    events = normalize(log_dir, sensor_id=sensor_id)
+    assets = build_inventory(log_dir, findings)
+
+    ai = {"status": "disabled", "model": None, "explained": 0, "dropped_sentences": 0,
+          "reason": None}
+    if explain:
+        from maxguard.ai.ollama_client import explain_all
+
+        ai = explain_all(findings, log_dir)
+
+    return {
+        "schema": "maxguard.report/2",
+        "input": {"name": path.name, "sha256": sha256_of(path), "adapter": adapter.name},
+        "tools": {"zeek": adapter.name == "pcap",
+                  "suricata": (log_dir / "eve.json").exists()},
+        "frameworks": [{"framework": fw["framework"], "version": fw["version"],
+                        "source": fw["source"]} for fw in fw_files if fw["framework"] != ATTACK],
+        "findings": [f.to_dict() for f in findings],
+        "assets": assets,
+        # MAC address, host name and DNS names per IP, from DHCP and DNS (JAK-08). The
+        # log folder is deleted after an upload, so the dashboard reads them from here.
+        "devices": build_device_table(log_dir),
+        "events": events,
+        "ai": ai,
+    }
+```
+
+and give flow records their own `source` in `maxguard/events/normalize.py` (the two new lines in `from_conn`):
+
+```python
+"""Common event schema (v2.0): Zeek logs + Suricata eve.json -> one list of events.
+
+Every event is a flat dict with exactly the keys in EVENT_KEYS, whatever tool
+wrote the record, so the timeline, the event store and the inventory never
+need to know Zeek's or Suricata's field names.
+
+The output only depends on the log files (no clock, no randomness) and is
+sorted by (ts, log, event_id), so the same logs always give the same list.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
+
+from maxguard.adapters.base import read_log
+from maxguard.ids import iso_to_epoch, record_id
+
+EVENT_KEYS = (
+    "event_id", "ts", "sensor_id", "source", "log", "kind", "uid", "community_id",
+    "src_ip", "dst_ip", "src_port", "dst_port", "proto", "service",
+    "bytes_out", "bytes_in", "device_mac", "summary", "ja4",
+)
+
+KNOWN_PROTOS = ("tcp", "udp", "icmp")
+
+
+# ---------- small helpers ----------
+
+def new_event(log: str, rec: dict, sensor_id: str, source: str, kind: str, ts: float) -> dict:
+    """An event with every key present; the converters below fill in what they know."""
+    return {
+        "event_id": record_id(log, rec), "ts": ts, "sensor_id": sensor_id,
+        "source": source, "log": log, "kind": kind, "uid": "", "community_id": "",
+        "src_ip": "", "dst_ip": "", "src_port": None, "dst_port": None,
+        "proto": "", "service": "", "bytes_out": 0, "bytes_in": 0,
+        "device_mac": "", "summary": "", "ja4": "",
+    }
+
+
+def as_int(value: object) -> int | None:
+    """Zeek JSON logs hold numbers, but logs converted from TSV hold strings ("443")."""
+    if value is None or value == "":
+        return None
+    return int(value)
+
+
+def as_list(value: object) -> list[str]:
+    """Zeek JSON logs hold lists, but TSV-converted logs hold one "a,b,c" string."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return value.split(",")
+    return [str(item) for item in value]
+
+
+def proto_name(value: object) -> str:
+    """"tcp", "udp", "icmp" or "". Suricata writes "TCP" and "IPv6-ICMP"."""
+    name = str(value or "").lower()
+    if name == "ipv6-icmp":
+        return "icmp"
+    return name if name in KNOWN_PROTOS else ""
+
+
+def words(*parts: object) -> str:
+    """Join the non-empty parts with spaces (for the short summary text)."""
+    return " ".join(str(part) for part in parts if part not in (None, ""))
+
+
+# ---------- Zeek logs ----------
+
+def zeek_event(log: str, rec: dict, sensor_id: str, kind: str, service: str) -> dict:
+    """The fields that conn, dns, http and ssl logs share: uid and the id.* 4-tuple."""
+    event = new_event(log, rec, sensor_id, "zeek", kind, float(rec["ts"]))
+    event["uid"] = rec.get("uid") or ""
+    event["community_id"] = rec.get("community_id") or ""
+    event["src_ip"] = rec.get("id.orig_h") or ""
+    event["dst_ip"] = rec.get("id.resp_h") or ""
+    event["src_port"] = as_int(rec.get("id.orig_p"))
+    event["dst_port"] = as_int(rec.get("id.resp_p"))
+    event["proto"] = proto_name(rec.get("proto"))  # http.log/ssl.log: filled from conn.log later
+    event["service"] = service
+    return event
+
+
+def from_conn(rec: dict, sensor_id: str) -> dict:
+    event = zeek_event("conn.log", rec, sensor_id, "conn", rec.get("service") or "")
+    if rec.get("mg_source") == "netflow":  # a router's flow record (JAK-10), not Zeek
+        event["source"] = "netflow"
+    # Only conn events carry byte counts, so adding up bytes never counts twice.
+    event["bytes_out"] = as_int(rec.get("orig_bytes")) or 0
+    event["bytes_in"] = as_int(rec.get("resp_bytes")) or 0
+    event["summary"] = words(f"{event['proto']}/{event['dst_port']}", event["service"],
+                             rec.get("conn_state"), f"out={event['bytes_out']}",
+                             f"in={event['bytes_in']}")
+    return event
+
+
+def from_dns(rec: dict, sensor_id: str) -> dict:
+    event = zeek_event("dns.log", rec, sensor_id, "dns", "dns")
+    answers = ",".join(as_list(rec.get("answers")))
+    event["summary"] = words(rec.get("qtype_name"), rec.get("query"),
+                             rec.get("rcode_name"), answers)
+    return event
+
+
+def from_http(rec: dict, sensor_id: str) -> dict:
+    event = zeek_event("http.log", rec, sensor_id, "http", "http")
+    event["summary"] = words(rec.get("method"), f"{rec.get('host') or ''}{rec.get('uri') or ''}")
+    return event
+
+
+def from_ssl(rec: dict, sensor_id: str) -> dict:
+    # Zeek calls the TLS service "ssl" (conn.log service "ssl"), the event kind is "tls".
+    event = zeek_event("ssl.log", rec, sensor_id, "tls", "ssl")
+    event["summary"] = words(rec.get("version"), rec.get("server_name"), rec.get("cipher"))
+    return event
+
+
+def from_dhcp(rec: dict, sensor_id: str) -> dict:
+    # dhcp.log is different: no id.* fields and no ports (Zeek does not log them),
+    # and one record groups several packets, so it has a set of uids.
+    event = new_event("dhcp.log", rec, sensor_id, "zeek", "dhcp", float(rec["ts"]))
+    uids = sorted(as_list(rec.get("uids")))  # sorted: a set has no fixed order
+    event["uid"] = uids[0] if uids else ""
+    # Before the lease the client has no address yet; the assigned one is its new IP.
+    event["src_ip"] = rec.get("client_addr") or rec.get("assigned_addr") or ""
+    event["dst_ip"] = rec.get("server_addr") or ""
+    event["proto"] = "udp"
+    event["service"] = "dhcp"
+    event["device_mac"] = rec.get("mac") or ""
+    assigned = rec.get("assigned_addr")
+    event["summary"] = words("/".join(as_list(rec.get("msg_types"))), event["device_mac"],
+                             rec.get("host_name"), f"-> {assigned}" if assigned else "")
+    return event
+
+
+ZEEK_LOGS: dict[str, Callable[[dict, str], dict]] = {
+    "conn.log": from_conn,
+    "dns.log": from_dns,
+    "http.log": from_http,
+    "ssl.log": from_ssl,
+    "dhcp.log": from_dhcp,
+}
+
+
+# ---------- Suricata eve.json ----------
+
+def eve_event(rec: dict, sensor_id: str, kind: str) -> dict:
+    """The fields every eve.json record shares. Suricata has no Zeek uid."""
+    event = new_event("eve.json", rec, sensor_id, "suricata", kind,
+                      iso_to_epoch(rec["timestamp"]))
+    event["community_id"] = rec.get("community_id") or ""
+    event["src_ip"] = rec.get("src_ip") or ""
+    event["dst_ip"] = rec.get("dest_ip") or ""
+    event["src_port"] = as_int(rec.get("src_port"))
+    event["dst_port"] = as_int(rec.get("dest_port"))
+    event["proto"] = proto_name(rec.get("proto"))
+    event["service"] = rec.get("app_proto") or ""
+    return event
+
+
+def from_eve_alert(rec: dict, sensor_id: str) -> dict:
+    event = eve_event(rec, sensor_id, "alert")
+    alert = rec.get("alert") or {}
+    event["summary"] = words(alert.get("signature"), f"(sid {alert.get('signature_id')})")
+    return event
+
+
+def from_eve_tls(rec: dict, sensor_id: str) -> dict:
+    # Kept even though Zeek's ssl.log covers TLS: only Suricata computes JA4.
+    event = eve_event(rec, sensor_id, "tls")
+    tls = rec.get("tls") or {}
+    event["service"] = event["service"] or "tls"
+    event["ja4"] = tls.get("ja4") or ""
+    event["summary"] = words(tls.get("version"), tls.get("sni"),
+                             f"ja4={event['ja4']}" if event["ja4"] else "")
+    return event
+
+
+def dns_question(dns: dict) -> dict:
+    """Suricata 7 (eve dns version 2) puts rrname/rrtype at the top of "dns";
+    Suricata 8 (version 3) puts them in a "queries" list."""
+    if "rrname" in dns:
+        return dns
+    queries = dns.get("queries") or [{}]
+    return queries[0]
+
+
+def from_eve_dns(rec: dict, sensor_id: str) -> dict:
+    event = eve_event(rec, sensor_id, "dns")
+    dns = rec.get("dns") or {}
+    question = dns_question(dns)
+    answers = ",".join(str(a.get("rdata", "")) for a in dns.get("answers") or [])
+    event["service"] = event["service"] or "dns"
+    event["summary"] = words(dns.get("type"), question.get("rrtype"), question.get("rrname"),
+                             dns.get("rcode"), answers)
+    return event
+
+
+def from_eve_dhcp(rec: dict, sensor_id: str) -> dict:
+    event = eve_event(rec, sensor_id, "dhcp")
+    dhcp = rec.get("dhcp") or {}
+    assigned = dhcp.get("assigned_ip")
+    event["service"] = event["service"] or "dhcp"
+    event["device_mac"] = dhcp.get("client_mac") or ""
+    event["summary"] = words(dhcp.get("dhcp_type"), event["device_mac"], dhcp.get("hostname"),
+                             f"-> {assigned}" if assigned else "")
+    return event
+
+
+# "flow" is left out on purpose: Zeek's conn.log already has one event per connection.
+EVE_TYPES: dict[str, Callable[[dict, str], dict]] = {
+    "alert": from_eve_alert,
+    "tls": from_eve_tls,
+    "dns": from_eve_dns,
+    "dhcp": from_eve_dhcp,
+}
+
+
+# ---------- putting it together ----------
+
+def fill_from_conn(events: list[dict]) -> None:
+    """Zeek writes community_id only in conn.log, and http.log/ssl.log have no proto.
+    Copy both from the conn event of the same connection (same uid), so every Zeek
+    event lines up with the Suricata events of that connection."""
+    conns = {e["uid"]: e for e in events if e["log"] == "conn.log" and e["uid"]}
+    for event in events:
+        conn = conns.get(event["uid"])
+        if conn is not None:
+            event["community_id"] = event["community_id"] or conn["community_id"]
+            event["proto"] = event["proto"] or conn["proto"]
+
+
+def normalize(log_dir: Path, sensor_id: str) -> list[dict]:
+    """One event per record of the logs we know. Missing log files are simply skipped."""
+    log_dir = Path(log_dir)
+    events: list[dict] = []
+    for log_name, convert in ZEEK_LOGS.items():
+        for rec in read_log(log_dir, log_name):
+            events.append(convert(rec, sensor_id))
+    for rec in read_log(log_dir, "eve.json"):
+        convert = EVE_TYPES.get(rec.get("event_type"))
+        if convert is not None:
+            events.append(convert(rec, sensor_id))
+    fill_from_conn(events)
+    events.sort(key=lambda e: (e["ts"], e["log"], e["event_id"]))
+    return events
+```
+
+**Step 5.** Create the test data `tests/fixtures/netflow/goflow2.json` (real goflow2 v2.2.7 output from the generator below, documentation addresses only):
+
+```json
+{"type":"NETFLOW_V5","time_received_ns":1791495640783352502,"sequence_num":0,"sampling_rate":0,"sampler_address":"203.0.113.1","time_flow_start_ns":1791295190000000000,"time_flow_end_ns":1791295192000000000,"bytes":900,"packets":12,"src_addr":"192.0.2.10","dst_addr":"198.51.100.20","etype":"IPv4","proto":"TCP","src_port":49152,"dst_port":23,"in_if":1,"out_if":2,"src_mac":"00:00:00:00:00:00","dst_mac":"00:00:00:00:00:00","src_vlan":0,"dst_vlan":0,"vlan_id":0,"ip_tos":0,"forwarding_status":0,"ip_ttl":0,"ip_flags":0,"tcp_flags":27,"icmp_type":0,"icmp_code":0,"ipv6_flow_label":0,"fragment_id":0,"fragment_offset":0,"src_as":0,"dst_as":0,"next_hop":"0.0.0.0","next_hop_as":0,"src_net":"192.0.2.0/24","dst_net":"198.51.100.0/24","bgp_next_hop":"","bgp_communities":[],"as_path":[],"mpls_ttl":[],"mpls_label":[],"mpls_ip":[],"observation_domain_id":0,"observation_point_id":0,"layer_stack":[],"layer_size":[],"ipv6_routing_header_addresses":[],"ipv6_routing_header_seg_left":0}
+{"type":"NETFLOW_V5","time_received_ns":1791495640784165231,"sequence_num":2,"sampling_rate":0,"sampler_address":"203.0.113.1","time_flow_start_ns":1791295195000000000,"time_flow_end_ns":1791295195500000000,"bytes":640,"packets":6,"src_addr":"192.0.2.10","dst_addr":"198.51.100.20","etype":"IPv4","proto":"TCP","src_port":49153,"dst_port":80,"in_if":1,"out_if":2,"src_mac":"00:00:00:00:00:00","dst_mac":"00:00:00:00:00:00","src_vlan":0,"dst_vlan":0,"vlan_id":0,"ip_tos":0,"forwarding_status":0,"ip_ttl":0,"ip_flags":0,"tcp_flags":27,"icmp_type":0,"icmp_code":0,"ipv6_flow_label":0,"fragment_id":0,"fragment_offset":0,"src_as":0,"dst_as":0,"next_hop":"0.0.0.0","next_hop_as":0,"src_net":"192.0.2.0/24","dst_net":"198.51.100.0/24","bgp_next_hop":"","bgp_communities":[],"as_path":[],"mpls_ttl":[],"mpls_label":[],"mpls_ip":[],"observation_domain_id":0,"observation_point_id":0,"layer_stack":[],"layer_size":[],"ipv6_routing_header_addresses":[],"ipv6_routing_header_seg_left":0}
+{"type":"NETFLOW_V5","time_received_ns":1791495640783352502,"sequence_num":0,"sampling_rate":0,"sampler_address":"203.0.113.1","time_flow_start_ns":1791295190010000000,"time_flow_end_ns":1791295192000000000,"bytes":1400,"packets":10,"src_addr":"198.51.100.20","dst_addr":"192.0.2.10","etype":"IPv4","proto":"TCP","src_port":23,"dst_port":49152,"in_if":1,"out_if":2,"src_mac":"00:00:00:00:00:00","dst_mac":"00:00:00:00:00:00","src_vlan":0,"dst_vlan":0,"vlan_id":0,"ip_tos":0,"forwarding_status":0,"ip_ttl":0,"ip_flags":0,"tcp_flags":27,"icmp_type":0,"icmp_code":0,"ipv6_flow_label":0,"fragment_id":0,"fragment_offset":0,"src_as":0,"dst_as":0,"next_hop":"0.0.0.0","next_hop_as":0,"src_net":"198.51.100.0/24","dst_net":"192.0.2.0/24","bgp_next_hop":"","bgp_communities":[],"as_path":[],"mpls_ttl":[],"mpls_label":[],"mpls_ip":[],"observation_domain_id":0,"observation_point_id":0,"layer_stack":[],"layer_size":[],"ipv6_routing_header_addresses":[],"ipv6_routing_header_seg_left":0}
+{"type":"NETFLOW_V5","time_received_ns":1791495640784165231,"sequence_num":2,"sampling_rate":0,"sampler_address":"203.0.113.1","time_flow_start_ns":1791295196000000000,"time_flow_end_ns":1791295196000000000,"bytes":60,"packets":1,"src_addr":"192.0.2.10","dst_addr":"198.51.100.53","etype":"IPv4","proto":"UDP","src_port":40000,"dst_port":53,"in_if":1,"out_if":2,"src_mac":"00:00:00:00:00:00","dst_mac":"00:00:00:00:00:00","src_vlan":0,"dst_vlan":0,"vlan_id":0,"ip_tos":0,"forwarding_status":0,"ip_ttl":0,"ip_flags":0,"tcp_flags":0,"icmp_type":0,"icmp_code":0,"ipv6_flow_label":0,"fragment_id":0,"fragment_offset":0,"src_as":0,"dst_as":0,"next_hop":"0.0.0.0","next_hop_as":0,"src_net":"192.0.2.0/24","dst_net":"198.51.100.0/24","bgp_next_hop":"","bgp_communities":[],"as_path":[],"mpls_ttl":[],"mpls_label":[],"mpls_ip":[],"observation_domain_id":0,"observation_point_id":0,"layer_stack":[],"layer_size":[],"ipv6_routing_header_addresses":[],"ipv6_routing_header_seg_left":0}
+{"type":"NETFLOW_V5","time_received_ns":1791495640784165231,"sequence_num":2,"sampling_rate":0,"sampler_address":"203.0.113.1","time_flow_start_ns":1791295197000000000,"time_flow_end_ns":1791295197000000000,"bytes":84,"packets":1,"src_addr":"192.0.2.10","dst_addr":"198.51.100.20","etype":"IPv4","proto":"ICMP","src_port":0,"dst_port":2048,"in_if":1,"out_if":2,"src_mac":"00:00:00:00:00:00","dst_mac":"00:00:00:00:00:00","src_vlan":0,"dst_vlan":0,"vlan_id":0,"ip_tos":0,"forwarding_status":0,"ip_ttl":0,"ip_flags":0,"tcp_flags":0,"icmp_type":0,"icmp_code":0,"ipv6_flow_label":0,"fragment_id":0,"fragment_offset":0,"src_as":0,"dst_as":0,"next_hop":"0.0.0.0","next_hop_as":0,"src_net":"192.0.2.0/24","dst_net":"198.51.100.0/24","bgp_next_hop":"","bgp_communities":[],"as_path":[],"mpls_ttl":[],"mpls_label":[],"mpls_ip":[],"observation_domain_id":0,"observation_point_id":0,"layer_stack":[],"layer_size":[],"ipv6_routing_header_addresses":[],"ipv6_routing_header_seg_left":0}
+{"type":"NETFLOW_V9","time_received_ns":1791495640785328329,"sequence_num":0,"sampling_rate":0,"sampler_address":"203.0.113.1","time_flow_start_ns":1791295192000000000,"time_flow_end_ns":1791295199000000000,"bytes":4200,"packets":30,"src_addr":"192.0.2.12","dst_addr":"198.51.100.22","etype":"IPv4","proto":"TCP","src_port":50022,"dst_port":22,"in_if":0,"out_if":0,"src_mac":"00:00:00:00:00:00","dst_mac":"00:00:00:00:00:00","src_vlan":0,"dst_vlan":0,"vlan_id":0,"ip_tos":0,"forwarding_status":0,"ip_ttl":0,"ip_flags":0,"tcp_flags":0,"icmp_type":0,"icmp_code":0,"ipv6_flow_label":0,"fragment_id":0,"fragment_offset":0,"src_as":0,"dst_as":0,"next_hop":"","next_hop_as":0,"src_net":"0.0.0.0/0","dst_net":"0.0.0.0/0","bgp_next_hop":"","bgp_communities":[],"as_path":[],"mpls_ttl":[],"mpls_label":[],"mpls_ip":[],"observation_domain_id":1,"observation_point_id":0,"layer_stack":[],"layer_size":[],"ipv6_routing_header_addresses":[],"ipv6_routing_header_seg_left":0}
+{"type":"IPFIX","time_received_ns":1791495640785661074,"sequence_num":0,"sampling_rate":0,"sampler_address":"203.0.113.1","time_flow_start_ns":1791295195000000000,"time_flow_end_ns":1791295198000000000,"bytes":5200,"packets":14,"src_addr":"192.0.2.11","dst_addr":"203.0.113.5","etype":"IPv4","proto":"TCP","src_port":50000,"dst_port":443,"in_if":0,"out_if":0,"src_mac":"00:00:00:00:00:00","dst_mac":"00:00:00:00:00:00","src_vlan":0,"dst_vlan":0,"vlan_id":0,"ip_tos":0,"forwarding_status":0,"ip_ttl":0,"ip_flags":0,"tcp_flags":0,"icmp_type":0,"icmp_code":0,"ipv6_flow_label":0,"fragment_id":0,"fragment_offset":0,"src_as":0,"dst_as":0,"next_hop":"","next_hop_as":0,"src_net":"0.0.0.0/0","dst_net":"0.0.0.0/0","bgp_next_hop":"","bgp_communities":[],"as_path":[],"mpls_ttl":[],"mpls_label":[],"mpls_ip":[],"observation_domain_id":1,"observation_point_id":0,"layer_stack":[],"layer_size":[],"ipv6_routing_header_addresses":[],"ipv6_routing_header_seg_left":0}
+```
+
+and the tests `tests/unit/test_netflow.py`:
+
+```python
+"""Tests for NetflowAdapter (Jakub, JAK-10).
+
+tests/fixtures/netflow/goflow2.json is real goflow2 v2.2.7 output for flows sent
+by a small generator (2 NetFlow v5 packets, 1 NetFlow v9, 1 IPFIX) with
+documentation addresses only (RFC 5737). The collector's own container address
+was replaced by 203.0.113.1.
+"""
+
+from __future__ import annotations
+
+import json
+import shutil
+from pathlib import Path
+
+import pytest
+
+from maxguard.adapters.base import read_log
+from maxguard.adapters.netflow import NetflowAdapter, flow_uid, to_conn
+from maxguard.events.normalize import normalize
+from maxguard.pipeline import analyze, pick_adapter
+
+FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "netflow" / "goflow2.json"
+TELNET_FLOW = {
+    "type": "NETFLOW_V5", "time_received_ns": 1791323155565530742, "sequence_num": 0,
+    "sampling_rate": 0, "sampler_address": "203.0.113.1",
+    "time_flow_start_ns": 1791295190000000000, "time_flow_end_ns": 1791295192000000000,
+    "bytes": 900, "packets": 12, "src_addr": "192.0.2.10", "dst_addr": "198.51.100.20",
+    "etype": "IPv4", "proto": "TCP", "src_port": 49152, "dst_port": 23,
+    "icmp_type": 0, "icmp_code": 0,
+}
+
+
+def flow_folder(tmp_path: Path) -> Path:
+    folder = tmp_path / "netflow"
+    folder.mkdir()
+    shutil.copy(FIXTURE, folder / "goflow2.json")
+    return folder
+
+
+def test_one_flow_becomes_a_conn_record():
+    assert to_conn(TELNET_FLOW) == {
+        "ts": 1791295190.0,
+        "uid": flow_uid(TELNET_FLOW),
+        "id.orig_h": "192.0.2.10", "id.orig_p": 49152,
+        "id.resp_h": "198.51.100.20", "id.resp_p": 23,
+        "proto": "tcp", "duration": 2.0,
+        "orig_bytes": 900, "resp_bytes": 0,
+        "mg_source": "netflow",
+    }
+
+
+def test_uid_is_deterministic_and_ignores_the_receive_time():
+    again = dict(TELNET_FLOW, time_received_ns=1791399999000000000)  # read again later
+    other = dict(TELNET_FLOW, bytes=901)  # a different flow
+    assert flow_uid(TELNET_FLOW) == flow_uid(dict(TELNET_FLOW)) == flow_uid(again)
+    assert flow_uid(other) != flow_uid(TELNET_FLOW)
+    assert flow_uid(TELNET_FLOW).startswith("N") and len(flow_uid(TELNET_FLOW)) == 18
+
+
+def test_netflow_v5_icmp_type_and_code_come_from_the_destination_port():
+    ping = dict(TELNET_FLOW, proto="ICMP", src_port=0, dst_port=8 * 256 + 0)  # echo request
+    conn = to_conn(ping)
+    assert (conn["proto"], conn["id.orig_p"], conn["id.resp_p"]) == ("icmp", 8, 0)
+
+
+def test_ipfix_icmp_uses_the_icmp_fields():
+    ping = dict(TELNET_FLOW, type="IPFIX", proto="ICMP", dst_port=0, icmp_type=3, icmp_code=1)
+    conn = to_conn(ping)
+    assert (conn["id.orig_p"], conn["id.resp_p"]) == (3, 1)
+
+
+def test_accepts_a_goflow2_folder_and_a_single_file(tmp_path):
+    folder = flow_folder(tmp_path)
+    assert NetflowAdapter().accepts(folder)
+    assert NetflowAdapter().accepts(folder / "goflow2.json")
+    assert pick_adapter(folder).name == "netflow"
+
+
+def test_does_not_steal_other_inputs(tmp_path, fixture_dir, pcap_file):
+    adapter = NetflowAdapter()
+    zeek_folder = fixture_dir("telnet")  # conn.log + eve.json
+    assert not adapter.accepts(zeek_folder)
+    assert not adapter.accepts(zeek_folder / "eve.json")
+    assert not adapter.accepts(pcap_file("telnet"))
+    # A Zeek log folder that also holds a goflow2 file still belongs to ZeekLogAdapter.
+    mixed = flow_folder(tmp_path)
+    shutil.copy(zeek_folder / "conn.log", mixed / "conn.log")
+    assert not adapter.accepts(mixed)
+    assert pick_adapter(mixed).name == "zeek-logs"
+    # A live sensor folder (zeek/<interval>/) belongs to LiveSensorAdapter.
+    sensor = tmp_path / "sensor"
+    (sensor / "zeek" / "2026-10-06-1400").mkdir(parents=True)
+    shutil.copy(FIXTURE, sensor / "goflow2.json")
+    assert not adapter.accepts(sensor)
+    assert pick_adapter(sensor).name == "live"
+    # An empty folder and a folder of other JSON are not flows.
+    other = tmp_path / "other"
+    other.mkdir()
+    assert not adapter.accepts(other)
+    (other / "settings.json").write_text('{"type": "settings"}\n')
+    assert not adapter.accepts(other)
+
+
+def test_to_zeek_logs_writes_a_sorted_conn_log(tmp_path):
+    log_dir = NetflowAdapter().to_zeek_logs(flow_folder(tmp_path), tmp_path / "work")
+    records = list(read_log(log_dir, "conn.log"))
+    assert len(records) == 7  # 5 NetFlow v5 + 1 NetFlow v9 + 1 IPFIX
+    assert [r["ts"] for r in records] == sorted(r["ts"] for r in records)
+    assert {r["mg_source"] for r in records} == {"netflow"}
+    ssh = [r for r in records if r["id.resp_p"] == 22]  # the NetFlow v9 flow
+    assert ssh[0]["id.orig_h"] == "192.0.2.12" and ssh[0]["orig_bytes"] == 4200
+
+
+def test_same_files_give_the_same_conn_log(tmp_path):
+    folder = flow_folder(tmp_path)
+    first = NetflowAdapter().to_zeek_logs(folder, tmp_path / "a") / "conn.log"
+    second = NetflowAdapter().to_zeek_logs(folder, tmp_path / "b") / "conn.log"
+    assert first.read_bytes() == second.read_bytes()
+
+
+def test_duplicates_and_a_half_written_line_are_skipped(tmp_path):
+    folder = flow_folder(tmp_path)
+    lines = FIXTURE.read_text().splitlines()
+    # The same records again in a second file, then a line goflow2 is still writing.
+    (folder / "goflow2-copy.json").write_text("\n".join(lines) + "\n" + lines[0][:40])
+    log_dir = NetflowAdapter().to_zeek_logs(folder, tmp_path / "work")
+    assert len(list(read_log(log_dir, "conn.log"))) == 7
+
+
+def test_normalizer_reads_the_result_as_netflow(tmp_path):
+    log_dir = NetflowAdapter().to_zeek_logs(flow_folder(tmp_path), tmp_path / "work")
+    events = normalize(log_dir, sensor_id="router")
+    assert len(events) == 7
+    assert {(e["source"], e["kind"], e["sensor_id"]) for e in events} == {
+        ("netflow", "conn", "router")}
+    telnet = [e for e in events if e["dst_port"] == 23][0]
+    assert (telnet["src_ip"], telnet["dst_ip"], telnet["proto"]) == (
+        "192.0.2.10", "198.51.100.20", "tcp")
+    assert (telnet["bytes_out"], telnet["bytes_in"]) == (900, 0)
+
+
+def test_zeek_conn_records_stay_zeek(fixture_dir):
+    events = normalize(fixture_dir("telnet"), sensor_id="pcap")
+    assert {e["source"] for e in events if e["log"] == "conn.log"} == {"zeek"}
+
+
+def test_analyze_flow_only_data(tmp_path):
+    report = analyze(flow_folder(tmp_path), tmp_path / "work", explain=False)
+    assert report["input"]["adapter"] == "netflow"
+    assert report["findings"] == []  # no payload: no payload rule can fire
+    assert len(report["events"]) == 7
+    assert report["tools"] == {"zeek": False, "suricata": False}
+
+
+def test_uploaded_flow_file_reaches_the_timeline(tmp_path):
+    # The dashboard upload (and POST /api/ingest) store the file without its name,
+    # so NetflowAdapter recognises one goflow2 file by its first line.
+    from fastapi.testclient import TestClient
+
+    from maxguard.api.app import create_app
+
+    client = TestClient(create_app(tmp_path / "data", explain=False))
+    with FIXTURE.open("rb") as f:
+        reply = client.post("/api/analyses", files={"file": ("goflow2.json", f)})
+    assert reply.status_code == 200, reply.text
+    assert reply.json()["findings"] == 0
+    events = client.get("/api/events", params={"ip": "192.0.2.10"}).json()
+    assert len(events) == 5 and {e["source"] for e in events} == {"netflow"}  # 4 out, 1 in
+
+
+def test_damaged_records_are_skipped_not_fatal(tmp_path):
+    # An upload is untrusted: a record goflow2 would never write is skipped, the
+    # good records still arrive, and nothing raises (a crash would be a 500).
+    bad_records = [
+        dict(TELNET_FLOW, bytes="900"),                 # text, not a number
+        dict(TELNET_FLOW, dst_port=[23]),               # a list
+        dict(TELNET_FLOW, bytes=2**70),                 # too large for the event store
+        dict(TELNET_FLOW, time_flow_start_ns=-5),       # negative time
+        dict(TELNET_FLOW, src_addr={"ip": "192.0.2.10"}),
+        dict(TELNET_FLOW, dst_addr=None),
+        dict(TELNET_FLOW, src_addr="not an address"),
+    ]
+    lines = [json.dumps(TELNET_FLOW)] + [json.dumps(r) for r in bad_records]
+    lines += ['{"type": "IPFIX", "src_addr": "192.0.2.1", "bytes": 1e400}',
+              "[" * 100_000 + "]" * 100_000]  # deeper than Python's recursion limit
+    upload = tmp_path / "upload"
+    upload.write_text("\n".join(lines) + "\n")
+    assert NetflowAdapter().accepts(upload)
+    records = list(read_log(NetflowAdapter().to_zeek_logs(upload, tmp_path / "w"), "conn.log"))
+    assert [r["uid"] for r in records] == [flow_uid(TELNET_FLOW)]
+
+
+def test_icmp_type_and_code_must_fit_in_a_byte():
+    with pytest.raises(ValueError):
+        to_conn(dict(TELNET_FLOW, type="IPFIX", proto="ICMP", icmp_type=300))
+
+
+def test_uid_does_not_depend_on_the_order_of_the_fields():
+    # Another goflow2 version may write the same fields in another order.
+    reordered = dict(reversed(list(TELNET_FLOW.items())))
+    assert flow_uid(reordered) == flow_uid(TELNET_FLOW)
+
+
+def test_flow_without_flow_times_uses_the_receive_time():
+    no_times = dict(TELNET_FLOW, time_flow_start_ns=0, time_flow_end_ns=0)
+    conn = to_conn(no_times)
+    assert (conn["ts"], conn["duration"]) == (1791323155.565531, 0.0)
+
+
+def test_sflow_and_other_json_with_src_addr_are_not_flows(tmp_path):
+    sflow = dict(TELNET_FLOW, type="SFLOW_5")  # sampled packets, not flow records
+    for name, record in [("sflow", sflow), ("other", {"src_addr": "192.0.2.10"})]:
+        path = tmp_path / name
+        path.write_text(json.dumps(record) + "\n")
+        assert not NetflowAdapter().accepts(path)
+```
+
+Run them with the tests of the two files you changed:
+
+```bash
+pytest tests/unit/test_netflow.py tests/unit/test_normalize.py tests/unit/test_pipeline.py -q
+```
+
+Expected output:
+
+```text
+....................................................................                         [100%]
+68 passed in 1.21s
+```
+
+**Step 6.** Create the flow generator `scripts/send_test_flows.py`. It packs NetFlow v5, v9 and IPFIX packets by hand with `struct`, so you can see exactly what a router sends:
+
+```python
+"""Send a few made-up flow records to a NetFlow collector (Jakub, JAK-10 step 6).
+
+NetFlow v5, NetFlow v9 and IPFIX, each with its own header. Only documentation
+addresses (RFC 5737). Fixed times, so every run sends the same bytes. Send them
+only to your own collector (docker/netflow-compose.yaml): the records are fake.
+
+    python3 scripts/send_test_flows.py <collector-host> [port]
+"""
+
+from __future__ import annotations
+
+import socket
+import struct
+import sys
+
+EXPORT_TIME = 1791295200  # 2026-10-06 14:00:00 UTC
+UPTIME_MS = 600_000       # the router has been up for 10 minutes
+TCP, UDP, ICMP = 6, 17, 1
+
+
+def ip(text: str) -> bytes:
+    return socket.inet_aton(text)
+
+
+# ---------- NetFlow v5 (fixed layout: 24-byte header, 48-byte records) ----------
+
+def v5_record(src: str, dst: str, sport: int, dport: int, proto: int,
+              packets: int, octets: int, first_ms: int, last_ms: int) -> bytes:
+    """One NetFlow v5 flow record. first/last are router uptimes in milliseconds."""
+    tcp_flags = 0x1B if proto == TCP else 0  # FIN SYN PSH ACK
+    return struct.pack("!4s4s4sHHIIIIHHBBBBHHBBH",
+                       ip(src), ip(dst), ip("0.0.0.0"), 1, 2,  # next hop, in/out interface
+                       packets, octets, first_ms, last_ms,
+                       sport, dport, 0, tcp_flags, proto, 0,   # pad, flags, protocol, ToS
+                       0, 0, 24, 24, 0)                        # AS numbers, masks, pad
+
+
+def v5_packet(records: list[bytes], sequence: int) -> bytes:
+    header = struct.pack("!HHIIIIBBH", 5, len(records), UPTIME_MS, EXPORT_TIME, 0,
+                         sequence, 0, 0, 0)
+    return header + b"".join(records)
+
+
+# ---------- NetFlow v9 (RFC 3954) and IPFIX (RFC 7011): template, then data ----------
+
+# (field type, length): IPv4 src, IPv4 dst, src port, dst port, protocol, bytes, packets
+V9_FIELDS = [(8, 4), (12, 4), (7, 2), (11, 2), (4, 1), (1, 4), (2, 4), (22, 4), (21, 4)]
+#                                                        FIRST_SWITCHED^  ^LAST_SWITCHED
+IPFIX_FIELDS = [(8, 4), (12, 4), (7, 2), (11, 2), (4, 1), (1, 8), (2, 8), (152, 8), (153, 8)]
+#                                              flowStartMilliseconds^    ^flowEndMilliseconds
+
+
+def template_body(template_id: int, fields: list[tuple[int, int]]) -> bytes:
+    body = struct.pack("!HH", template_id, len(fields))
+    return body + b"".join(struct.pack("!HH", t, n) for t, n in fields)
+
+
+def flow_set(set_id: int, body: bytes) -> bytes:
+    return struct.pack("!HH", set_id, 4 + len(body)) + body
+
+
+def v9_packet(sequence: int) -> bytes:
+    """Template 256 (flowset id 0), then one data record: an SSH flow."""
+    data = struct.pack("!4s4sHHBIIII", ip("192.0.2.12"), ip("198.51.100.22"), 50022, 22,
+                       TCP, 4200, 30, UPTIME_MS - 8000, UPTIME_MS - 1000)
+    flowsets = flow_set(0, template_body(256, V9_FIELDS)) + flow_set(256, data)
+    # version, count (records incl. template), sysUptime, unix secs, sequence, source id
+    return struct.pack("!HHIIII", 9, 2, UPTIME_MS, EXPORT_TIME, sequence, 1) + flowsets
+
+
+def ipfix_packet(sequence: int) -> bytes:
+    """Template 256 (set id 2), then one data record: an HTTPS flow."""
+    start_ms = EXPORT_TIME * 1000 - 5000
+    data = struct.pack("!4s4sHHBQQQQ", ip("192.0.2.11"), ip("203.0.113.5"), 50000, 443,
+                       TCP, 5200, 14, start_ms, start_ms + 3000)
+    sets = flow_set(2, template_body(256, IPFIX_FIELDS)) + flow_set(256, data)
+    return struct.pack("!HHIII", 10, 16 + len(sets), EXPORT_TIME, sequence, 1) + sets
+
+
+def main() -> None:
+    host = sys.argv[1]
+    port = int(sys.argv[2]) if len(sys.argv) > 2 else 2055
+    telnet = v5_record("192.0.2.10", "198.51.100.20", 49152, 23, TCP, 12, 900, 590_000, 592_000)
+    answer = v5_record("198.51.100.20", "192.0.2.10", 23, 49152, TCP, 10, 1400, 590_010, 592_000)
+    web = v5_record("192.0.2.10", "198.51.100.20", 49153, 80, TCP, 6, 640, 595_000, 595_500)
+    dns = v5_record("192.0.2.10", "198.51.100.53", 40000, 53, UDP, 1, 60, 596_000, 596_000)
+    ping = v5_record("192.0.2.10", "198.51.100.20", 0, 8 * 256 + 0, ICMP, 1, 84,
+                     597_000, 597_000)  # echo request: type 8, code 0
+    packets = [v5_packet([telnet, answer], 0), v5_packet([web, dns, ping], 2),
+               v9_packet(0), ipfix_packet(0)]
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        for packet in packets:
+            sock.sendto(packet, (host, port))
+    print(f"sent {len(packets)} packets (2 NetFlow v5, 1 NetFlow v9, 1 IPFIX) to {host}:{port}")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+**Step 7.** Prove it end to end: start the collector on `127.0.0.1`, send the test flows, start a new file the way you would every hour (`mv`, then `SIGHUP`), and analyze the finished file:
+
+```bash
+mkdir -p data/netflow data/netflow-done
+export MAXGUARD_NETFLOW_ADDRESS=127.0.0.1 MAXGUARD_NETFLOW_DATA="$PWD/data/netflow"
+export MAXGUARD_UID=$(id -u) MAXGUARD_GID=$(id -g)
+NF="docker compose -p maxguard-netflow-test -f docker/netflow-compose.yaml"
+$NF up -d 2> /dev/null
+for i in $(seq 1 40); do $NF logs goflow2 | grep -q 'starting collection' && break; sleep 0.5; done
+python scripts/send_test_flows.py 127.0.0.1
+for i in $(seq 1 40); do [ "$(wc -l < data/netflow/goflow2.json)" -ge 7 ] && break; sleep 0.5; done
+echo "flows written: $(wc -l < data/netflow/goflow2.json)"
+mv data/netflow/goflow2.json data/netflow-done/2026-10-06-1400.json
+$NF kill -s HUP goflow2 2> /dev/null
+for i in $(seq 1 20); do [ -f data/netflow/goflow2.json ] && break; sleep 0.5; done
+ls data/netflow
+$NF down 2> /dev/null
+maxguard analyze data/netflow-done --no-ai -o data/netflow-report.json
+python - <<'EOF'
+import json
+from pathlib import Path
+from maxguard.adapters.netflow import NetflowAdapter
+from maxguard.events.normalize import normalize
+
+report = json.loads(Path("data/netflow-report.json").read_text())
+print("findings:", len(report["findings"]), "| zeek and suricata ran:", report["tools"])
+logs = NetflowAdapter().to_zeek_logs(Path("data/netflow-done"), Path("data/netflow-work"))
+for e in normalize(logs, "router"):
+    print(e["source"], e["uid"], e["src_ip"], e["src_port"], "->", e["dst_ip"], e["dst_port"], e["summary"])
+EOF
+```
+
+Expected output:
+
+```text
+sent 4 packets (2 NetFlow v5, 1 NetFlow v9, 1 IPFIX) to 127.0.0.1:2055
+flows written: 7
+goflow2.json
+maxguard: 0 finding(s), report written to data/netflow-report.json
+findings: 0 | zeek and suricata ran: {'suricata': False, 'zeek': False}
+netflow N21c703d6223fff025 192.0.2.10 49152 -> 198.51.100.20 23 tcp/23 out=900 in=0
+netflow Nd75eaed68a20131ed 198.51.100.20 23 -> 192.0.2.10 49152 tcp/49152 out=1400 in=0
+netflow Nf80b3e8c076fe446f 192.0.2.12 50022 -> 198.51.100.22 22 tcp/22 out=4200 in=0
+netflow N328b3296b8be401c5 192.0.2.11 50000 -> 203.0.113.5 443 tcp/443 out=5200 in=0
+netflow N775574a24a9332000 192.0.2.10 49153 -> 198.51.100.20 80 tcp/80 out=640 in=0
+netflow Ne403487b7714c8d0a 192.0.2.10 40000 -> 198.51.100.53 53 udp/53 out=60 in=0
+netflow N6d97c91022c3a171a 192.0.2.10 8 -> 198.51.100.20 0 icmp/0 out=84 in=0
+```
+
+*goflow2 runs with your user ID here, so you can read the files without `sudo`; on the console the default is 1000:1000, the first user.*
+
+No rule fires, and that is correct. The cleartext, TLS and certificate rules read Zeek's protocol logs (`ftp.log`, `ssl.log`, ...), which only exist when someone looked inside the packets. A flow to port 23 is not proof of Telnet, and MaxGuard only reports what it can prove. What flows do give is the timeline (who talked to whom, how much, when): upload the finished `.json` file on the dashboard and open the timeline for `192.0.2.10`.
+
+**Step 8.** **On the lab** (*not run — verify on hardware*): if your router can export NetFlow or IPFIX, point it at the console's LAN address, UDP port 2055, start the collector with `MAXGUARD_NETFLOW_ADDRESS=<console address>`, and check that `/data/netflow/goflow2.json` grows. Also run the collector once on the Raspberry Pi 5 (the arm64 image was not run in planning). Many home routers cannot export flows at all; write down what yours can do in the issue.
+
+**Step 9.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -4053,11 +5115,11 @@ git commit -m "feat: NetFlow/IPFIX input through goflow2 (JAK-10)"
 git push -u origin HEAD
 ```
 
-`HEAD` means "the branch I am on", so you do not have to retype its name. Open the repository on github.com: a yellow bar shows your branch with a **Compare & pull request** button. Click it, keep the title `feat: NetFlow/IPFIX input through goflow2 (JAK-10)`, fill in the template (paste the real output of the commands above under **How I tested it**), write `Closes #<issue number>` (this task's issue), and pick **@flau0306** under **Reviewers**. Click **Create pull request**, then fix anything CI or the reviewer finds with new commits on the same branch.
+`HEAD` means "the branch I am on", so you do not have to retype its name. Open the repository on github.com: a yellow bar shows your branch with a **Compare & pull request** button. Click it, keep the title `feat: NetFlow/IPFIX input through goflow2 (JAK-10)`, fill in the template (paste the real output of the commands above under **How I tested it**), write `Closes #<issue number>` (this task's issue), and pick **@JWinborne1** under **Reviewers**. Click **Create pull request**, then fix anything CI or the reviewer finds with new commits on the same branch.
 
 #### How to test
 
-The unit tests pass, and the end-to-end check shows the generated flows on the timeline page.
+The tests pass, the proof prints seven flows and zero findings, and an uploaded flow file shows on the timeline page.
 
 #### What you just did and why
 
@@ -4071,16 +5133,17 @@ Many small offices have a router that can export flows but no mirror port. Flow 
 - [ ] No secrets, passwords, email addresses, personal data, or captures from a real network (CLAUDE.md rule 6)
 - [ ] Any new dependency has a row in `docs/DEPENDENCIES.md` with its license
 - [ ] CI is green and your reviewer approved
-- [ ] The collector's license is in `docs/DEPENDENCIES.md`
+- [ ] The collector image is pinned by version and digest
 - [ ] Test data uses only documentation addresses (RFC 5737)
+- [ ] Jaiden reviewed the new `source` value
 
 ### JAK-11: Host agent for one computer
 
-**Due:** Spring S12 (due Fri Apr 23, 2027) · **Milestone:** `S12 v2.0 feature freeze` · **Needs first:** [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) · **Kind:** design
+**Due:** Spring S12 (due Fri Apr 23, 2027) · **Milestone:** `S12 v2.0 feature freeze` · **Needs first:** [JAI-07](jaiden.md#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) · **Kind:** code, tested
 
-**Issue labels:** `type:task` `phase:spring` `owner:jakub` `area:sensor`
+**Issue labels:** `type:task` `phase:spring` `owner:jakub` `area:sensor` `needs-hardware`
 
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
+> **Needs hardware.** Steps that use the Raspberry Pi, the switch or other devices were not run during planning; they are marked *not run — verify on hardware*.
 
 #### Goal
 
@@ -4088,7 +5151,7 @@ For a home with no mirror port: a small agent on one computer captures that comp
 
 #### Prerequisites
 
-JAI-07 is merged (ingest endpoint).
+JAI-07 is merged (ingest endpoint and the ingest-only app on port 8001).
 
 #### Steps
 
@@ -4103,13 +5166,716 @@ git checkout -b jakub/host-agent
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** Write `maxguard/sensor/agent.py`. It builds the capture command for the operating system without third-party drivers: Linux and macOS `tcpdump` with `-G` (rotate every N seconds) and `-w` with a time pattern; Windows `pktmon start --capture` and `pktmon etl2pcap` to convert each file. Check every flag against the tcpdump manual page and Microsoft's pktmon documentation, and cite them in the docstring.
+**Step 2.** Create `maxguard/sensor/agent.py`:
 
-**Step 3.** Upload each finished file with `requests` and `Authorization: Bearer <token>`; the console URL and token come from a config file outside the repository. Document that the console must be the user's own machine and that ingest is off unless `MAXGUARD_INGEST_TOKEN` is set there.
+```python
+"""Host agent: capture this computer's own traffic and upload it (Jakub, JAK-11).
 
-**Step 4.** Write `tests/unit/test_agent.py`: the command built for each operating system, and uploads to a fake HTTP server on `127.0.0.1`. Never start a real capture in a test.
+For a home with no mirror port. The agent runs on one computer, captures only
+that computer's traffic with the operating system's built-in tools (no extra
+driver), writes one capture file per interval, and uploads every finished file
+to the console's POST /api/ingest (the LAN port 8001, docker/compose.lan.yaml).
 
-**Step 5.** Commit, push, and open the pull request:
+    sudo python -m maxguard.sensor.agent --config ~/.config/maxguard/agent.toml
+
+Safety rules:
+- The console must be YOUR OWN computer running MaxGuard. The agent sends your
+  traffic to it, so never point console_url at anyone else's machine.
+- Ingest is off on the console unless MAXGUARD_INGEST_TOKEN is set there
+  (POST /api/ingest answers 404); the agent's token must be the same value.
+- The token lives in a config file outside the repository (default
+  ~/.config/maxguard/agent.toml, or %APPDATA%\\MaxGuard\\agent.toml on Windows),
+  and the agent refuses a config file other users can read.
+- The capture only listens (CLAUDE.md rule 5). Port 8001 is plain HTTP, so the
+  token and the captures cross your LAN unencrypted: use a wired or trusted network.
+- The upload goes straight to console_url: proxy variables (HTTP_PROXY ...) and
+  ~/.netrc are ignored, so your traffic never leaves through a proxy (rule 1).
+
+Capture commands, every flag checked against the manuals:
+- Linux and macOS: tcpdump (tcpdump(1), https://www.tcpdump.org/manpages/tcpdump.1.html)
+    -i <interface>  capture on this interface (left out: tcpdump picks the lowest
+                    numbered interface that is up, not loopback)
+    -n              do not turn addresses into names (no DNS lookups of its own)
+    -G <seconds>    rotate the file given with -w every <seconds> seconds
+    -w <pattern>    write raw packets to a file; with -G the name is a strftime(3)
+                    pattern, e.g. capture-%Y%m%d-%H%M%S.pcap
+    -Z <user>       after opening the capture device, but before opening any
+                    output file, drop root and run as <user>. So the files belong to
+                    <user>, and <user> must be able to write the spool folder.
+  tcpdump fills the time pattern with localtime(); the agent starts it with TZ=UTC
+  so the names are UTC and sort in time order all year (no daylight saving jumps).
+  tcpdump starts the next file only when a packet arrives after the interval, so
+  the newest file is always the one still being written: it is never uploaded.
+- Windows: pktmon (built in since Windows 10 1809; run as Administrator)
+    https://learn.microsoft.com/windows-server/administration/windows-commands/pktmon-start
+    https://learn.microsoft.com/windows-server/administration/windows-commands/pktmon-etl2pcap
+    pktmon start --capture --comp nics --pkt-size 0 --file-name <file.etl>
+        --capture: capture packets; --comp nics: only at the network cards (pktmon
+        otherwise logs a packet once for every component it passes through);
+        --pkt-size 0: the whole packet (the default keeps only 128 bytes)
+    pktmon stop
+    pktmon etl2pcap <file.etl> --out <file.pcapng>
+  pktmon rotates only by size, not by time, so the agent stops and restarts it
+  every interval; a stopped .etl file is finished and is converted to pcapng.
+  pktmon's default log mode is "circular" with a 512 MB file (--file-size): if
+  one interval holds more than that, its oldest packets are overwritten.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import platform
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import time
+import tomllib
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+
+import requests
+
+SENSOR_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")  # what POST /api/ingest accepts
+CAPTURE_PATTERN = "capture-%Y%m%d-%H%M%S"        # strftime pattern; UTC
+UPLOAD_TIMEOUT = (10, 600)  # seconds to connect, seconds to wait for the analysis
+CHECK_EVERY = 10            # seconds between looks at the spool folder (Linux, macOS)
+KEEP_UPLOADED = 4           # uploaded files kept on this computer, newest first
+UPLOADED_DIR = "uploaded"   # inside the spool folder
+REJECTED_DIR = "rejected"   # files the console refused: not sent again
+REJECTED_STATUSES = (400, 413, 422)  # answers that will be the same next time
+
+
+@dataclass
+class AgentConfig:
+    console_url: str          # e.g. "http://192.168.50.20:8001" (your own console)
+    token: str                # the console's MAXGUARD_INGEST_TOKEN
+    spool_dir: Path           # where capture files wait for upload
+    sensor_id: str = "agent"  # this computer's name in every event
+    interface: str = ""       # "" = the capture tool's default
+    rotate_seconds: int = 900  # 15 minutes, like the live sensor
+    capture_user: str = ""    # tcpdump -Z: who owns the files (Linux, macOS)
+
+
+# ---------- Config file ----------
+
+def default_config_path() -> Path:
+    """Outside the repository, in the user's own settings folder."""
+    if platform.system() == "Windows":
+        return Path(os.environ.get("APPDATA", Path.home())) / "MaxGuard" / "agent.toml"
+    return Path.home() / ".config" / "maxguard" / "agent.toml"
+
+
+def check_private(path: Path) -> None:
+    """The file holds the token: refuse it if other users may read it (Linux, macOS)."""
+    if platform.system() == "Windows":
+        return  # Windows uses ACLs, not mode bits; %APPDATA% is private by default
+    if path.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+        raise ValueError(f"{path} can be read by other users: run  chmod 600 {path}")
+
+
+def load_config(path: Path) -> AgentConfig:
+    check_private(path)
+    with path.open("rb") as f:
+        raw = tomllib.load(f)
+    config = AgentConfig(
+        console_url=str(raw["console_url"]).rstrip("/"),
+        token=str(raw["token"]),
+        spool_dir=Path(raw["spool_dir"]).expanduser(),
+        sensor_id=str(raw.get("sensor_id", "agent")),
+        interface=str(raw.get("interface", "")),
+        rotate_seconds=int(raw.get("rotate_seconds", 900)),
+        capture_user=str(raw.get("capture_user", "")),
+    )
+    check_config(config)
+    return config
+
+
+def check_config(config: AgentConfig) -> None:
+    if not config.console_url.startswith(("http://", "https://")):
+        raise ValueError("console_url must start with http:// or https://")
+    if not SENSOR_ID.fullmatch(config.sensor_id):
+        raise ValueError("sensor_id: 1-64 characters, letters, digits, '.', '_' or '-'")
+    if not config.token:
+        raise ValueError("token is empty: copy the console's MAXGUARD_INGEST_TOKEN")
+    if config.rotate_seconds < 60:
+        raise ValueError("rotate_seconds must be at least 60")
+
+
+# ---------- Capture commands ----------
+
+def tcpdump_command(config: AgentConfig) -> list[str]:
+    """Linux and macOS. Run it with TZ=UTC in its environment (see capture_env)."""
+    if not config.capture_user:
+        raise ValueError("set capture_user: tcpdump -Z drops root to that user")
+    command = ["tcpdump"]
+    if config.interface:
+        command += ["-i", config.interface]
+    # tcpdump runs the WHOLE -w name through strftime, so a "%" in the folder
+    # name must be written "%%" to stay a plain "%".
+    folder = str(config.spool_dir).replace("%", "%%")
+    pattern = f"{folder}{os.sep}{CAPTURE_PATTERN}.pcap"
+    command += ["-n", "-G", str(config.rotate_seconds), "-w", pattern,
+                "-Z", config.capture_user]
+    return command
+
+
+def capture_env() -> dict[str, str]:
+    """tcpdump fills the file name with local time: make that UTC."""
+    return {**os.environ, "TZ": "UTC"}
+
+
+def pktmon_start_command(etl_file: Path) -> list[str]:
+    return ["pktmon", "start", "--capture", "--comp", "nics", "--pkt-size", "0",
+            "--file-name", str(etl_file)]
+
+
+def pktmon_stop_command() -> list[str]:
+    return ["pktmon", "stop"]
+
+
+def pktmon_convert_command(etl_file: Path) -> list[str]:
+    return ["pktmon", "etl2pcap", str(etl_file), "--out", str(etl_file.with_suffix(".pcapng"))]
+
+
+def capture_command(system: str, config: AgentConfig, now: float) -> list[str]:
+    """The command that starts the capture on this operating system (platform.system())."""
+    if system in ("Linux", "Darwin"):
+        return tcpdump_command(config)
+    if system == "Windows":
+        return pktmon_start_command(etl_name(config.spool_dir, now))
+    raise ValueError(f"no built-in capture tool known for {system!r}")
+
+
+def etl_name(spool_dir: Path, now: float) -> Path:
+    stamp = datetime.fromtimestamp(now, UTC).strftime(CAPTURE_PATTERN)
+    return spool_dir / f"{stamp}.etl"
+
+
+# ---------- Which files are finished ----------
+
+def finished_files(spool_dir: Path, *, capture_running: bool) -> list[Path]:
+    """Capture files that are complete, oldest first.
+
+    The names are UTC times, so sorting by name sorts by time. While the capture
+    runs, the newest file is still being written: never upload it."""
+    files = sorted(p for p in spool_dir.glob("capture-*") if p.suffix in (".pcap", ".pcapng"))
+    if capture_running and files:
+        files = files[:-1]
+    return files
+
+
+# ---------- Upload ----------
+
+def console_session() -> requests.Session:
+    """A requests session that talks only to console_url.
+
+    trust_env=False: requests would otherwise send the upload through a proxy named
+    in HTTP_PROXY/HTTPS_PROXY, and replace our Bearer header with a password from
+    ~/.netrc. Both were seen in a test; neither may happen to your captures."""
+    session = requests.Session()
+    session.trust_env = False
+    return session
+
+
+def upload(path: Path, config: AgentConfig, session=None) -> int | None:
+    """POST one file to the console. Returns the HTTP status, or None if unreachable."""
+    session = session or console_session()
+    url = f"{config.console_url}/api/ingest"
+    headers = {"Authorization": f"Bearer {config.token}"}
+    try:
+        with path.open("rb") as f:
+            reply = session.post(url, headers=headers, data={"sensor_id": config.sensor_id},
+                                 files={"file": (path.name, f, "application/octet-stream")},
+                                 timeout=UPLOAD_TIMEOUT)
+    except requests.RequestException as err:
+        print(f"console not reachable, will retry {path.name}: {err}", file=sys.stderr)
+        return None
+    return reply.status_code
+
+
+def upload_finished(config: AgentConfig, *, capture_running: bool, session=None) -> int:
+    """Upload every finished file. Returns how many the console accepted.
+
+    A file counts as uploaded only after a 2xx answer; then it moves to uploaded/.
+    400 (not a capture), 413 (too large) and 422 (Zeek or Suricata failed on this
+    file) will never work: the file moves to rejected/, so one bad file cannot
+    block every later one. Anything else (console down, 401 wrong token, 5xx) is
+    tried again later."""
+    session = session or console_session()
+    accepted = 0
+    for path in finished_files(config.spool_dir, capture_running=capture_running):
+        status = upload(path, config, session)
+        if status is not None and 200 <= status < 300:
+            move_into(path, config.spool_dir / UPLOADED_DIR)
+            accepted += 1
+        elif status in REJECTED_STATUSES:
+            print(f"console refused {path.name} ({status}): moved to {REJECTED_DIR}/",
+                  file=sys.stderr)
+            move_into(path, config.spool_dir / REJECTED_DIR)
+        else:
+            if status is not None:
+                print(f"upload of {path.name} failed ({status}), will retry", file=sys.stderr)
+            break  # keep the order: try the oldest file again next time
+    prune_uploaded(config.spool_dir / UPLOADED_DIR)
+    return accepted
+
+
+def move_into(path: Path, folder: Path) -> Path:
+    folder.mkdir(exist_ok=True)
+    return path.replace(folder / path.name)
+
+
+def prune_uploaded(folder: Path, keep: int = KEEP_UPLOADED) -> None:
+    """The console has the data now; keep only the newest few files here."""
+    if not folder.is_dir():
+        return
+    files = sorted(p for p in folder.iterdir() if p.is_file())
+    for old in files[:-keep] if keep else files:
+        old.unlink()
+
+
+# ---------- Main loops (they start a real capture: never called by tests) ----------
+
+def prepare_spool(config: AgentConfig, system: str) -> None:
+    """Create the spool folder if it is missing.
+
+    tcpdump -Z writes the files as capture_user, but the agent runs as root (sudo),
+    so a folder it creates would belong to root and tcpdump could not write into
+    it. A folder the agent creates is therefore given to capture_user. An existing
+    folder is never changed: it may be shared, and it is yours to set up."""
+    if config.spool_dir.is_dir():
+        return
+    config.spool_dir.mkdir(parents=True)
+    if system in ("Linux", "Darwin") and config.capture_user and os.geteuid() == 0:
+        shutil.chown(config.spool_dir, user=config.capture_user)
+
+
+def run_tcpdump(config: AgentConfig) -> int:
+    """Capture and upload until tcpdump stops. Returns tcpdump's exit code.
+
+    Not 0 means tcpdump could not capture (it printed why, for example a spool
+    folder capture_user cannot write)."""
+    capture = subprocess.Popen(tcpdump_command(config), env=capture_env())
+    try:
+        while capture.poll() is None:
+            upload_finished(config, capture_running=True)
+            time.sleep(CHECK_EVERY)
+    finally:
+        capture.terminate()  # SIGTERM: tcpdump closes the current file cleanly
+        capture.wait()
+        upload_finished(config, capture_running=False)
+    return capture.returncode
+
+
+def run_pktmon(config: AgentConfig) -> None:
+    while True:
+        etl_file = etl_name(config.spool_dir, time.time())
+        subprocess.run(pktmon_start_command(etl_file), check=True)
+        try:
+            time.sleep(config.rotate_seconds)
+        finally:
+            subprocess.run(pktmon_stop_command(), check=True)
+            convert_etl(etl_file)
+        upload_finished(config, capture_running=False)
+
+
+def convert_etl(etl_file: Path) -> None:
+    """ETL -> pcapng (MaxGuard reads pcapng), then delete the ETL file."""
+    subprocess.run(pktmon_convert_command(etl_file), check=True)
+    etl_file.unlink()
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="MaxGuard host agent (capture + upload)")
+    parser.add_argument("--config", type=Path, default=default_config_path())
+    parser.add_argument("--upload-only", action="store_true",
+                        help="upload every capture file once and exit (no capture); "
+                             "only while the agent is stopped, because it also sends "
+                             "the newest file")
+    args = parser.parse_args(argv)
+    config = load_config(args.config)
+    system = platform.system()
+    prepare_spool(config, system)
+    if args.upload_only:
+        print(f"uploaded {upload_finished(config, capture_running=False)} file(s)")
+        return 0
+    if system == "Windows":
+        run_pktmon(config)
+    elif system in ("Linux", "Darwin"):
+        return run_tcpdump(config)
+    else:
+        print(f"no built-in capture tool known for {system}", file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+The docstring lists every capture flag with the manual it comes from. Four decisions to understand. tcpdump runs as root only long enough to open the network card, then `-Z` drops to your normal user before it writes any file. tcpdump names files with the *local* time, so the agent starts it with `TZ=UTC`: the names then sort in time order all year. The newest file is the one tcpdump is still writing, so it is never uploaded; a file counts as uploaded only after a `2xx` answer, goes to `rejected/` on 400, 413 or 422 (answers that would be the same next time, so one bad file cannot block the rest), and is retried (oldest first) on anything else. Windows' `pktmon` rotates only by size, so the agent stops and restarts it every interval and converts each finished `.etl` file to pcapng.
+
+The security review added three more details. The upload uses a session with `trust_env = False`: by default `requests` would send your captures through any proxy in `HTTP_PROXY` and replace the token with a password from `~/.netrc`. A `%` in the spool folder's name is doubled, because tcpdump runs the whole `-w` name through `strftime`. And a spool folder the agent creates as root is given to `capture_user`, because tcpdump opens its files only after `-Z` dropped root.
+
+**Step 3.** Create the tests `tests/unit/test_agent.py`. They check the command for each operating system and upload to a fake server and to the real ingest app through `TestClient`; no test ever starts a capture:
+
+```python
+"""Tests for the host agent (Jakub, JAK-11).
+
+No test starts a capture: the commands are only built and compared. Uploads go
+to a fake HTTP server on 127.0.0.1 and to the real ingest app through TestClient.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+import pytest
+
+from maxguard.sensor import agent
+from maxguard.sensor.agent import AgentConfig
+
+TOKEN = "test-token-" + "x" * 32  # made up; the API wants at least 32 characters
+FLOW_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "netflow" / "goflow2.json"
+
+
+def make_config(spool: Path, **changes) -> AgentConfig:
+    settings = {"console_url": "http://127.0.0.1:8001", "token": TOKEN, "spool_dir": spool,
+                "sensor_id": "laptop", "interface": "eth0", "rotate_seconds": 900,
+                "capture_user": "alex"}
+    settings.update(changes)
+    return AgentConfig(**settings)
+
+
+def make_captures(spool: Path, *names: str) -> None:
+    spool.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (spool / name).write_bytes(b"\xd4\xc3\xb2\xa1" + b"\0" * 20)  # a pcap header
+
+
+# ---------- capture commands ----------
+
+@pytest.mark.parametrize("system", ["Linux", "Darwin"])
+def test_tcpdump_command(system, tmp_path):
+    command = agent.capture_command(system, make_config(tmp_path), now=0)
+    assert command == ["tcpdump", "-i", "eth0", "-n", "-G", "900",
+                       "-w", str(tmp_path / "capture-%Y%m%d-%H%M%S.pcap"), "-Z", "alex"]
+
+
+def test_tcpdump_without_interface_uses_its_default(tmp_path):
+    command = agent.tcpdump_command(make_config(tmp_path, interface=""))
+    assert "-i" not in command
+
+
+def test_tcpdump_needs_a_user_to_drop_root_to(tmp_path):
+    with pytest.raises(ValueError, match="capture_user"):
+        agent.tcpdump_command(make_config(tmp_path, capture_user=""))
+
+
+def test_percent_in_the_spool_folder_is_not_a_time_pattern(tmp_path):
+    # tcpdump runs the whole -w name through strftime: "%d" in a folder name
+    # would become the day of the month unless it is written "%%d".
+    command = agent.tcpdump_command(make_config(tmp_path / "100%done"))
+    assert command[command.index("-w") + 1] == str(
+        tmp_path / "100%%done" / "capture-%Y%m%d-%H%M%S.pcap")
+
+
+def test_tcpdump_names_files_in_utc():
+    assert agent.capture_env()["TZ"] == "UTC"
+
+
+def test_windows_commands(tmp_path):
+    now = 1791295200.0  # 2026-10-06 14:00:00 UTC
+    etl = tmp_path / "capture-20261006-140000.etl"
+    assert agent.capture_command("Windows", make_config(tmp_path), now) == [
+        "pktmon", "start", "--capture", "--comp", "nics", "--pkt-size", "0",
+        "--file-name", str(etl)]
+    assert agent.pktmon_stop_command() == ["pktmon", "stop"]
+    assert agent.pktmon_convert_command(etl) == [
+        "pktmon", "etl2pcap", str(etl), "--out", str(tmp_path / "capture-20261006-140000.pcapng")]
+
+
+def test_unknown_system_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="no built-in capture tool"):
+        agent.capture_command("Plan9", make_config(tmp_path), now=0)
+
+
+# ---------- config file ----------
+
+CONFIG_TEXT = f"""
+console_url = "http://192.0.2.20:8001/"
+token = "{TOKEN}"
+spool_dir = "SPOOL"
+sensor_id = "laptop"
+capture_user = "alex"
+"""
+
+
+@pytest.mark.skipif(os.name == "nt", reason="mode bits are POSIX only")
+def test_load_config(tmp_path):
+    path = tmp_path / "agent.toml"
+    path.write_text(CONFIG_TEXT.replace("SPOOL", str(tmp_path / "spool")))
+    path.chmod(0o600)
+    config = agent.load_config(path)
+    assert config.console_url == "http://192.0.2.20:8001"  # trailing / removed
+    assert (config.sensor_id, config.rotate_seconds, config.interface) == ("laptop", 900, "")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="mode bits are POSIX only")
+def test_config_readable_by_others_is_refused(tmp_path):
+    path = tmp_path / "agent.toml"
+    path.write_text(CONFIG_TEXT.replace("SPOOL", str(tmp_path)))
+    path.chmod(0o644)
+    with pytest.raises(ValueError, match="chmod 600"):
+        agent.load_config(path)
+
+
+@pytest.mark.parametrize("change, message", [
+    ({"sensor_id": "my laptop"}, "sensor_id"),
+    ({"console_url": "192.0.2.20:8001"}, "http"),
+    ({"token": ""}, "token"),
+    ({"rotate_seconds": 5}, "rotate_seconds"),
+])
+def test_bad_settings_are_refused(tmp_path, change, message):
+    with pytest.raises(ValueError, match=message):
+        agent.check_config(make_config(tmp_path, **change))
+
+
+# ---------- which files are finished ----------
+
+def test_newest_file_is_not_finished_while_capturing(tmp_path):
+    make_captures(tmp_path, "capture-20261006-141500.pcap", "capture-20261006-140000.pcap",
+                  "capture-20261006-143000.pcap")
+    (tmp_path / "capture-20261006-144500.etl").write_bytes(b"")  # pktmon still writing
+    running = agent.finished_files(tmp_path, capture_running=True)
+    assert [p.name for p in running] == ["capture-20261006-140000.pcap",
+                                         "capture-20261006-141500.pcap"]
+    stopped = agent.finished_files(tmp_path, capture_running=False)
+    assert len(stopped) == 3
+
+
+# ---------- uploads to a fake console on 127.0.0.1 ----------
+
+class FakeConsole(BaseHTTPRequestHandler):
+    status = 200
+    requests: list[dict] = []
+
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers["Content-Length"]))
+        FakeConsole.requests.append({"path": self.path, "auth": self.headers["Authorization"],
+                                     "type": self.headers["Content-Type"], "body": body})
+        self.send_response(FakeConsole.status)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"analysis_id": "a1", "findings": 0}')
+
+    def log_message(self, *args):  # keep test output quiet
+        pass
+
+
+@pytest.fixture
+def console():
+    """A fake console on 127.0.0.1 (a free port). Yields its URL."""
+    FakeConsole.status, FakeConsole.requests = 200, []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), FakeConsole)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_port}"
+    server.shutdown()
+    server.server_close()
+
+
+def test_upload_sends_file_sensor_id_and_token(tmp_path, console):
+    spool = tmp_path / "spool"
+    make_captures(spool, "capture-20261006-140000.pcap", "capture-20261006-141500.pcap")
+    config = make_config(spool, console_url=console)
+    assert agent.upload_finished(config, capture_running=True) == 1
+    sent = FakeConsole.requests[0]
+    assert sent["path"] == "/api/ingest"
+    assert sent["auth"] == f"Bearer {TOKEN}"
+    assert sent["type"].startswith("multipart/form-data")
+    assert b'name="sensor_id"\r\n\r\nlaptop' in sent["body"]
+    assert b'name="file"; filename="capture-20261006-140000.pcap"' in sent["body"]
+    # Uploaded after the 2xx; the file tcpdump is still writing was not touched.
+    assert (spool / "uploaded" / "capture-20261006-140000.pcap").exists()
+    assert (spool / "capture-20261006-141500.pcap").exists()
+    assert len(FakeConsole.requests) == 1
+
+
+def test_failed_upload_keeps_the_file(tmp_path, console):
+    spool = tmp_path / "spool"
+    make_captures(spool, "capture-20261006-140000.pcap", "capture-20261006-141500.pcap")
+    FakeConsole.status = 401  # wrong token
+    config = make_config(spool, console_url=console)
+    assert agent.upload_finished(config, capture_running=False) == 0
+    assert len(FakeConsole.requests) == 1  # stopped at the oldest file, keeps the order
+    assert sorted(p.name for p in spool.glob("*.pcap")) == [
+        "capture-20261006-140000.pcap", "capture-20261006-141500.pcap"]
+
+
+@pytest.mark.parametrize("status", [400, 413, 422])
+def test_refused_file_moves_to_rejected(tmp_path, console, status):
+    """400 not a capture, 413 too large, 422 Zeek failed on it: the same next time."""
+    spool = tmp_path / "spool"
+    make_captures(spool, "capture-20261006-140000.pcap")
+    FakeConsole.status = status
+    agent.upload_finished(make_config(spool, console_url=console), capture_running=False)
+    assert (spool / "rejected" / "capture-20261006-140000.pcap").exists()
+
+
+def test_console_down_keeps_the_file(tmp_path, console):
+    spool = tmp_path / "spool"
+    make_captures(spool, "capture-20261006-140000.pcap")
+    closed_port = make_config(spool, console_url="http://127.0.0.1:9")  # nothing listens
+    assert agent.upload_finished(closed_port, capture_running=False) == 0
+    assert (spool / "capture-20261006-140000.pcap").exists()
+
+
+def test_upload_ignores_proxy_settings_and_netrc(tmp_path, console, monkeypatch):
+    # A proxy variable must not reroute the captures, and a ~/.netrc entry for
+    # the console must not replace the Bearer token with a password.
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".netrc").write_text("machine 127.0.0.1 login someone password not-the-token\n")
+    (home / ".netrc").chmod(0o600)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("NETRC", str(home / ".netrc"))
+    for name in ("HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
+        monkeypatch.setenv(name, "http://127.0.0.1:9")  # nothing listens there
+    for name in ("NO_PROXY", "no_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    spool = tmp_path / "spool"
+    make_captures(spool, "capture-20261006-140000.pcap")
+    assert agent.upload_finished(make_config(spool, console_url=console),
+                                 capture_running=False) == 1
+    assert FakeConsole.requests[0]["auth"] == f"Bearer {TOKEN}"
+
+
+def test_spool_folder_the_agent_creates_goes_to_capture_user(tmp_path, monkeypatch):
+    # sudo: the agent is root, but tcpdump -Z writes as capture_user.
+    given = []
+    monkeypatch.setattr(agent.os, "geteuid", lambda: 0, raising=False)
+    monkeypatch.setattr(agent.shutil, "chown", lambda path, user: given.append((path, user)))
+    config = make_config(tmp_path / "spool")
+    agent.prepare_spool(config, "Linux")
+    assert config.spool_dir.is_dir() and given == [(config.spool_dir, "alex")]
+    agent.prepare_spool(config, "Linux")  # it exists now: left alone
+    assert len(given) == 1
+
+
+def test_only_the_newest_uploaded_files_are_kept(tmp_path):
+    folder = tmp_path / "uploaded"
+    make_captures(folder, *[f"capture-20261006-14{m:02d}00.pcap" for m in range(0, 60, 10)])
+    agent.prune_uploaded(folder, keep=2)
+    assert sorted(p.name for p in folder.iterdir()) == [
+        "capture-20261006-144000.pcap", "capture-20261006-145000.pcap"]
+
+
+# ---------- the real ingest app ----------
+
+# The agent passes timeout= like any requests call; TestClient warns that it ignores it.
+@pytest.mark.filterwarnings("ignore:You should not use the 'timeout' argument")
+def test_upload_to_the_real_ingest_app(tmp_path, monkeypatch):
+    """The agent's request, answered by create_ingest_app (no network: TestClient).
+
+    The console recognises a file by its content, not its name, so a goflow2 flow
+    file stands in for a capture here (a real capture would need Zeek)."""
+    from fastapi.testclient import TestClient
+
+    from maxguard.api.app import create_ingest_app
+
+    monkeypatch.setenv("MAXGUARD_INGEST_TOKEN", TOKEN)
+    client = TestClient(create_ingest_app(tmp_path / "data", explain=False))
+    spool = tmp_path / "spool"
+    spool.mkdir()
+    shutil.copy(FLOW_FIXTURE, spool / "capture-20261006-140000.pcap")
+    config = make_config(spool, console_url="http://testserver")
+    assert agent.upload_finished(config, capture_running=False, session=client) == 1
+    assert agent.upload(spool / "uploaded" / "capture-20261006-140000.pcap",
+                        make_config(spool, console_url="http://testserver", token="wrong"),
+                        session=client) == 401
+```
+
+Run them:
+
+```bash
+pytest tests/unit/test_agent.py -q
+```
+
+Expected output:
+
+```text
+.........................                                                                    [100%]
+25 passed in 4.33s
+```
+
+**Step 4.** See the capture flags work. This runs tcpdump inside a container that has no network, on its own loopback, with 2-second files: the names are UTC and the files belong to `nobody` (user 65534), which shows that `-Z` dropped root:
+
+```bash
+docker run --rm --network none --cap-add NET_RAW --cap-add NET_ADMIN -e TZ=UTC nicolaka/netshoot:v0.15 sh -c '
+  mkdir -p /spool && chown nobody /spool
+  tcpdump -i lo -n -G 2 -w "/spool/capture-%Y%m%d-%H%M%S.pcap" -Z nobody 2> /dev/null & P=$!
+  ping -i 0.5 -c 9 127.0.0.1 > /dev/null; kill -INT $P; wait $P
+  ls -ln /spool'
+```
+
+Expected output:
+
+```text
+total 12
+-rw-r--r--    1 65534    65534          252 Oct  8 22:55 capture-20261008-225520.pcap
+-rw-r--r--    1 65534    65534          936 Oct  8 22:55 capture-20261008-225522.pcap
+-rw-r--r--    1 65534    65534          480 Oct  8 22:55 capture-20261008-225524.pcap
+```
+
+*The file names carry the time you run it, so yours differ.*
+
+**Step 5.** Upload for real: the ingest-only app (the one sensors reach on port 8001) and the agent in `--upload-only` mode, with the Telnet capture standing in for a finished file. The config file must be private (`chmod 600`), because it holds the token:
+
+```bash
+mkdir -p data/agent/spool
+cp tests/pcaps/telnet.pcap data/agent/spool/capture-20261006-140000.pcap
+T=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+cat > data/agent/agent.toml <<EOF
+console_url = "http://127.0.0.1:8001"
+token = "$T"
+spool_dir = "data/agent/spool"
+sensor_id = "laptop"
+capture_user = "nobody"
+EOF
+chmod 600 data/agent/agent.toml
+MAXGUARD_INGEST_TOKEN=$T MAXGUARD_DATA_DIR=data/console \
+  uvicorn --factory maxguard.api.app:create_ingest_app --host 127.0.0.1 --port 8001 > data/agent/console.log 2>&1 & U=$!
+for i in $(seq 1 50); do python -c "import socket; socket.create_connection(('127.0.0.1', 8001), 1)" 2> /dev/null && break; sleep 0.2; done
+python -m maxguard.sensor.agent --config data/agent/agent.toml --upload-only
+ls data/agent/spool/uploaded
+grep -o '"POST /api/ingest HTTP/1.1" [0-9]* [A-Za-z]*' data/agent/console.log
+python -c "from maxguard.storage.events import EventStore; e = EventStore('data/console/events').query(ip='172.18.0.3', since=0); print(len(e), 'event(s) from sensor', sorted({x['sensor_id'] for x in e}))"
+kill $U
+```
+
+Expected output:
+
+```text
+uploaded 1 file(s)
+capture-20261006-140000.pcap
+"POST /api/ingest HTTP/1.1" 200 OK
+1 event(s) from sensor ['laptop']
+```
+
+*`uvicorn` and the agent run inside the `zeek/zeek:9.0.0` image here, because the console needs Zeek to read a capture. The console refuses a token shorter than 32 characters.*
+
+**Step 6.** **On your own laptop** (*not run — verify on hardware*). On the console set `MAXGUARD_INGEST_TOKEN` (make one with `python -c "import secrets; print(secrets.token_urlsafe(32))"`) and start `docker/compose.lan.yaml`. On the laptop write `~/.config/maxguard/agent.toml` (Windows: `%APPDATA%\MaxGuard\agent.toml`) with `console_url = "http://<console address>:8001"`, the same token, `spool_dir`, `sensor_id`, `capture_user` (your login name) and `rotate_seconds = 900`; `chmod 600` it; then `sudo python -m maxguard.sensor.agent` (Windows: an Administrator terminal). After 15 minutes the first file appears on the console. Port 8001 is plain HTTP, so the token and your captures cross the LAN unencrypted: use a wired or trusted network. Check macOS's `tcpdump -Z` and Windows' `pktmon` too; neither could be run in planning.
+
+**Step 7.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -4118,11 +5884,11 @@ git commit -m "feat: host agent with OS-native capture (JAK-11)"
 git push -u origin HEAD
 ```
 
-`HEAD` means "the branch I am on", so you do not have to retype its name. Open the repository on github.com: a yellow bar shows your branch with a **Compare & pull request** button. Click it, keep the title `feat: host agent with OS-native capture (JAK-11)`, fill in the template (paste the real output of the commands above under **How I tested it**), write `Closes #<issue number>` (this task's issue), and pick **@flau0306** under **Reviewers**. Click **Create pull request**, then fix anything CI or the reviewer finds with new commits on the same branch.
+`HEAD` means "the branch I am on", so you do not have to retype its name. Open the repository on github.com: a yellow bar shows your branch with a **Compare & pull request** button. Click it, keep the title `feat: host agent with OS-native capture (JAK-11)`, fill in the template (paste the real output of the commands above under **How I tested it**), write `Closes #<issue number>` (this task's issue), and pick **@JWinborne1** under **Reviewers**. Click **Create pull request**, then fix anything CI or the reviewer finds with new commits on the same branch.
 
 #### How to test
 
-The unit tests pass on Linux, and a manual run on your own laptop uploads one file that appears on the console.
+The tests pass, the upload check prints `uploaded 1 file(s)` and `200 OK`, and a manual run on your own laptop uploads one file that appears on the console.
 
 #### What you just did and why
 
@@ -4137,3 +5903,4 @@ A host agent sees only its own computer, but it needs no extra hardware, which m
 - [ ] Any new dependency has a row in `docs/DEPENDENCIES.md` with its license
 - [ ] CI is green and your reviewer approved
 - [ ] No test starts a real capture
+- [ ] The token is read from a private config file

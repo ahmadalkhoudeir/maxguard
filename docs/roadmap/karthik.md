@@ -889,7 +889,7 @@ result. No source line, no merge.
 **Step 8.** Look inside one capture with tcpdump (the netshoot image has it):
 
 ```bash
-docker run --rm -v "$PWD/tests/pcaps:/p:ro" --entrypoint tcpdump nicolaka/netshoot:v0.15 -nn -r /p/telnet.pcap 'tcp port 23' | head -n 4
+docker run --rm -v "$PWD/tests/pcaps:/p:ro" --entrypoint tcpdump nicolaka/netshoot:v0.15 -nn -c 4 -r /p/telnet.pcap 'tcp port 23'
 ```
 
 Expected output:
@@ -1449,7 +1449,7 @@ Expected output:
 
 ```text
 ..............                                                                               [100%]
-14 passed in 0.11s
+14 passed in 0.09s
 ```
 
 **Step 7.** Commit, push, and open the pull request:
@@ -1848,7 +1848,7 @@ Expected output:
 
 ```text
 .........................................................                                    [100%]
-57 passed in 0.08s
+57 passed in 0.07s
 ```
 
 **Step 6.** Build the test image and run the integration tests in it with networking off:
@@ -1862,7 +1862,7 @@ Expected output:
 
 ```text
 ...............                                                          [100%]
-15 passed, 340 deselected in 8.57s
+15 passed, 340 deselected in 8.09s
 ```
 
 *Run in planning inside `zeek/zeek:9.0.0` with MaxGuard's Python packages added, because the engine image build needs Debian's package servers (JAI-04). Zeek ran for real on every capture.*
@@ -2069,7 +2069,7 @@ Expected output:
 
 ```text
 ..............................                                           [100%]
-30 passed, 443 deselected in 29.33s
+30 passed, 455 deselected in 24.17s
 ```
 
 *Run in planning inside `zeek/zeek:9.0.0` with MaxGuard's Python packages added (see KAR-03). Running Zeek without `-D` made the Telnet determinism test fail on the connection IDs, which is the mistake this test exists to catch.*

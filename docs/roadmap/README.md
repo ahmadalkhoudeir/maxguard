@@ -261,8 +261,8 @@ How the team avoids waiting:
 | W5 | [JAI-08](jaiden.md#jai-08-ed25519-signing-library) | Jaiden | Ed25519 signing library | code, tested |
 | W5 | [AMO-04](amory.md#amo-04-cisa-cpg-20-and-cjis-v61-rows) | Amory | CISA CPG 2.0 and CJIS v6.1 rows | process |
 | W5 | [AHM-04](ahmad.md#ahm-04-security-review-of-the-alpha) | Ahmad | Security review of the alpha | process |
-| W6 | [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) | Jonattan | Offline bundle: install MaxGuard on a machine with no internet | design |
-| W6 | [JAI-09](jaiden.md#jai-09-release-workflow-and-v20-alpha-rc1) | Jaiden | Release workflow and v2.0-alpha-rc1 | design |
+| W6 | [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) | Jonattan | Offline bundle: install MaxGuard on a machine with no internet | code, tested |
+| W6 | [JAI-09](jaiden.md#jai-09-release-workflow-and-v20-alpha-rc1) | Jaiden | Release workflow and v2.0-alpha-rc1 | code, tested |
 | W6 | [KAR-05](karthik.md#kar-05-release-candidate-test-with-an-outside-tester) | Karthik | Release-candidate test with an outside tester | process |
 | W8 | [JAI-10](jaiden.md#jai-10-release-v20-alpha) | Jaiden | Release v2.0-alpha | process |
 | W8 | [JAK-06](jakub.md#jak-06-build-the-reference-lab-and-prove-the-mirror-works) | Jakub | Build the reference lab and prove the mirror works | process |
@@ -280,8 +280,8 @@ How the team avoids waiting:
 | S8 | [ALI-05](ali.md#ali-05-re-evaluate-the-models-against-prompt-injection-and-the-spring-rules) | Ali | Re-evaluate the models against prompt injection and the spring rules | process |
 | S11 | [FIO-06](fiona.md#fio-06-decoys-fake-services-on-their-own-ip-address) | Fiona | Decoys: fake services on their own IP address | code, tested |
 | S11 | [FIO-07](fiona.md#fio-07-per-device-baselines) | Fiona | Per-device baselines | code, tested |
-| S11 | [JAK-10](jakub.md#jak-10-netflow-and-ipfix-input) | Jakub | NetFlow and IPFIX input | design |
-| S12 | [JAK-11](jakub.md#jak-11-host-agent-for-one-computer) | Jakub | Host agent for one computer | design |
+| S11 | [JAK-10](jakub.md#jak-10-netflow-and-ipfix-input) | Jakub | NetFlow and IPFIX input | code, tested |
+| S12 | [JAK-11](jakub.md#jak-11-host-agent-for-one-computer) | Jakub | Host agent for one computer | code, tested |
 | S13 | [JAI-12](jaiden.md#jai-12-release-v20-rc1-and-v20) | Jaiden | Release v2.0-rc1 and v2.0 | process |
 | S14 | [AHM-09](ahmad.md#ahm-09-v20-acceptance-test) | Ahmad | v2.0 acceptance test | process |
 
@@ -290,21 +290,21 @@ How the team avoids waiting:
 Run by someone who did not build the release, on a machine that has never run
 MaxGuard. Ahmad records each result (AHM-05).
 
-1. On a clean machine with only Docker installed, download the offline bundle
-   parts and the checksum file from the GitHub Release.
+1. On a clean machine with only Docker installed, download every file of the
+   GitHub Release (the offline bundle) into one empty folder.
 2. Verify the checksums (`sha256sum -c SHA256SUMS` on Linux,
    `shasum -a 256 -c SHA256SUMS` on macOS): every part prints `OK`.
-3. Reassemble and unpack the bundle.
+3. Nothing to reassemble or unpack: `install.sh` joins the parts itself.
 4. **Disconnect the network** (Wi-Fi off, cable out). Check that
    `ping -c 1 1.1.1.1` fails.
 5. Run `bash install.sh`. It finishes without errors.
 6. Open http://127.0.0.1:8000. The dashboard loads and shows the privacy note.
-7. Upload `telnet.pcap` from the release. The alert queue shows a
+7. Upload `sample-telnet.pcap` from the bundle. The alert queue shows a
    `cleartext.telnet` alert mapped to controls in all four frameworks, with
    ATT&CK techniques and a local AI explanation whose sentences cite record IDs.
-8. Upload a zipped folder of Zeek logs. A report appears (the log-import path works).
+8. Upload `sample-telnet-zeek-logs.tar.gz`. A report appears (the log-import path works).
 9. Download the JSON, CSV, and HTML reports. All three open and contain the same findings.
-10. Upload the clean TLS 1.3 capture. It produces zero findings.
+10. Upload `sample-clean-tls13.pcap`. It produces zero findings.
 
 The `v2.0` acceptance test (May 7, AHM-09) adds: the live sensor on the
 reference lab, a blocked IP address with preview, approval and revert, a
