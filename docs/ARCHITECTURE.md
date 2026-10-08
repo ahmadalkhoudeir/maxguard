@@ -151,7 +151,7 @@ built yet.
 | Live sensor: rotation script, Suricata live settings, Compose file, adapter, shipper | `maxguard/zeek/scripts/live/rotate.zeek`, `maxguard/suricata/maxguard-suricata-live.yaml`, `docker/sensor-compose.yaml`, `maxguard/adapters/live.py`, `maxguard/sensor/shipper.py` | Jakub | spring | tested (unit tests; the three containers shipped 1-minute folders to a console in planning); not run on a Raspberry Pi |
 | JA4 watchlist rule | `maxguard/rules/ja4.py` | Jakub | spring | tested |
 | Device attribution | `maxguard/sensor/attribution.py` | Jakub | spring | tested |
-| NetFlow adapter and host agent | `maxguard/adapters/netflow.py`, `maxguard/sensor/agent.py` | Jakub | spring | design |
+| NetFlow adapter, collector and host agent | `maxguard/adapters/netflow.py`, `docker/netflow-compose.yaml`, `maxguard/sensor/agent.py` | Jakub | spring | tested (goflow2 v2.2.7 in Docker received NetFlow v5, v9 and IPFIX from a generator and the flows were analyzed; tcpdump's flags run in a container; the agent uploaded to the ingest-only app); not run with a real router, on a Raspberry Pi, or on macOS or Windows |
 | Decoys and device baselines | `maxguard/decoy/`, `maxguard/rules/decoy.py`, `baseline.py`, `docker/decoy-compose.yaml` | Fiona | spring | tested (unit tests; the decoy in Docker on a bridge network, non-root and read-only, with an intruder container); macvlan on a real LAN not run; rule IDs not registered yet |
 | Signed intel bundles | `maxguard/intel/bundle.py` | Jaiden | spring | tested |
 
@@ -298,8 +298,9 @@ flowchart LR
   never crosses it. Tests that need lab traffic put the lab service on a LAN
   port of the router.
 - Retention is 7 days on both machines: the shipper deletes shipped folders
-  older than that (a folder that was never shipped is kept), and the console's
-  event store prunes whole hour folders (section 9).
+  older than that (a folder that was never shipped is kept). On the console,
+  `EventStore.prune()` deletes whole hour folders (section 9), but **nothing
+  calls it yet**: an open item for review (section 9).
 
 The three questions this section left open are answered:
 
@@ -479,7 +480,7 @@ object per line, so rules read it with the same helper:
 | `PcapAdapter` | Runs Zeek (and Suricata when installed) on the file | alpha |
 | `ZeekLogAdapter` | Unpacks a folder, `.zip` or `.tar.gz` of Zeek logs; converts TSV logs to JSON | alpha |
 | `LiveSensorAdapter` | Returns the newest *completed* interval folder written by the sensor (Zeek logs plus that interval's `eve.json`) | spring |
-| `NetflowAdapter` | Converts collector records into `conn.log`-shaped JSON records, so the normal rules and normalizer can read them (payload-based rules simply find nothing) | spring |
+| `NetflowAdapter` | Converts goflow2's JSON flow records into `conn.log`-shaped records, so the normal rules and normalizer can read them (payload-based rules simply find nothing). Accepts a folder of goflow2 files, or one goflow2 file (uploads arrive as one file under a generated name); never a folder with `conn.log` or `zeek/` | spring |
 | Host agent | Uploads rotated capture files to the console, which uses `PcapAdapter` | spring |
 
 Rules that need history (device baselines) cannot be a plain
@@ -544,8 +545,8 @@ with exactly these keys:
 |---|---|---|
 | `event_id` | str | `record_id(log, record)`, so an event and the AI's citations use the same ID |
 | `ts` | float | epoch seconds (Suricata's ISO time is converted) |
-| `sensor_id` | str | `pcap` for uploaded captures, `import` for uploaded Zeek logs, the sensor's name for live data |
-| `source` | str | `zeek` or `suricata` (later `netflow`, `agent`, `decoy`) |
+| `sensor_id` | str | `pcap` for uploaded captures, `import` for uploaded Zeek logs and NetFlow files, the sensor's or agent's name for data sent to `POST /api/ingest` |
+| `source` | str | `zeek`, `suricata`, or `netflow` (a `conn.log` record that carries `mg_source: netflow`); later `decoy`. A host agent's captures go through Zeek, so they are `zeek` |
 | `log` | str | `conn.log`, `dns.log`, `http.log`, `ssl.log`, `dhcp.log`, or `eve.json` |
 | `kind` | str | `conn`, `dns`, `http`, `tls`, `dhcp`, or `alert` |
 | `uid` | str | Zeek connection uid, or `""` |
@@ -718,6 +719,13 @@ data/events/date=2026-10-06/hour=01/part-<sha>.parquet
 
 - One folder per UTC hour. Retention is "delete hour folders older than 7 days"
   (`prune(older_than=...)`), which is fast and never rewrites a database.
+  **Open item for review:** nothing calls `prune()` yet, so events are kept
+  until the user deletes them, although the privacy table (section 14) and the
+  timeline page promise 7 days. Calling it after every upload is the simple
+  fix, with one catch: events carry the capture's own time, so an uploaded
+  capture older than 7 days would be pruned right after it is analyzed. Jaiden
+  decides between pruning by capture time (and saying so on the upload page)
+  and pruning by upload time (a new column).
 - `<sha>` is a hash of the batch's event IDs, so writing the same events again
   (the same capture uploaded twice) replaces the file instead of adding a copy.
 - `query(ip=..., since=..., until=..., limit=...)` uses DuckDB to scan the
@@ -833,6 +841,23 @@ for a display name once and records it as the `actor` in the audit trail; that
 is for accountability inside a team, not security. **Proposed — confirm in
 review:** user accounts stay out of scope for v2.0, and a rack deployment that
 needs logins puts the console behind the company's existing reverse proxy.
+The name must be 1 to 100 printable characters and is checked before anything
+is saved; the `mg_actor` cookie stores it percent-encoded, because a cookie
+holds only Latin-1 text and a name such as *Łukasz* used to fail after the
+change was already saved (found by the security review). The timeline's `end`
+parameter is limited to real times (0 to the year 9999), so `nan` or `1e20`
+answers 422 instead of crashing the page.
+
+**Open items for review (dashboard):**
+
+- The queue shows at most 200 alerts and the timeline's "Alerts involving this
+  address" reads at most 1000, without saying so on the page. A busy rack
+  sensor can hit both: show "only the first 200: use the filters", and give
+  `StateStore` a query by address.
+- Home mode says "Device involved:" with the finding's source address. For an
+  inbound finding (a decoy contact, for example) that is the outsider, not the
+  user's device. Pick the address on the user's network, together with
+  Jonattan's Home text.
 
 ## 11. The evidence-citing AI
 
@@ -987,16 +1012,49 @@ stateDiagram-v2
   is removed from the firewall.
 - **Concurrency and errors.** Each check and state change is one SQL
   `UPDATE ... WHERE state IN (...)`, so two people clicking at once cannot both
-  approve. A firewall error keeps the state, is audited (`response.apply_failed`,
-  `response.revert_failed`) and answers 502. Other errors: 400 bad input, 404 no
-  such proposal, 409 a step that is not allowed now.
+  approve. An address can have only **one** open proposal (proposed, previewed,
+  approved or applied), checked and inserted in one statement: with two, reverting
+  one would take the address off the firewall while the other still said
+  *applied*. Firewall changes run one at a time (`FIREWALL_LOCK`; the API is one
+  process), so a double click on Apply reaches the firewall once. If a `both`
+  block fails half-way, the address is taken off every list again
+  (`remove_everywhere()`), so the firewall is never left half-blocked. A firewall
+  error keeps the state, is audited (`response.apply_failed`, with whether the
+  rollback worked, and `response.revert_failed`) and answers 502. Other errors:
+  400 bad input, 404 no such proposal, 409 a step that is not allowed now or an
+  address that already has an open proposal.
 - **Audit.** Every step writes a row to the audit table (`response.<step>`,
   target = the proposal ID, who and when), in the same transaction as the state
   change, so a crash can never leave a block without its record. Refused and
-  failed steps are audited too.
+  failed steps are audited too. *Who* is the name the person types: there are no
+  logins yet, which is acceptable only because this API listens on `127.0.0.1`.
+- **On the firewall.** The OPNsense Block rules must sit above every Pass rule
+  (OPNsense uses the first rule that matches; the AHM-08 setup steps say so).
+  `pf` is stateful, so a connection that was already open keeps working until
+  its state ends; the nftables rules match every packet of a tracked connection
+  instead. An iptables block line run twice adds two rules and one undo removes
+  only one (nftables sets do not have this problem).
 - **Dashboard.** The workflow is reachable through the API (AHM-08 shows a full
   session). A dashboard page for proposals is an open item for review: no task
   builds one yet.
+
+**Open items for review (found by the security review):**
+
+- **Suricata alerts and direction.** The normalizer copies an `eve.json`
+  alert's top-level `src_ip` and `dest_ip`, which belong to the packet that
+  matched, not to whoever started the connection (Suricata's EVE format
+  documentation shows a `to_client` alert whose `src_ip` is the server). So an
+  inbound preview can count a connection one of our own devices started.
+  Fix in the normalizer (Jaiden): use the alert's `flow.src_ip` and
+  `flow.dest_ip` when present.
+- **Blocking yourself.** Nothing stops a proposal for the firewall's own
+  address, the console's address or the default gateway, which could cut off
+  the whole network. The preview shows the traffic, but there is no warning.
+  Whether to refuse or warn is a decision for the Security Lead.
+- **Error mapping.** A broken firewall setting (for example an `http://`
+  address in `MAXGUARD_OPNSENSE_URL`) answers 400 instead of 502, and a missing
+  key file answers 500 without an `apply_failed` audit row. Turning setting
+  errors into `EnforcerError` fixes both.
 
 ## 14. Security design
 
@@ -1011,6 +1069,7 @@ controlled. The main threats and the defenses:
 | Text in traffic attacks a spreadsheet (CSV formula injection) | A CSV cell that starts with `=`, `+`, `-`, `@`, a tab, or a line break gets a leading `'`, as OWASP recommends | `report.py` |
 | Text in traffic attacks the AI (prompt injection) | Evidence is passed as JSON data and the prompt says never to follow it; the model can only fill two text fields; every sentence must cite this finding's records; the rule's severity is always shown; tested with four hostile fields and a model that obeys (section 11) | `ai/`, `tests/unit/test_prompt_injection.py` |
 | The dashboard is reached from the network | Published on `127.0.0.1` only. Sensors and agents get a separate ingest-only app (one route, token required, off by default) on the LAN address the user names | `docker/compose.yaml`, `docker/compose.lan.yaml`, API |
+| Someone on the LAN reads or replays what sensors send | Port 8001 is plain HTTP in v2.0, so the token and the logs or captures cross the LAN unencrypted: the docs say to use a wired or trusted network. The shipper already accepts an `https://` console with its own CA file (`ca_file`); TLS on the ingest port is an open item for review. The token is compared in constant time and the agent refuses a config file other users can read | `docker/compose.lan.yaml`, `sensor/shipper.py`, `sensor/agent.py` |
 | A sensor leaks or injects traffic | The capture interface has no IP address; Zeek and Suricata only listen; decoys run on their own IP, never on the capture interface | `docs/HARDWARE.md`, CLAUDE.md rule 5 |
 | A block is abused or goes wrong | Approve only after a preview, with the IP typed again; one-step state changes; audit row for every step and every refusal; undo always shown; strict address parsing (no scope IDs, integers or special addresses); only the user's own firewall, over verified HTTPS; the response API is never on the LAN port | response module |
 | A tampered rule or intel update | The archive's member list is read from its headers (regular files only, no duplicates, size limits); the Ed25519 signature over the manifest is checked before the manifest is trusted; only allowed paths (`rules/*.rules`, `intel/ja4_watchlist.yaml`, `mappings/*.yaml`) and only files in the manifest; every hash checked in memory, then again on disk after extracting with the `data` filter; the `current` link is switched in one step; a version that is not newer is refused, so an old signed bundle cannot be replayed (rollback attack) | `intel/bundle.py` |
@@ -1018,7 +1077,7 @@ controlled. The main threats and the defenses:
 | Another website makes the user's browser send requests to the console (CSRF) | Changing requests are refused when `Sec-Fetch-Site` is `cross-site` or `same-site`, or `Origin` does not match `Host` (OWASP CSRF Prevention Cheat Sheet). DNS rebinding: requests for host names outside `MAXGUARD_ALLOWED_HOSTS` are refused | API |
 | Secrets end up in the repository | Keys and API keys live in the data folder; `.gitignore` and `.dockerignore` exclude key files; CLAUDE.md rule 6 is part of every review | repository |
 | A dependency is compromised or changes license | Pinned minimum versions, one vendored front-end file checked by SHA-256, every license in `docs/DEPENDENCIES.md` | repository |
-| Privacy of the people on the network | Uploads deleted after analysis; events kept 7 days; nothing leaves the machine | storage, section 12 |
+| Privacy of the people on the network | Uploads deleted after analysis; events meant to be kept 7 days (the call to `prune()` is still open, section 9); nothing leaves the machine | storage, section 12 |
 
 The MaxGuard engine container runs as a non-root user (uid 10001). The Ollama
 container keeps its image's default user but sits only on the internal network.
@@ -1091,6 +1150,25 @@ for the pinned tags during planning). Section 4 has the layout on the SSD.
 for an `https://` console with its own certificate, `ca_file`. Make it readable
 only by root.
 
+**NetFlow collector (JAK-10).** `docker/netflow-compose.yaml` runs goflow2
+v2.2.7 (pinned by digest; on Docker Hub `latest` is still the old v1.3.8) on
+the console or any machine the router can reach. It listens on UDP 2055 of
+`MAXGUARD_NETFLOW_ADDRESS` (required), writes JSON lines to
+`MAXGUARD_NETFLOW_DATA` (default `/data/netflow`) as `MAXGUARD_UID:MAXGUARD_GID`
+(default `1000:1000`), read-only, with no capabilities and its HTTP metrics
+server off. A new file starts when the old one is moved away and goflow2 gets
+`SIGHUP`. Flow-only data gives no findings (the rules need Zeek's protocol
+logs) but fills the timeline.
+
+**Host agent (JAK-11).** `python -m maxguard.sensor.agent` on one computer
+(root or Administrator, for the capture). Its config file
+(`~/.config/maxguard/agent.toml`, or `%APPDATA%\MaxGuard\agent.toml` on
+Windows; refused if other users can read it) holds `console_url` (the console's
+port 8001), `token`, `spool_dir`, `sensor_id`, `capture_user` (Linux and macOS:
+tcpdump drops root to this user with `-Z`), and optionally `interface` and
+`rotate_seconds` (default 900, at least 60). Uploaded files move to
+`<spool>/uploaded/` (the newest 4 are kept), refused ones to `rejected/`.
+
 ## 16. Decisions and the options we rejected
 
 `docs/PROJECT_DECISIONS.md` section 6 records what was decided on October 6,
@@ -1160,6 +1238,7 @@ re-generates the fixtures (when Zeek or Suricata change) and updates
 | Python | 3.11 or newer | `pyproject.toml` | Laptops and CI use 3.11; the image has Debian 13's 3.13 |
 | htmx | 2.0.11 | `maxguard/web/static/htmx-2.0.11.min.js` | 0BSD; SHA-256 `d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717` |
 | Python packages | pyyaml 6.0.3, requests 2.34.2, fastapi 0.142.2, uvicorn 0.54.0, jinja2 3.1.6, python-multipart 0.0.32, duckdb 1.5.6, cryptography 50.0.2; dev: pytest 9.1.1, ruff 0.16.10, httpx2 2.13.1 | lower bounds in `pyproject.toml` | Tested versions |
+| goflow2 (NetFlow collector) | v2.2.7 | `docker/netflow-compose.yaml` (tag and digest) | BSD-3-Clause; amd64 and arm64; on Docker Hub `latest` is the old v1.3.8 |
 | Lab images | `python:3.11-slim-bookworm`, `nicolaka/netshoot:v0.15` | `lab/` | Only for making test captures |
 | Development tools | ShellCheck 0.11.0 (`koalaman/shellcheck:v0.11.0`), actionlint 1.7.12 (`actionlint-py==1.7.12.25`) | the guides that use them (KAR-06, JON-05, JAI-09) | Never shipped; licenses in `docs/DEPENDENCIES.md` |
 
