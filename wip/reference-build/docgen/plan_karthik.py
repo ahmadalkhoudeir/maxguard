@@ -80,7 +80,7 @@ TASKS = [
              "label": "Expected output (the end of the planning run for pop3)",
              "note": "The server's exit code 137 is normal: Compose stops it once the client is done."},
             {"id": "look", "show": ("docker run --rm -v \"$PWD/tests/pcaps:/p:ro\" --entrypoint tcpdump "
-                                    "nicolaka/netshoot:v0.15 -nn -r /p/telnet.pcap 'tcp port 23' | head -n 4")},
+                                    "nicolaka/netshoot:v0.15 -nn -c 4 -r /p/telnet.pcap 'tcp port 23'")},
         ],
         "test": (
             "`ls -l lab/captures` lists 14 files of 1 to 4 KB. The tcpdump command shows the "

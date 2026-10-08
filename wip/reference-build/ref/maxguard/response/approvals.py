@@ -13,6 +13,11 @@ and is logged. The steps (docs/ARCHITECTURE.md section 13):
   (action "response.<step>", target = the proposal id). A state change and its
   audit row are written in ONE transaction (storage.state.insert_audit), so a
   crash can never leave a change without its audit row.
+- One open proposal per address: a second proposal for an address that is still
+  proposed, previewed, approved or applied is refused. Otherwise reverting one of
+  them would quietly remove the block the other one still shows as applied.
+- If an enforcer fails half way, the address is taken off the firewall again, so
+  the firewall never keeps a block that MaxGuard does not show as applied.
 - Times are passed in by the caller (the API reads the clock, this module never does).
 
 Proposals live in their own table in state.db, created here with
@@ -24,6 +29,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import sqlite3
+import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
@@ -32,6 +38,12 @@ from maxguard.response.generate import check_direction, parse_ip, rules_for
 from maxguard.storage.state import StateStore, insert_audit
 
 STATES = ("proposed", "previewed", "approved", "applied", "reverted", "rejected")
+OPEN_STATES = ("proposed", "previewed", "approved", "applied")  # not finished yet
+
+# One firewall change at a time. Without it, a double click on "apply" sends the
+# address to the firewall twice before either request can change the state, and
+# OPNsense can then keep a second copy that a later revert leaves behind.
+FIREWALL_LOCK = threading.Lock()
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS response_proposals (
@@ -96,14 +108,24 @@ class ProposalStore:
                 finding_id: str | None = None) -> dict:
         address = str(parse_ip(ip))  # ValueError for anything that is not a plain address
         check_direction(direction)
+        open_states = ", ".join("?" for _ in OPEN_STATES)
         with self._connect() as conn:  # the proposal and its audit row: one transaction
+            # INSERT ... WHERE NOT EXISTS checks and inserts in one statement, so two
+            # people proposing the same address at the same moment cannot both succeed.
             cur = conn.execute(
                 "INSERT INTO response_proposals (ip, direction, reason, finding_id, state, "
-                "created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'proposed', ?, ?, ?)",
-                (address, direction, reason, finding_id, actor, at, at))
-            proposal_id = cur.lastrowid
-            audit(conn, actor, "proposed", proposal_id, at,
-                  {"ip": address, "direction": direction, "finding_id": finding_id})
+                "created_by, created_at, updated_at) "
+                "SELECT ?, ?, ?, ?, 'proposed', ?, ?, ? WHERE NOT EXISTS ("
+                "SELECT 1 FROM response_proposals "
+                f"WHERE ip = ? AND state IN ({open_states}))",
+                (address, direction, reason, finding_id, actor, at, at, address, *OPEN_STATES))
+            if cur.rowcount == 1:
+                proposal_id = cur.lastrowid
+                audit(conn, actor, "proposed", proposal_id, at,
+                      {"ip": address, "direction": direction, "finding_id": finding_id})
+        if cur.rowcount == 0:
+            raise WrongState(f"{address} already has an open proposal: "
+                             "revert or reject it before proposing it again")
         return self.get(proposal_id)
 
     def record_preview(self, proposal_id: int, *, actor: str, preview: dict,
@@ -131,37 +153,43 @@ class ProposalStore:
     def mark_applied(self, proposal_id: int, *, actor: str, at: float,
                      enforcers: Sequence[Enforcer] = ()) -> dict:
         """Apply an approved block: by the enforcers if given, else the person ran the
-        commands by hand and says so. If an enforcer fails, the state stays 'approved'."""
-        proposal = self.require_state(proposal_id, "approved")
-        method = "enforcer" if enforcers else "manual"
-        try:
-            for enforcer in enforcers:
-                enforcer.add(proposal["ip"])
-                enforcer.apply()
-        except Exception as err:
-            self.audit_only(actor, "apply_failed", proposal_id, at, {"error": str(err)})
-            raise
-        self.move(proposal_id, ("approved",), "applied", at, actor,
-                  {"ip": proposal["ip"], "method": method}, method=method)
+        commands by hand and says so. If an enforcer fails, the state stays 'approved'
+        and the address is taken off every enforcer again (nothing stays half-blocked)."""
+        with FIREWALL_LOCK:
+            proposal = self.require_state(proposal_id, "approved")
+            method = "enforcer" if enforcers else "manual"
+            try:
+                for enforcer in enforcers:
+                    enforcer.add(proposal["ip"])
+                    enforcer.apply()
+            except Exception as err:
+                undone = remove_everywhere(enforcers, proposal["ip"])
+                self.audit_only(actor, "apply_failed", proposal_id, at,
+                                {"error": str(err), "undone": undone})
+                raise
+            self.move(proposal_id, ("approved",), "applied", at, actor,
+                      {"ip": proposal["ip"], "method": method}, method=method)
         return self.get(proposal_id)
 
     def revert(self, proposal_id: int, *, actor: str, at: float,
                enforcers: Sequence[Enforcer] = ()) -> dict:
         """Undo the block the same way it was applied."""
-        proposal = self.require_state(proposal_id, "applied")
-        if proposal["method"] == "enforcer":
-            if not enforcers:
-                raise ValueError("this block was applied by the firewall connector, "
-                                 "which is not configured now")
-            try:
-                for enforcer in enforcers:
-                    enforcer.remove(proposal["ip"])
-                    enforcer.apply()
-            except Exception as err:
-                self.audit_only(actor, "revert_failed", proposal_id, at, {"error": str(err)})
-                raise
-        self.move(proposal_id, ("applied",), "reverted", at, actor,
-                  {"ip": proposal["ip"], "method": proposal["method"]})
+        with FIREWALL_LOCK:
+            proposal = self.require_state(proposal_id, "applied")
+            if proposal["method"] == "enforcer":
+                if not enforcers:
+                    raise ValueError("this block was applied by the firewall connector, "
+                                     "which is not configured now")
+                try:
+                    for enforcer in enforcers:
+                        enforcer.remove(proposal["ip"])
+                        enforcer.apply()
+                except Exception as err:
+                    self.audit_only(actor, "revert_failed", proposal_id, at,
+                                    {"error": str(err)})
+                    raise
+            self.move(proposal_id, ("applied",), "reverted", at, actor,
+                      {"ip": proposal["ip"], "method": proposal["method"]})
         return self.get(proposal_id)
 
     def reject(self, proposal_id: int, *, actor: str, at: float, reason: str = "") -> dict:
@@ -210,6 +238,21 @@ def audit(conn: sqlite3.Connection, actor: str, step: str, proposal_id: int, at:
     """One audit row (action "response.<step>"), inside the caller's transaction."""
     insert_audit(conn, actor=actor, action=f"response.{step}", target=str(proposal_id),
                  details=details, at=at)
+
+
+def remove_everywhere(enforcers: Sequence[Enforcer], ip: str) -> bool:
+    """After a failed apply, take ip off every enforcer again, so a retry starts clean.
+
+    Removing an address that is not there is harmless (OPNsense answers "done").
+    Returns False when this failed too (for example, the firewall is unreachable):
+    the audit row then tells the person to check the firewall by hand."""
+    try:
+        for enforcer in enforcers:
+            enforcer.remove(ip)
+            enforcer.apply()
+    except Exception:
+        return False
+    return True
 
 
 def same_address(typed: str | None, expected: str) -> bool:

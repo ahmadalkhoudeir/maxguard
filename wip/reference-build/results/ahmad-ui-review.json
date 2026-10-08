@@ -1,0 +1,157 @@
+{
+ "owner": "ahmad-ui",
+ "verdict": "fixed",
+ "fixed": [
+  {
+   "file": "maxguard/web/routes.py",
+   "problem": "PATCH /alerts/{id}/status crashed with a 500 for any display name containing characters outside Latin-1 (for example '\u0141ukasz' or Arabic '\u0639\u0644\u064a'): Starlette's set_cookie raised UnicodeEncodeError. The crash happened AFTER update_alert had saved the change and written the audit row, so the page reported an error for a change that was already saved, and the cookie was never set, so every later change failed the same way. Names with control characters ('Ann\\x00', 'a\\r\\nSet-Cookie: x=1') also gave a 500 (http.cookies.CookieError) after saving, and were written into the audit trail as they were.",
+   "fix": "Added valid_name(): 1 to 100 characters and str.isprintable(). It is checked before update_alert, so a bad name gets the 400 'Type your name' fragment and no audit row. The mg_actor cookie now stores quote(actor, safe='') and actor_of() reads it back with unquote(). A cookie that is not valid now counts as 'no name', so the form asks for the name again. New tests: test_any_name_works_and_is_remembered (Jos\u00e9, \u0141ukasz, \u0639\u0644\u064a, 'Ann Lee': first and second change both 200, audit actors correct) and test_bad_names_are_refused (newline, NUL, blank, 101 characters give 400 and no audit row)."
+  },
+  {
+   "file": "maxguard/web/routes.py",
+   "problem": "GET /timeline?ip=...&end= accepted any float. end=nan, inf, -inf, 1e20, -1e20 and even 1e12 all returned 500, because utc_time()/datetime.fromtimestamp failed. That is reachable from the hidden 'end' field or a hand-edited URL.",
+   "fix": "end is now Query(None, ge=0, le=LAST_TIME), where LAST_TIME = 253402300799 (9999-12-31 23:59:59 UTC; checked with datetime(9999,12,31,23,59,59,tzinfo=UTC).timestamp()). I checked that pydantic's ge/le refuse nan and \u00b1inf with 422. The constant sits inside the AHM-06 section, so docgen's AHM-03 cut still removes it. New test: test_timeline_refuses_an_impossible_end (nan, inf, -1, 1e20 give 422)."
+  },
+  {
+   "file": "tests/unit/test_web.py",
+   "problem": "Mutation testing showed that tests missed these breakages: dropping the backslash check in safe_next (an open redirect: browsers read /\\evil.example as //evil.example), removing notify_change() after a status change (open queues stop refreshing live), dropping HttpOnly/SameSite from the mg_mode cookie, and adding 'unsafe-inline' to the CSP script-src.",
+   "fix": "Parametrized test_mode_switch_never_redirects_off_site over //evil.example/, /\\evil.example/, https://evil.example/ and javascript:alert(1). Added test_status_change_refreshes_open_queues (app.state.changes goes up by one). test_mode_switch_sets_the_cookie now asserts httponly and samesite=lax. test_pages_return_200_with_the_layout now asserts script-src 'self'; and no 'unsafe' in the CSP. All four mutations are now caught."
+  },
+  {
+   "file": "docs-draft/dashboard-notes.md",
+   "problem": "Test counts were stale (37 tests, '766 passed'), and nothing described the name rules or the end= bound.",
+   "fix": "Updated to 53 tests, the Python 3.13 run, and the whole unit suite result. Documented the end= range and the name rules with the percent-encoded mg_actor cookie, including why (the old 500)."
+  }
+ ],
+ "findings": [
+  {
+   "severity": "major",
+   "file": "../docgen/make_web_snippets.py (lead's script; not edited)",
+   "problem": "My fix adds 'from urllib.parse import quote, unquote\\n' to routes.py. The script's AHM-02 stage (v1) cuts actor_of/valid_name and the AHM-03 section, so web_routes_v1.py keeps an unused import. With the project's ruff config: web_routes_v1.py:18 F401 `urllib.parse.quote` and `urllib.parse.unquote` imported but unused. No assert fails; the script ran and printed 'wrote the AHM-02 and AHM-03 dashboard snippets'. The 4 I001 errors on the snippets were there before my change: run from docgen/, ruff does not know maxguard is first-party.",
+   "suggestion": "In routes(), next to the line that removes 'import time\\n' for v1, add: v1 = sub(v1, \"from urllib.parse import quote, unquote\\n\", \"\"). I ran the derived v1 and v2 test snippets against the derived v1 and v2 routes in a /tmp copy: 18 passed and 39 passed."
+  },
+  {
+   "severity": "major",
+   "file": "maxguard/storage/events.py / maxguard/api/app.py (not the builder's files)",
+   "problem": "Nothing on the console ever calls EventStore.prune(). grep finds no '.prune(' outside sensor/shipper.py and agent.py. Yet ARCHITECTURE (the diagram 'events, 7 days', the privacy row 'events kept 7 days') and the timeline's empty-state text ('Events are kept for 7 days') promise 7-day retention. Events from uploads stay in data/events forever.",
+   "suggestion": "The lead or Jaiden adds retention, for example prune(older_than=now-7d) after each upload in the API or in a periodic task, or changes the docs and the timeline text."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/web/routes.py",
+   "problem": "The queue calls list_alerts() with its default limit=200 and the caption says 'N alerts' without saying the list was cut. alerts_for_ip() reads only the first 1000 alerts. On a busy rack sensor, alerts can silently disappear from the queue and from the timeline's 'Alerts involving this address'.",
+   "suggestion": "Show '(only the first 200: use the filters)' when len(alerts) == limit, as the timeline already does. The timeline could use a store query by IP (needs a StateStore method: lead/Jaiden)."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/web/routes.py",
+   "problem": "same_connection() is applied even when an event's event_id exactly equals a cited record_id. Today every rule makes single-connection findings, so this is harmless. A future aggregated finding (scan or beacon with dst_port 0 or None) would lose its exact record_id links.",
+   "suggestion": "Accept an exact event_id == record_id match without the host/port check, and keep the host/port check only for uid and Community ID matches. Debatable; left for the lead."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/web/templates/alert.html",
+   "problem": "Home mode says 'Device involved: {{ alert.src_ip }}'. For inbound findings (for example a decoy hit, where src is the outside scanner), the 'device' shown is the attacker, not the user's device.",
+   "suggestion": "Pick the address that is on the user's network (or show both in plain words). Decide together with JON-04's Home text."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/web/routes.py",
+   "problem": "No test covers IPv6 normalization on /timeline. Mutating 'ip = str(ipaddress.ip_address(ip))' to only validate was not caught, so an upper-case IPv6 address would silently match nothing.",
+   "suggestion": "Add a test with one event between documentation addresses 2001:db8::1 and 2001:db8::2, queried as 2001:DB8::1."
+  }
+ ],
+ "mutations": [
+  "same_connection() always True: CAUGHT (test_timeline_links_survive_repeated_zeek_uids)",
+  "safe_next() without the backslash check: MISSED before the review, CAUGHT after (new /\\evil.example/ parameter)",
+  "safe_next() allows //: CAUGHT",
+  "notify_change() removed from change_status: MISSED before, CAUGHT after (test_status_change_refreshes_open_queues)",
+  "actor_of() without the 100-character truncation: MISSED before (code replaced by valid_name)",
+  "valid_name() without isprintable(): CAUGHT (test_bad_names_are_refused)",
+  "mg_actor cookie not percent-encoded: CAUGHT (test_any_name_works_and_is_remembered)",
+  "end= without the ge/le bound: CAUGHT (test_timeline_refuses_an_impossible_end)",
+  "timeline ignores hours (always 168): CAUGHT",
+  "evidence_links() without uid keys: CAUGHT",
+  "join_devices() not a full join: CAUGHT",
+  "queue ignores the severity filter: CAUGHT",
+  "Home-mode severity words removed: CAUGHT",
+  "mg_mode cookie without HttpOnly/SameSite: MISSED before, CAUGHT after",
+  "CSP script-src with 'unsafe-inline': MISSED before, CAUGHT after",
+  "timeline IP not normalized: MISSED (only matters for IPv6; reported in findings)",
+  "assignee not saved: CAUGHT"
+ ],
+ "verified_facts": [
+  "The steps were checked against docs-spec/roadmap/ahmad.md AHM-02, AHM-03 and AHM-06: file paths, the router, cookies mg_mode/mg_actor, hx-get/hx-target/hx-select on both filters, EventSource('/api/stream') -> htmx.trigger('#alerts','refresh'), hx-trigger='refresh, every 30s', hx-post with hx-encoding on /upload, id='ev-<record_id>' rows with #ev- chips, the ai.reason banner, Home text from load_home_text()[rule_id], hx-patch /alerts/{id}/status with update_alert(..., at=time.time()), the timeline validated with ipaddress (400) and default 24 h up to 7 days, and /assets joining report['devices']. All conform. The builder explained its deviations (4-link nav, extra /mode and /favicon.ico, end= parameter, uid plus host/port linking).",
+  "The pipeline now puts report['devices'] = build_device_table(log_dir) (pipeline.py line 116). Device rows have the keys ip, mac, host_name, dns_names, first_seen, which is what join_devices reads.",
+  "The CSRF middleware in app.py (refuse_cross_site_changes) covers the web router's POST /mode and PATCH /alerts/{id}/status. The tests check this with Sec-Fetch-Site: cross-site and Origin: http://evil.example (403).",
+  "Starlette's RedirectResponse percent-encodes control characters in next=: '/\\t/evil.example' becomes Location '/%09/evil.example' (ran it). Together with safe_next, the mode switch cannot redirect off the site.",
+  "A name with a ';' cannot inject a cookie: SimpleCookie quotes it ('mg_actor=\"A\\073 mg_mode=home\"'), and mode stayed analyst (ran it).",
+  "Before the fix: actor '\u0639\u0644\u064a' or '\u0141ukasz' gave a 500 with set-cookie None, but the audit row was written (ran it). Starlette Response.set_cookie raises UnicodeEncodeError ('latin-1' codec) for '\u0639\u0644\u064a' and CookieError for '\\r\\n' and '\\x00' (ran it). Python's http.cookies._LegalChars includes '%', so percent-encoded values pass unquoted.",
+  "Pydantic/FastAPI Query(None, ge=0, le=253402300799) answers 422 for nan, inf, -inf, 1e20 and -5, and accepts 0 and 253402300799 (ran it). datetime(9999,12,31,23,59,59,tzinfo=UTC).timestamp() == 253402300799.0.",
+  "In the vendored htmx 2.0.11 (version:\"2.0.11\" in the file), the default responseHandling is [{code:'204',swap:false},{code:'[23]..',swap:true},{code:'[45]..',swap:false,error:true}], and the file reads meta[name=\"htmx-config\"]. The keys includeIndicatorStyles, allowEval, allowScriptTags and selfRequestsOnly are all in the file (grep).",
+  "The vendored htmx sha256 is d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717 (test_htmx_file_is_the_reviewed_one passes).",
+  "zeek -D is used for uploads (maxguard/zeek/runner.py docstring). The uid collision across the telnet and cert_expired fixtures is asserted in a test that passes.",
+  "app.css has no url(), @import or http references. The screenshots have no PNG text or EXIF chunks. alert-home.png shows only lab address 172.18.0.3.",
+  "docgen/make_web_snippets.py ran with no failed assert after the fixes. The section markers '# ---------- AHM-03: alert detail ----------' and '# ---------- AHM-06: timeline and assets ----------' are unchanged.",
+  "Not verified online: RFC 6265 section 4.1.1 (the cookie-octet grammar is ASCII only), which the new comment cites. rfc-editor.org gave CONNECT 403 through the proxy, and datatracker and raw.githubusercontent gave no answer. The claim is backed by running Starlette and http.cookies as above."
+ ],
+ "commands": [
+  {
+   "command": "./.venv/bin/pytest tests/unit/test_web.py -q -p no:cacheprovider   (before the review)",
+   "output": "37 passed in 2.71s"
+  },
+  {
+   "command": "PYTHONPATH=. python probe.py  (in a /tmp copy; TestClient with raise_server_exceptions=False)",
+   "output": "end nan 500 / end inf 500 / end -inf 500 / end 1e20 500 / end -1e20 500 / end 1e12 500\n'/\\t/evil.example' 303 '/%09/evil.example'\n'javascript:alert(1)' 303 '/'\nsemi 200 mg_actor=\"A\\073 mg_mode=home\" ... cookie next 200 False"
+  },
+  {
+   "command": "PYTHONPATH=. python probe2.py  (actor names, before the fix)",
+   "output": "'\u0639\u0644\u064a' 500 None   audit ['\u0639\u0644\u064a'] investigating\n'\u0141ukasz' 500 None   audit ['\u0141ukasz'] investigating\n'Ann\\x00' 500 None\n'a\\r\\nSet-Cookie: x=1' 500 None   audit ['a\\r\\nSet-Cookie: x=1'] investigating"
+  },
+  {
+   "command": "python probe3.py  (Starlette Response.set_cookie)",
+   "output": "'a\\r\\nb' CookieError Control characters are not allowed in cookies\n'Ann\\x00' CookieError Control characters are not allowed in cookies\n'\u0639\u0644\u064a' UnicodeEncodeError 'latin-1' codec can't encode characters in position 10-12"
+  },
+  {
+   "command": "python mutate.py  (in /tmp/claude-0/ahmad-ui-review/repo, before the fixes)",
+   "output": "safe_next no backslash check: MISSED | no notify_change on status: MISSED | actor not truncated: MISSED | mode cookie not httponly/samesite: MISSED | timeline ip not normalized: MISSED | CSP script-src unsafe-inline: MISSED | the other 8: CAUGHT"
+  },
+  {
+   "command": "python mutate.py  (after the fixes)",
+   "output": "16 mutations: 15 CAUGHT, 1 MISSED (timeline ip not normalized)"
+  },
+  {
+   "command": "./.venv/bin/pytest tests/unit/test_web.py -q -p no:cacheprovider",
+   "output": ".....................................................                    [100%]\n53 passed in 3.24s"
+  },
+  {
+   "command": "./.venv/bin/ruff check maxguard/web/routes.py maxguard/web/__init__.py tests/unit/test_web.py",
+   "output": "All checks passed!"
+  },
+  {
+   "command": "docker run --rm --name ahmad-ui-review-py313 --network none --user $(id -u):$(id -g) -e PYTHONDONTWRITEBYTECODE=1 -e HOME=/tmp -v $PWD:/src:ro -w /src maxguard-sandbox:test /opt/venv/bin/python -m pytest tests/unit/test_web.py -q -p no:cacheprovider",
+   "output": "53 passed in 3.26s"
+  },
+  {
+   "command": "cd ../docgen && python3 make_web_snippets.py",
+   "output": "wrote the AHM-02 and AHM-03 dashboard snippets"
+  },
+  {
+   "command": "ruff check --config ref/pyproject.toml --output-format concise web_routes_v1.py web_routes_v2.py test_web_v1.py test_web_v2.py  (docgen/snippets)",
+   "output": "web_routes_v1.py:18:26: F401 `urllib.parse.quote` imported but unused\nweb_routes_v1.py:18:33: F401 `urllib.parse.unquote` imported but unused\n(+4 I001, also present before the change)"
+  },
+  {
+   "command": "git stash -q; python3 make_web_snippets.py; ruff ...; git stash pop -q   (to compare snippet lint before and after; the stash briefly covered all tracked modified files in ref; restored, and git diff --stat was unchanged: 12 files, 296+/51-)",
+   "output": "before my change: 4 errors (I001 only)"
+  },
+  {
+   "command": "derived snippet tests in a /tmp copy: web_routes_v1 + v1 templates + test_web_v1.py; web_routes_v2 + test_web_v2.py",
+   "output": "18 passed in 1.28s\n39 passed in 2.53s"
+  },
+  {
+   "command": "./.venv/bin/pytest -m \"not integration\" -q -p no:cacheprovider | tail -3",
+   "output": "858 passed, 1 skipped, 31 deselected in 18.64s"
+  }
+ ],
+ "tests_passed": true
+}

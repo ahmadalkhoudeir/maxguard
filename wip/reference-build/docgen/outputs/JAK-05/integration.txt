@@ -1,4 +1,4 @@
 s                                                                        [100%]
 =========================== short test summary info ============================
 SKIPPED [1] tests/integration/test_suricata_pipeline.py:22: suricata is not installed here; the engine image has it
-1 skipped in 0.08s
+1 skipped in 0.06s

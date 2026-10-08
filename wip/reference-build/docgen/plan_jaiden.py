@@ -2,6 +2,9 @@
 
 from plan_helpers import checklist, pr_step, start_step
 
+# actionlint 1.7.12 from actionlint-py==1.7.12.25, installed once in the planning sandbox.
+SCRATCH_ACTIONLINT = "/tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/jaiden-actionlint/bin/actionlint"
+
 TASKS = [
     {
         "id": "JAI-01", "owner": "jaiden", "milestone": "W0",
@@ -210,7 +213,7 @@ TASKS = [
             "Run them:\n\n@@RUN tests@@",
             pr_step("feat: common event schema normalizer and record lookup (JAI-03)", "ahmadalkhoudeir"),
         ],
-        "files": ["maxguard/events/__init__.py", "maxguard/events/normalize.py",
+        "files": ["maxguard/events/__init__.py", ("maxguard/events/normalize.py", "snip:normalize_v1.py"),
                   "maxguard/events/lookup.py", "tests/unit/test_normalize.py",
                   "tests/unit/test_lookup.py"],
         "commands": [
@@ -512,45 +515,90 @@ TASKS = [
     {
         "id": "JAI-09", "owner": "jaiden", "milestone": "W6",
         "title": "Release workflow and v2.0-alpha-rc1",
-        "labels": ["area:release", "critical-path"], "status": "design",
+        "labels": ["area:release", "critical-path"], "hardware": True,
         "depends": ["JAI-04", "KAR-04", "JON-05"],
         "goal": (
             "Add `.github/workflows/release.yml`: when a tag `v*` is pushed, build the image for "
             "`linux/amd64` and `linux/arm64`, push it to the GitHub Container Registry, and create "
-            "a GitHub Release with a `SHA256SUMS` file. Then tag `v2.0-alpha-rc1` and attach the "
-            "offline bundle."
+            "a GitHub Release with the small bundle files and a `SHA256SUMS` file. Then tag "
+            "`v2.0-alpha-rc1` and attach the offline bundle."
         ),
         "prereq": "JAI-04, KAR-04 and JON-05 are merged, and every W5 issue is closed or moved.",
         "steps": [
             start_step("jaiden/release-workflow"),
-            "Write `release.yml` with `on: push: tags: [\"v*\"]`, `permissions: contents: write, "
-            "packages: write`, and the official Docker actions (`docker/setup-qemu-action`, "
-            "`docker/setup-buildx-action`, `docker/login-action` with `GITHUB_TOKEN`, "
-            "`docker/build-push-action` with `platforms: linux/amd64,linux/arm64`). On October 6, "
-            "2026 the newest major versions were `actions/checkout@v7`, "
-            "`docker/setup-qemu-action@v4`, `docker/setup-buildx-action@v4`, "
-            "`docker/login-action@v4` and `docker/build-push-action@v7` (read with "
-            "`git ls-remote --tags https://github.com/<owner>/<action>`); check again and pin "
-            "the newest.",
-            "Validate the file with `actionlint` before merging (`pip install actionlint-py==1.7.12.25` in a "
-            "throwaway virtual environment).",
-            "After merging: write the release notes in `docs/releases/v2.0-alpha-rc1.md` (what "
-            "works, known limits, how to install offline), then:\n\n```bash\ngit checkout main && git pull\n"
+            "Create `.github/workflows/release.yml`:\n\n@@FILE .github/workflows/release.yml@@\n\n"
+            "Four security choices, all from GitHub's *Secure use reference* for "
+            "Actions. The top level grants only `contents: read`; the `image` job adds "
+            "`packages: write` and the `release` job adds `contents: write`, so neither job "
+            "holds both. Every action is pinned to a full commit SHA with its version in a "
+            "comment, because a tag such as `v7` can be moved to other code and a commit "
+            "cannot (GitHub: pinning to a full-length commit SHA is \"the only way to use an "
+            "action as an immutable release\"). `persist-credentials: false` keeps the token "
+            "out of `.git/config`. And the tag name reaches shell commands only through "
+            "environment variables, never pasted in with `${{ }}`.",
+            "Find the newest release of each action and the commit it points to. On October 8, "
+            "2026 they were the ones in the file; check again before you merge:\n\n"
+            "@@RUN versions@@\n\nWhen a newer version exists, put its SHA and version comment in "
+            "the file. (A Dependabot `github-actions` update would keep them current; ask Ahmad "
+            "first.)",
+            "Validate the workflow with `actionlint` in a throwaway virtual environment (it is "
+            "a development tool, never shipped; `docs/DEPENDENCIES.md`):\n\n@@RUN lint@@",
+            "Create the release notes `docs/releases/v2.0-alpha-rc1.md`. The workflow refuses "
+            "to run without `docs/releases/<tag>.md`, and fails in seconds (before the hour of "
+            "building) when it or `docs/OFFLINE-INSTALL.md` is missing. Replace every TODO with "
+            "what the acceptance test showed:\n\n@@FILE docs/releases/v2.0-alpha-rc1.md@@",
+            "After merging, tag the release from `main`:\n\n```bash\ngit checkout main && git pull\n"
             "git tag -a v2.0-alpha-rc1 -m \"MaxGuard v2.0-alpha release candidate 1\"\n"
-            "git push origin v2.0-alpha-rc1\n```",
-            "When the workflow is green, build the offline bundle (JON-05) and attach its parts and "
-            "`SHA256SUMS` to the release with `gh release upload v2.0-alpha-rc1 dist/*`. Hand it "
-            "to Karthik for KAR-05.",
+            "git push origin v2.0-alpha-rc1\n```\n\n"
+            "*Not run — verify on GitHub*: GitHub Actions cannot run in planning. The first "
+            "tag push is the test: the run must be green and the release page must show the "
+            "image digest. A package on a personal account is **private** the first time it "
+            "is published: in the package's settings, make `maxguard` public once (GitHub "
+            "warns that this cannot be undone).",
+            "When the workflow is green, build the offline bundle (JON-05) from the tagged "
+            "commit, with the image CI built, and attach it:\n\n```bash\n"
+            "git checkout v2.0-alpha-rc1\n"
+            "docker pull --platform linux/amd64 ghcr.io/<owner>/maxguard:2.0-alpha-rc1@<digest from the release page>\n"
+            "docker tag ghcr.io/<owner>/maxguard:2.0-alpha-rc1@<digest> maxguard:2.0.0a0\n"
+            "rm -rf dist && scripts/build-offline-bundle.sh\n"
+            "gh release upload v2.0-alpha-rc1 dist/* --clobber\n```\n\n"
+            "`--clobber` is needed because the release already has `SHA256SUMS` and the small "
+            "files: they are replaced by identical copies, and `SHA256SUMS` by the bundle's, "
+            "which lists every file. Hand the release to Karthik for KAR-05.",
         ],
-        "files": [], "commands": [],
-        "test": "The release page shows both architectures in the image's manifest and the "
-                "bundle parts with their checksums.",
+        "files": [".github/workflows/release.yml", "docs/releases/v2.0-alpha-rc1.md"],
+        "commands": [
+            {"id": "versions", "show": (
+                "for repo in actions/checkout docker/setup-qemu-action docker/setup-buildx-action "
+                "docker/login-action docker/build-push-action; do\n"
+                "  tag=$(git ls-remote --tags --refs \"https://github.com/$repo\" | sed 's#.*refs/tags/##' \\\n"
+                "        | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+$' | sort -V | tail -n 1)\n"
+                "  sha=$(git ls-remote \"https://github.com/$repo\" \"refs/tags/$tag^{}\" \"refs/tags/$tag\" "
+                "| head -n 1 | cut -f 1)\n"
+                "  echo \"$repo@$sha # $tag\"\n"
+                "done"),
+             "note": ("`^{}` asks for the commit an annotated tag points to; for a plain tag only "
+                      "the second name exists. Newer releases after October 8, 2026 change "
+                      "this output.")},
+            {"id": "lint", "show": (
+                "python -m venv /tmp/actionlint-venv\n"
+                "/tmp/actionlint-venv/bin/pip install -q actionlint-py==1.7.12.25\n"
+                "/tmp/actionlint-venv/bin/actionlint .github/workflows/release.yml .github/workflows/ci.yml "
+                "&& echo \"actionlint: clean\""),
+             "run": (SCRATCH_ACTIONLINT
+                     + " .github/workflows/release.yml .github/workflows/ci.yml && echo \"actionlint: clean\""),
+             "note": "Installing actionlint-py downloads the actionlint program from GitHub."},
+        ],
+        "test": "`actionlint` is clean; on the first tag push the release page shows both "
+                "architectures in the image's manifest and the bundle parts with their checksums.",
         "why": (
             "Releases built by CI from a tag are reproducible: anyone can see exactly which commit "
             "and which steps made them. The ARM64 image is what the Raspberry Pi sensor and Apple "
-            "Silicon laptops run."
+            "Silicon laptops run. A release workflow holds a token that can publish code, so it "
+            "gets the fewest rights and only actions that cannot change under it."
         ),
-        "checklist": checklist(extra=["`actionlint` is clean", "The release has `SHA256SUMS`"]),
+        "checklist": checklist(extra=["`actionlint` is clean", "Every action is pinned to a commit SHA",
+                                      "The release has `SHA256SUMS`"]),
     },
     {
         "id": "JAI-10", "owner": "jaiden", "milestone": "W8",

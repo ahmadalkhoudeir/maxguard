@@ -16,7 +16,8 @@ like the rest of the API; approvals.py and preview.py never do.
 apply uses the OPNsense enforcer when MAXGUARD_OPNSENSE_URL is set; otherwise
 it records that the person ran the generated commands by hand.
 Errors: 400 bad input or wrong typed IP, 404 no such proposal, 409 step not
-allowed now, 502 the firewall refused or could not be reached.
+allowed now (or the address already has an open proposal), 502 the firewall
+refused or could not be reached.
 """
 
 from __future__ import annotations

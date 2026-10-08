@@ -1,0 +1,24 @@
+bundle built
+OFFLINE-INSTALL.md
+SHA256SUMS
+compose.yaml
+images.tar.part-aa
+images.tar.part-ab
+install.sh
+models.tar.gz
+sample-clean-tls13.pcap
+sample-telnet-zeek-logs.tar.gz
+sample-telnet.pcap
+uninstall.sh
+--- a clean machine: no stand-in image, no model volume
+Loaded image: alpine:3.20
+Loaded image: maxguard-test/ollama:stand-in
+Restoring the AI model into the volume maxguard-test-models...
+MAXGUARD_SKIP_START=1: not starting MaxGuard.
+image loaded: sha256:c64c687
+not a real model
+--- one changed byte
+Checking the SHA-256 checksum of every file...
+images.tar.part-ab: FAILED
+sha256sum: WARNING: 1 computed checksum did NOT match
+ERROR: a file is damaged or was changed. Nothing was installed. Download the bundle again.

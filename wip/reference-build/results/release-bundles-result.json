@@ -1,0 +1,137 @@
+{
+ "owner": "release-bundles",
+ "files": [
+  ".github/workflows/release.yml",
+  "scripts/build-offline-bundle.sh",
+  "scripts/install.sh",
+  "scripts/uninstall.sh",
+  "docs-draft/OFFLINE-INSTALL.md",
+  "docs-draft/release-notes.md",
+  "tests/unit/test_bundle_scripts.py"
+ ],
+ "commands": [
+  {
+   "command": "for a in actions/checkout docker/setup-qemu-action docker/setup-buildx-action docker/login-action docker/build-push-action; do git ls-remote --tags https://github.com/$a | ...newest vN and vN.N.N...; done",
+   "output": "actions/checkout: v7 (newest v7.0.1)\ndocker/setup-qemu-action: v4 (v4.4.0)\ndocker/setup-buildx-action: v4 (v4.4.1)\ndocker/login-action: v4 (v4.6.0)\ndocker/build-push-action: v7 (v7.4.0)\n(same majors as the spec's October 6 list)"
+  },
+  {
+   "command": "curl -sS https://raw.githubusercontent.com/docker/build-push-action/v7.4.0/action.yml | grep inputs/outputs (same for login v4.6.0, setup-qemu v4.4.0, setup-buildx v4.4.1)",
+   "output": "build-push-action inputs include context, file, labels, platforms, push, tags, target; outputs imageid, digest, metadata; using: 'node24'. login-action inputs registry, username, password. All four use node24."
+  },
+  {
+   "command": "python3 -m venv /tmp/claude-0/release-bundles-actionlint && .../pip install actionlint-py==1.7.12.25; actionlint --version",
+   "output": "1.7.12\ninstalled by downloading from release page\nbuilt with go1.26.1 compiler for linux/amd64"
+  },
+  {
+   "command": "PATH=<shim that runs docker run -i koalaman/shellcheck:v0.11.0>:$PATH actionlint -verbose .github/workflows/release.yml",
+   "output": "verbose: Found 0 parse errors in 0 ms for .github/workflows/release.yml\nverbose: Rule \"pyflakes\" was disabled: exec: \"pyflakes\": executable file not found in $PATH\nverbose: Found total 0 errors in 1142 ms for .github/workflows/release.yml\nactionlint exit=0\n(the shellcheck shim was proven active: a test workflow with `run: echo $FOO` was reported as SC2086)"
+  },
+  {
+   "command": "docker run --rm --network none -v \"$PWD/scripts\":/mnt:ro -w /mnt koalaman/shellcheck:v0.11.0 build-offline-bundle.sh install.sh uninstall.sh; echo \"shellcheck exit=$?\"",
+   "output": "shellcheck exit=0\n(ShellCheck version 0.11.0, image koalaman/shellcheck@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d)"
+  },
+  {
+   "command": "docker save -o dist/images.tar alpine-standin hello-world-standin   (first attempt, without --platform)",
+   "output": "Error response from daemon: unable to create manifests file: NotFound: content digest sha256:d1a8d0a4...: not found\n(Docker 29.6.2 uses the containerd image store; the local hello-world:latest index only has arm64 content. Fixed by docker save --platform \"$BUNDLE_PLATFORM\".)"
+  },
+  {
+   "command": "docker tag alpine:3.20 release-bundles/mg:test; tar -C fake-ollama -cf - . | docker import - release-bundles/ollama:test   (hello-world amd64 pull got 429 Too Many Requests from Docker Hub)",
+   "output": "sha256:f998c8380b68163a6b958bd7693423534b51a581017027f2d6f1ac4010ca1083\nlinux/amd64 894"
+  },
+  {
+   "command": "MG_IMAGE=release-bundles/mg:test OLLAMA_IMAGE=release-bundles/ollama:test MODEL_VOLUME=release-bundles-models MODEL_SOURCE_DIR=$W/model OFFLINE_DOC=docs-draft/OFFLINE-INSTALL.md DIST_DIR=$W/dist PART_BYTES=1500000 scripts/build-offline-bundle.sh",
+   "output": "Building a bundle for linux/amd64\nUsing the image release-bundles/mg:test that is already on this machine\nUsing the image release-bundles/ollama:test that is already on this machine\nFilling the volume release-bundles-models from $W/model (no model pull)\nSaving release-bundles/mg:test and release-bundles/ollama:test (linux/amd64) to $W/dist/images.tar\nSaving the volume release-bundles-models to $W/dist/models.tar.gz\nSplitting $W/dist/images.tar (3725824 bytes) into parts of 1500000 bytes\nSplitting $W/dist/models.tar.gz (6001405 bytes) into parts of 1500000 bytes\nWriting $W/dist/SHA256SUMS\nDone. The bundle is in $W/dist/:\nbuild exit=0\nOFFLINE-INSTALL.md SHA256SUMS compose.yaml images.tar.part-aa images.tar.part-ab images.tar.part-ac install.sh models.tar.gz.part-aa models.tar.gz.part-ab models.tar.gz.part-ac models.tar.gz.part-ad models.tar.gz.part-ae uninstall.sh"
+  },
+  {
+   "command": "cp -r dist usb; docker volume rm release-bundles-models; docker image rm release-bundles/mg:test release-bundles/ollama:test; MG_IMAGE=release-bundles/mg:test MODEL_VOLUME=release-bundles-models MAXGUARD_SKIP_START=1 bash usb/install.sh",
+   "output": "Checking the SHA-256 checksum of every file...\nOFFLINE-INSTALL.md: OK\ncompose.yaml: OK\nimages.tar.part-aa: OK\nimages.tar.part-ab: OK\nimages.tar.part-ac: OK\ninstall.sh: OK\nmodels.tar.gz.part-aa: OK\n... models.tar.gz.part-ae: OK\nuninstall.sh: OK\nLoading the images (this takes a few minutes)...\nLoaded image: release-bundles/mg:test\nLoaded image: release-bundles/ollama:test\nRestoring the AI model into the volume release-bundles-models...\nMAXGUARD_SKIP_START=1: not starting MaxGuard.\ninstall exit=0"
+  },
+  {
+   "command": "docker run --rm --network none -v release-bundles-models:/models:ro alpine:3.20 sh -c 'cd /models && find . -type f | sort && sha256sum blobs/sha256-fakeblob'; sha256sum model/blobs/sha256-fakeblob",
+   "output": "./blobs/sha256-fakeblob\n./manifests/registry.ollama.ai/library/fake/latest\n611a70e4d7f5cc022a894af835a4278682bdaf2f95972cedd6f72727758c85d0  blobs/sha256-fakeblob\n611a70e4d7f5cc022a894af835a4278682bdaf2f95972cedd6f72727758c85d0  .../model/blobs/sha256-fakeblob"
+  },
+  {
+   "command": "(flip one bit of byte 1000 in usb/images.tar.part-ab; volume and ollama stand-in removed first) MG_IMAGE=... MAXGUARD_SKIP_START=1 bash usb/install.sh",
+   "output": "Checking the SHA-256 checksum of every file...\nOFFLINE-INSTALL.md: OK\ncompose.yaml: OK\nimages.tar.part-aa: OK\nimages.tar.part-ab: FAILED\nimages.tar.part-ac: OK\n...\nsha256sum: WARNING: 1 computed checksum did NOT match\nERROR: a file is damaged or was changed. Nothing was installed. Download the bundle again.\ninstall exit=1\nollama stand-in NOT loaded\nno model volume created"
+  },
+  {
+   "command": "(restore the part, add an unlisted usb/images.tar.part-ad) bash usb/install.sh",
+   "output": "uninstall.sh: OK\nERROR: images.tar.part-ad is not listed in SHA256SUMS. Nothing was installed."
+  },
+  {
+   "command": "echo \"\" | COMPOSE_PROJECT_NAME=release-bundles-test DATA_VOLUME=release-bundles-data MODEL_VOLUME=release-bundles-models bash usb/uninstall.sh",
+   "output": "Stopping MaxGuard (project release-bundles-test)...\nlevel=warning msg=\"Warning: No resource found to remove for project \\\"release-bundles-test\\\".\"\nDelete the volumes release-bundles-data and release-bundles-models?\nThis deletes all alerts, reports, the audit log and the AI model. It cannot be undone.\nType yes to delete them: \nKept the volumes release-bundles-data and release-bundles-models.\nThe images are still on this machine. To remove them too:\n  docker image rm maxguard:2.0.0a0 ollama/ollama:0.35.1\nexit=0 (both volumes still listed)"
+  },
+  {
+   "command": "COMPOSE_PROJECT_NAME=release-bundles-test DATA_VOLUME=release-bundles-data MODEL_VOLUME=release-bundles-models bash usb/uninstall.sh --yes",
+   "output": "Stopping MaxGuard (project release-bundles-test)...\nDeleted the volume release-bundles-data\nDeleted the volume release-bundles-models\nThe images are still on this machine. To remove them too:\n  docker image rm maxguard:2.0.0a0 ollama/ollama:0.35.1\nexit=0\nno release-bundles volumes left"
+  },
+  {
+   "command": "stand-in compose project (release-bundles-ctest): docker volume create <fixed-name volume>; docker compose -f compose.yaml up -d --pull never; then a service whose image is not loaded",
+   "output": "level=warning msg=\"volume \\\"release-bundles-ctest-models\\\" already exists but was not created by Docker Compose. Use `external: true` to use an existing volume\"\nContainer release-bundles-ctest-app-1 Started\n--- missing image:\nError response from daemon: No such image: release-bundles/not-in-bundle:test\nexit=1   (--pull never fails instead of downloading)"
+  },
+  {
+   "command": "docker run --rm --network none --entrypoint sh zeek/zeek:9.0.0 -c 'tar --version | head -1; command -v gzip'",
+   "output": "tar (GNU tar) 1.35\n/usr/bin/gzip   (the real engine image base can tar/untar the model volume)"
+  },
+  {
+   "command": "./.venv/bin/pytest tests/unit/test_bundle_scripts.py -q -p no:cacheprovider",
+   "output": "...........  11 passed in 0.74s"
+  },
+  {
+   "command": "./.venv/bin/ruff check tests/unit/test_bundle_scripts.py",
+   "output": "All checks passed!"
+  },
+  {
+   "command": "./.venv/bin/pytest -m \"not integration\" -q -p no:cacheprovider | tail -3",
+   "output": "836 passed, 1 skipped, 31 deselected in 18.51s"
+  },
+  {
+   "command": "gh release create --help | grep ...; gh release upload --help | grep clobber",
+   "output": "--verify-tag  Abort in case the git tag doesn't already exist in the remote repository\n-F, --notes-file file\n-p, --prerelease  Mark the release as a prerelease\n-t, --title string\n--clobber   Delete and re-upload existing assets of the same name (gh 2.89.0)"
+  }
+ ],
+ "tests_passed": true,
+ "verified_facts": [
+  "Newest major tags on 2026-10-08 (git ls-remote --tags): actions/checkout v7 (v7.0.1), docker/setup-qemu-action v4 (v4.4.0), docker/setup-buildx-action v4 (v4.4.1), docker/login-action v4 (v4.6.0), docker/build-push-action v7 (v7.4.0) - unchanged from the spec.",
+  "build-push-action v7.4.0 has inputs context/file/target/platforms/push/tags/labels and output digest (https://raw.githubusercontent.com/docker/build-push-action/v7.4.0/action.yml); login-action v4.6.0 has registry/username/password (https://raw.githubusercontent.com/docker/login-action/v4.6.0/action.yml).",
+  "actionlint 1.7.12 (actionlint-py==1.7.12.25) reports 0 errors on release.yml, with its shellcheck integration active through a shim running koalaman/shellcheck:v0.11.0 (proven by a deliberately bad workflow being flagged SC2086).",
+  "ShellCheck 0.11.0 (koalaman/shellcheck:v0.11.0, digest sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d) reports nothing on all three scripts.",
+  "Docker 29.6.2 here uses the containerd image store (driver-type io.containerd.snapshotter.v1); docker save without --platform failed when an image index lacked the host platform's content; docker save --platform linux/amd64 works (docker save --help: '--platform strings  Save only the given platform(s)').",
+  "Real Docker run with stand-ins: the bundle built, was split (3 image parts, 5 model parts), install.sh verified every checksum, loaded both images (tags reappeared after removal), restored the model volume byte-for-byte (sha256 611a70e4... matches), and skipped compose up with MAXGUARD_SKIP_START=1.",
+  "Flipping one bit in images.tar.part-ab: sha256sum prints 'images.tar.part-ab: FAILED', install.sh exits 1 before docker load, no image loaded and no volume created.",
+  "An extra unlisted file images.tar.part-ad is refused by install.sh ('is not listed in SHA256SUMS'); sha256sum -c by itself would ignore it.",
+  "docker compose up -d --pull never fails with 'No such image' rather than downloading when an image is missing (tested with a stand-in compose project, Docker Compose v5.3.1).",
+  "A volume created with docker volume create and then used by Compose under the same fixed name produces only a warning ('already exists but was not created by Docker Compose'); the container starts.",
+  "docker compose -p <project> down works without a compose file (uninstall.sh relies on this).",
+  "zeek/zeek:9.0.0 (base of the engine image) and maxguard-sandbox:runtime contain GNU tar 1.35 and gzip, so MG_IMAGE can pack and unpack the model volume.",
+  "First publish of a GHCR package scoped to a personal account is private by default; public cannot be undone (https://raw.githubusercontent.com/github/docs/main/content/packages/working-with-a-github-packages-registry/working-with-the-container-registry.md).",
+  "gh 2.89.0: release create has --verify-tag, --notes-file, --prerelease, --title; --prerelease=false parses as a boolean; release upload has --clobber ('Delete and re-upload existing assets of the same name').",
+  "tests/unit/test_bundle_scripts.py: 11 tests pass in 0.74 s with a fake docker on PATH; whole unit suite: 836 passed, 1 skipped."
+ ],
+ "not_run": [
+  "The release workflow on GitHub Actions (tag push, QEMU arm64 build, push to ghcr.io, gh release create): GitHub Actions cannot run here; only actionlint-validated. Verify on the first tag push.",
+  "build-offline-bundle.sh real model pull path (pull_model_into_volume: temporary ollama/ollama:0.35.1 container + ollama pull qwen3:4b): the model registry is blocked in this sandbox and ollama/ollama:0.35.1 must not be docker-saved here (several GB).",
+  "build-offline-bundle.sh 'build MaxGuard image' branch (docker build when MG_IMAGE is missing) and 'docker pull --platform' of the Ollama image: stand-ins were already present.",
+  "A real bundle with 1900 MiB parts (PART_BYTES default) and the real images/model: only small stand-ins with PART_BYTES=1500000 were run.",
+  "install.sh starting the real stack (docker compose up -d --pull never with maxguard:2.0.0a0 + ollama/ollama:0.35.1) and the dashboard showing an AI explanation on a laptop with Wi-Fi off (JON-05 step 6 / acceptance test): needs the real model and an offline laptop.",
+  "macOS (shasum -a 256 path, bash 3.2) and Windows WSL 2: no such machines here; the scripts avoid bash 4 features but this is not run.",
+  "An arm64 bundle (BUNDLE_PLATFORM=linux/arm64) and running a bundle on Apple Silicon or a Raspberry Pi 5.",
+  "OLLAMA_IMAGE=hello-world:latest as asked: the local hello-world only holds arm64 content and Docker Hub answered 429 Too Many Requests to the amd64 pull, so a 894-byte image made with docker import (release-bundles/ollama:test) stood in for Ollama."
+ ],
+ "issues_for_lead": [
+  "SHA256SUMS name clash (JAI-09 vs JON-05): the workflow must create a release with SHA256SUMS, and step 5 uploads dist/* which also contains SHA256SUMS; gh release upload refuses an existing asset name unless --clobber. My resolution: the workflow attaches the small bundle files built from the tagged commit (compose.yaml, install.sh, uninstall.sh, OFFLINE-INSTALL.md) plus SHA256SUMS for them; step 5 must read `gh release upload v2.0-alpha-rc1 dist/* --clobber`, which replaces the small files with identical copies and SHA256SUMS with the bundle's, which lists every release file. Please fix JAI-09 step 5. Build the bundle from the tagged checkout (`git checkout v2.0-alpha-rc1`) so the small files really are identical.",
+  "The workflow refuses to run unless docs/releases/<tag>.md exists (it fails within seconds, before the hour-long build). docs-draft/release-notes.md is the draft for docs/releases/v2.0-alpha-rc1.md and has TODOs to fill from the acceptance test.",
+  "Move docs-draft/OFFLINE-INSTALL.md to docs/OFFLINE-INSTALL.md: release.yml copies docs/OFFLINE-INSTALL.md and build-offline-bundle.sh defaults OFFLINE_DOC to docs/OFFLINE-INSTALL.md. In this scratch repo the file is only in docs-draft/, so the default build fails here until it is moved (the tests pass their own OFFLINE_DOC).",
+  "Add `dist/` to .gitignore (I do not own it): the bundle is several GB and must never be committed.",
+  "docker save needs --platform with the containerd image store, which Docker Engine 29 here uses by default: without it the save failed. build-offline-bundle.sh now has BUNDLE_PLATFORM (defaults to this machine's platform, from docker version) and needs Docker Engine 28 or newer to build. A bundle holds one platform, and the file names carry no architecture, so an amd64 bundle and an arm64 bundle cannot share one release. Decide whether rc1 ships amd64 only (the release-notes draft says so) or whether to add an arch prefix to the names.",
+  "The bundle ships uninstall.sh too, which JON-05 step 2's file list does not include. Please add it to the step 2 list and to ARCHITECTURE.md's bundle description.",
+  "Security addition worth putting in the ARCHITECTURE threat table: sha256sum -c checks only the files SHA256SUMS lists, so an added images.tar.part-zz would pass unnoticed and be joined into the images. install.sh therefore refuses any file it is about to use that SHA256SUMS does not list, and the test proves it. SHA256SUMS is still unsigned; signing it with the JAI-08 Ed25519 key is a natural spring follow-up.",
+  "Acceptance test (docs/roadmap/README.md) step 3 'Reassemble and unpack the bundle' is not needed: install.sh streams the parts (cat parts | docker load, cat parts | tar -x in a container), so the user only puts every file in one folder. Streaming also saves several GB of disk.",
+  "The bundle's interfaces to change in JON-05 or document: MAXGUARD_SKIP_START=1 makes install.sh skip `docker compose up` (needed to test with stand-ins). install.sh uses MG_IMAGE (default maxguard:2.0.0a0) as the tar helper, because Ollama stand-ins may have no shell and nothing can be pulled offline. It runs with --user 0:0 and --network none, since the real image runs as USER maxguard and the new volume belongs to root. MODEL_SOURCE_DIR fills the model volume from a folder instead of pulling. PART_BYTES defaults to 1992294400, which is 1900 MiB written in bytes so it works with both GNU and BSD split. DIST_DIR must be empty, or the build refuses, so stale parts from an old build cannot be included. The model volume is restored before the first `up`, so Compose prints a harmless 'already exists but was not created by Docker Compose' warning (verified), which OFFLINE-INSTALL.md explains.",
+  "The bundle includes every model in the build machine's maxguard-ollama-models volume (the script prints `ollama list`), so build on a machine whose volume holds only the chosen model. To ship the CI-built image rather than a local build, run this first: `docker pull --platform linux/amd64 ghcr.io/<owner>/maxguard:2.0-alpha-rc1 && docker tag ghcr.io/<owner>/maxguard:2.0-alpha-rc1 maxguard:2.0.0a0`. I suggest putting that in JAI-09 step 5.",
+  "Image naming: release.yml pushes ghcr.io/<owner lowercased>/maxguard:<tag without v>, for example :2.0-alpha-rc1, with OCI source/revision/version labels, and checks with imagetools that both linux/amd64 and linux/arm64 are in the manifest. Tags with a '-' become pre-releases. GHCR packages for a personal account are private on first publish, so Jaiden must set the package to public in its settings once; that cannot be undone (GitHub docs). compose.yaml keeps the local name maxguard:2.0.0a0.",
+  "Disclosure: while checking gh flag parsing I ran `gh release create v0 --prerelease=false --notes x -R example/none` (a placeholder repo name, not a team repo). It reached the GitHub API and was refused with HTTP 403 ('not permitted for this session type'); nothing was created. I should have used a parse-only check instead."
+ ],
+ "doc_notes": "How the pieces fit:\n1. Tag push -> release.yml. The \"image\" job checks that docs/releases/<tag>.md exists, then builds docker/Dockerfile target runtime for linux/amd64 and linux/arm64 (QEMU emulates arm64 on the x86 runner, which is slow, hence timeout 120 min) and pushes ghcr.io/<owner>/maxguard:<tag without v>. A `docker buildx imagetools inspect` step proves both architectures are in the pushed manifest. The \"release\" job copies compose.yaml, install.sh, uninstall.sh and OFFLINE-INSTALL.md, writes SHA256SUMS, appends the image digest to the notes and runs `gh release create --verify-tag`. permissions: contents: write lets it create the release; packages: write lets it push to ghcr.io. GITHUB_TOKEN is per-run, so no secret is stored. Registry names must be lowercase, hence ${GITHUB_REPOSITORY_OWNER,,}.\n2. A maintainer then runs scripts/build-offline-bundle.sh from the repository root of the tagged checkout, on a machine with internet, and runs `gh release upload <tag> dist/* --clobber`.\n3. The user downloads every file into one folder and runs `bash install.sh`. The order is the security point: (a) `sha256sum -c SHA256SUMS` on everything, (b) refuse any file the script will use that SHA256SUMS does not list, (c) only then `docker load`, (d) unpack the model into the maxguard-ollama-models volume (name fixed in compose.yaml so this works before the first start), (e) `docker compose up -d --pull never`, where --pull never means Docker fails rather than download anything.\n\nGotchas:\n- Docker Engine 28/29 with the containerd image store keeps several platforms per image tag. docker save without --platform can fail ('content digest ... not found') or save more than wanted, so the build passes --platform and a bundle is for one platform.\n- Tar goes through stdin/stdout (`tar ... | docker run -i ... tar -x`) rather than bind mounts. That way no root-owned files land on the host and it also works on Docker Desktop.\n- `split -b <bytes>` with a byte count works on both GNU and macOS split; 1992294400 = 1900 MiB keeps each part under GitHub's 2 GiB per-file limit and FAT32's 4 GiB.\n- The parts are joined with `cat name.part-*`. The shell sorts the glob, so aa, ab, ac come in order. The joined data is streamed, never written to disk.\n- uninstall.sh deletes the volumes only on a typed 'yes' or --yes. Pressing Enter or having no keyboard (EOF) keeps them. It stops the stack by project name (`docker compose -p maxguard down`), so it needs no compose file.\n\nTesting: unit tests (tests/unit/test_bundle_scripts.py) put a fake `docker` bash script first on PATH. It logs calls, writes fake `docker save` output, and captures what is streamed into `docker load` and into the tar container, so the tests need no Docker and each runs well under a second. The real-Docker proof used alpine:3.20 (re-tagged release-bundles/mg:test) and an imported 894-byte image standing in for Ollama, with PART_BYTES=1500000, a 6 MB random fake model folder, MODEL_VOLUME=release-bundles-models and MAXGUARD_SKIP_START=1. Everything I created was removed afterwards: tags, volumes, the work folder and the actionlint venv.\n\nTo validate the workflow locally: `python3 -m venv /tmp/al && /tmp/al/bin/pip install actionlint-py==1.7.12.25 && /tmp/al/bin/actionlint .github/workflows/release.yml`. It prints nothing and exits 0 when clean. Put shellcheck on PATH so actionlint also lints the run: scripts."
+}

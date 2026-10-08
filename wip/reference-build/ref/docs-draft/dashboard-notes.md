@@ -21,7 +21,7 @@ guides.
 | `maxguard/web/templates/error.html` | 400/404 page |
 | `maxguard/web/static/app.css` | styles, 375 px layout (table rows become labelled cards) |
 | `maxguard/web/static/app.js` | `EventSource("/api/stream")` -> `htmx.trigger("#alerts", "refresh")`; upload result as text |
-| `tests/unit/test_web.py` | 37 tests |
+| `tests/unit/test_web.py` | 53 tests (after the review) |
 
 ## Routes
 
@@ -31,7 +31,8 @@ GET   /upload                       upload form
 POST  /mode                         Analyst/Home switch -> cookie mg_mode, 303 back to the page
 GET   /alerts/{finding_id}          detail (404 page if missing)
 PATCH /alerts/{finding_id}/status   form fields actor (first time only), status, assignee
-GET   /timeline?ip=&hours=&end=     hours 1..168 (default 24); end = Unix seconds (default now)
+GET   /timeline?ip=&hours=&end=     hours 1..168 (default 24); end = Unix seconds 0..253402300799
+                                    (default now; nan, inf or later than year 9999 -> 422)
 GET   /assets                       newest analysis' assets joined with report["devices"]
 GET   /favicon.ico                  204 (stops a 404 line in the log on every page)
 ```
@@ -42,12 +43,13 @@ GET   /favicon.ico                  204 (stops a 404 line in the log on every pa
 ./.venv/bin/pytest tests/unit/test_web.py -q -p no:cacheprovider
 ```
 ```text
-.....................................                                    [100%]
-37 passed in 3.11s
+.....................................................                    [100%]
+53 passed in 3.24s
 ```
 
-Python 3.13 (maxguard-sandbox:test image, Python 3.13.5): `37 passed in 3.41s`.
-Whole unit suite: `766 passed, 1 skipped in 15.62s` (before the last 2 web tests were added).
+Python 3.13 (maxguard-sandbox:test image, Python 3.13.5): `53 passed in 3.26s`.
+Whole unit suite after the review: `858 passed, 1 skipped, 31 deselected in 18.64s`
+(`pytest -m "not integration"`).
 
 ```bash
 sha256sum maxguard/web/static/htmx-2.0.11.min.js
@@ -98,7 +100,11 @@ was run).
   refused cross-site by the API middleware, and the `next` path is checked so it cannot
   redirect off the site.
 - **Name for the audit trail.** The status form has a "Your name" field until the
-  `mg_actor` cookie exists; the PATCH handler sets the cookie. Changes go through
+  `mg_actor` cookie exists; the PATCH handler sets the cookie. The name must be 1 to 100
+  printable characters (a line break could fake a line in the audit trail). The cookie holds
+  it percent-encoded (`quote(name, safe="")`, read back with `unquote`), because a cookie
+  value may only hold plain ASCII (RFC 6265 section 4.1.1): before the review, a name such as
+  "Łukasz" or "علي" saved the change and then crashed with a 500 while setting the cookie. Changes go through
   `StateStore.update_alert(..., at=time.time())`, and `notify_change()` refreshes open queues.
 - **Home mode** shows `load_home_text()[rule_id]` headline and action, the severity as words
   ("High: fix this week"), and the device address; no rule IDs, record IDs, framework names

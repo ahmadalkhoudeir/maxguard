@@ -21,6 +21,7 @@ import ipaddress
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -90,8 +91,15 @@ def mode_of(request: Request) -> str:
 
 
 def actor_of(request: Request) -> str:
-    """The display name stored in the mg_actor cookie ("" when not set yet)."""
-    return request.cookies.get("mg_actor", "").strip()[:MAX_NAME_LENGTH]
+    """The display name stored in the mg_actor cookie ("" when not set yet or not valid)."""
+    name = unquote(request.cookies.get("mg_actor", "")).strip()
+    return name if valid_name(name) else ""
+
+
+def valid_name(name: str) -> bool:
+    """1 to 100 printable characters. A line break or another control character
+    could fake an extra line in the audit trail, so it is refused."""
+    return 0 < len(name) <= MAX_NAME_LENGTH and name.isprintable()
 
 
 def render(request: Request, name: str, context: dict, status_code: int = 200) -> HTMLResponse:
@@ -197,7 +205,7 @@ async def change_status(request: Request, finding_id: str):
     alert = store.get_alert(finding_id)
     if alert is None:
         return error_page(request, 404, "No alert with this ID.")
-    if not actor or len(actor) > MAX_NAME_LENGTH:
+    if not valid_name(actor):
         return render(request, "_status.html", status_context(
             alert, "", f"Type your name (1 to {MAX_NAME_LENGTH} characters) first."), 400)
     try:
@@ -209,7 +217,9 @@ async def change_status(request: Request, finding_id: str):
         return render(request, "_status.html", status_context(alert, actor, str(err)), 400)
     notify_change(request.app)  # open queues refresh themselves
     response = render(request, "_status.html", status_context(alert, actor, "Saved."))
-    response.set_cookie("mg_actor", actor, max_age=YEAR_SECONDS, path="/",
+    # Percent-encoded ("Jos%C3%A9"): a cookie value may only hold plain ASCII
+    # (RFC 6265 section 4.1.1), and names such as "José" or "Łukasz" are not.
+    response.set_cookie("mg_actor", quote(actor, safe=""), max_age=YEAR_SECONDS, path="/",
                         samesite="lax", httponly=True)
     return response
 
@@ -253,9 +263,14 @@ def alert_for_event(event: dict, links: dict[str, list[dict]]) -> dict | None:
     return None
 
 
+# The last second Python's datetime can show (9999-12-31 23:59:59 UTC). A larger
+# end=, or "nan" or "inf", gets FastAPI's 422 instead of crashing the page.
+LAST_TIME = 253402300799
+
+
 @router.get("/timeline", response_class=HTMLResponse)
 def timeline(request: Request, ip: str = "", hours: int = Query(24, ge=1, le=168),
-             end: float | None = None):
+             end: float | None = Query(None, ge=0, le=LAST_TIME)):
     """Everything one address did in a time window (default: the last 24 hours).
     end (Unix seconds) moves the window back, for captures recorded earlier."""
     context = {"ip": ip, "hours": hours, "hour_choices": TIMELINE_HOURS, "end": end,

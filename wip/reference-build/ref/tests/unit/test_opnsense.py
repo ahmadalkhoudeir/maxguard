@@ -91,6 +91,7 @@ class FakeOPNsense:
                                              "maxguard_block_out": set()}
         self.requests: list[tuple[str, dict]] = []
         self.reconfigures = 0
+        self.redirects: dict[str, str] = {}  # path -> where to send the client instead
         self.ca_file, cert_file, key_file = make_certificates(folder)
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(cert_file, key_file)
@@ -134,6 +135,13 @@ class FakeOPNsense:
             def do_POST(self):  # noqa: N802 (the name http.server expects)
                 length = int(self.headers.get("Content-Length", 0))
                 body = json.loads(self.rfile.read(length) or b"{}")
+                if self.path in fake.redirects:
+                    fake.requests.append((self.path, body))
+                    self.send_response(307)
+                    self.send_header("Location", fake.redirects[self.path])
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
                 if self.headers.get("Authorization") != expected:
                     status, answer = 401, {"message": "Authentication Failed"}
                 else:
@@ -212,6 +220,16 @@ def test_wrong_secret_is_an_error(firewall):
     with pytest.raises(EnforcerError, match="401"):
         client.add("203.0.113.7")
     assert firewall.aliases["maxguard_block_in"] == set()
+
+
+def test_redirects_are_not_followed(firewall):
+    # A redirect could send the request (and the API key) somewhere else: refuse it.
+    firewall.redirects["/api/firewall/alias_util/add/maxguard_block_in"] = (
+        firewall.url + "/api/firewall/alias_util/add/maxguard_block_out")
+    with pytest.raises(EnforcerError, match="307"):
+        enforcer(firewall).add("203.0.113.7")
+    assert len(firewall.requests) == 1
+    assert firewall.aliases["maxguard_block_out"] == set()
 
 
 def test_unknown_alias_is_an_error(firewall):

@@ -1,0 +1,47 @@
+# NetFlow / IPFIX collector for MaxGuard (Jakub, JAK-10).
+#
+# A router on YOUR network exports NetFlow v5, NetFlow v9 or IPFIX to UDP port
+# 2055 of the computer that runs this file. goflow2 writes one JSON line per
+# flow to /data/netflow/goflow2.json; MaxGuard reads that folder:
+#
+#   maxguard analyze /data/netflow          (NetflowAdapter, maxguard/adapters/netflow.py)
+#
+# or upload one finished flow file on the dashboard (it then shows on the timeline).
+#
+# Once:   sudo mkdir -p /data/netflow && sudo chown 1000:1000 /data/netflow
+# Start:  MAXGUARD_NETFLOW_ADDRESS=192.168.50.20 docker compose -f docker/netflow-compose.yaml up -d
+# Stop:   docker compose -f docker/netflow-compose.yaml down    (the flow files stay)
+#
+# Settings (environment variables or docker/.env, which git ignores):
+#   MAXGUARD_NETFLOW_ADDRESS   this computer's LAN address that the router sends to (required)
+#   MAXGUARD_NETFLOW_DATA      the folder for the flow files (default /data/netflow)
+#   MAXGUARD_UID / MAXGUARD_GID  who owns the flow files (default 1000:1000, the first user)
+#
+# Start a new file (for example once an hour), so each analysis covers one period:
+#   mv /data/netflow/goflow2.json /data/netflow-done/2026-10-06-1400.json
+#   docker compose -f docker/netflow-compose.yaml kill -s HUP goflow2
+# goflow2 closes and reopens its output file when it gets SIGHUP.
+#
+# The collector only listens: it never sends anything to the router or anywhere else
+# (CLAUDE.md rules 1 and 5). Its built-in HTTP server (metrics) is switched off.
+
+services:
+  goflow2:
+    # v2.2.7 for linux/amd64 and linux/arm64 (Raspberry Pi 5). BSD-3-Clause.
+    # Pin the version tag: on Docker Hub "latest" is the old v1.3.8, not v2.
+    image: netsampler/goflow2:v2.2.7@sha256:b8fdc8f3666b05b0022ada3a3c8c50dcde97f7d19e3f42d050695fa0571fb952
+    command:
+      - "-listen=netflow://:2055"    # NetFlow v5, v9 and IPFIX; no sFlow
+      - "-format=json"
+      - "-transport=file"
+      - "-transport.file=/data/netflow/goflow2.json"
+      - "-addr="                     # empty: no HTTP server
+    ports:
+      - "${MAXGUARD_NETFLOW_ADDRESS:?set MAXGUARD_NETFLOW_ADDRESS (this computer's LAN address)}:2055:2055/udp"
+    volumes:
+      - ${MAXGUARD_NETFLOW_DATA:-/data/netflow}:/data/netflow
+    user: "${MAXGUARD_UID:-1000}:${MAXGUARD_GID:-1000}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped

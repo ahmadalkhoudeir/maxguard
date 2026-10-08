@@ -2,6 +2,66 @@
 
 from plan_helpers import checklist, pr_step, start_step
 
+JAK10_PROOF = (
+                "mkdir -p data/netflow data/netflow-done\n"
+                "export MAXGUARD_NETFLOW_ADDRESS=127.0.0.1 MAXGUARD_NETFLOW_DATA=\"$PWD/data/netflow\"\n"
+                "export MAXGUARD_UID=$(id -u) MAXGUARD_GID=$(id -g)\n"
+                "NF=\"docker compose -p maxguard-netflow-test -f docker/netflow-compose.yaml\"\n"
+                "$NF up -d 2> /dev/null\n"
+                "for i in $(seq 1 40); do $NF logs goflow2 | grep -q 'starting collection' && break; "
+                "sleep 0.5; done\n"
+                "python scripts/send_test_flows.py 127.0.0.1\n"
+                "for i in $(seq 1 40); do [ \"$(wc -l < data/netflow/goflow2.json)\" -ge 7 ] && break; "
+                "sleep 0.5; done\n"
+                "echo \"flows written: $(wc -l < data/netflow/goflow2.json)\"\n"
+                "mv data/netflow/goflow2.json data/netflow-done/2026-10-06-1400.json\n"
+                "$NF kill -s HUP goflow2 2> /dev/null\n"
+                "for i in $(seq 1 20); do [ -f data/netflow/goflow2.json ] && break; sleep 0.5; done\n"
+                "ls data/netflow\n"
+                "$NF down 2> /dev/null\n"
+                "maxguard analyze data/netflow-done --no-ai -o data/netflow-report.json\n"
+                "python - <<'EOF'\n"
+                "import json\n"
+                "from pathlib import Path\n"
+                "from maxguard.adapters.netflow import NetflowAdapter\n"
+                "from maxguard.events.normalize import normalize\n"
+                "\n"
+                "report = json.loads(Path(\"data/netflow-report.json\").read_text())\n"
+                "print(\"findings:\", len(report[\"findings\"]), \"| zeek and suricata ran:\", report[\"tools\"])\n"
+                "logs = NetflowAdapter().to_zeek_logs(Path(\"data/netflow-done\"), Path(\"data/netflow-work\"))\n"
+                "for e in normalize(logs, \"router\"):\n"
+                "    print(e[\"source\"], e[\"uid\"], e[\"src_ip\"], e[\"src_port\"], \"->\", e[\"dst_ip\"], "
+                "e[\"dst_port\"], e[\"summary\"])\n"
+                "EOF")
+
+
+JAK11_UPLOAD = (
+                "mkdir -p data/agent/spool\n"
+                "cp tests/pcaps/telnet.pcap data/agent/spool/capture-20261006-140000.pcap\n"
+                "T=$(python -c \"import secrets; print(secrets.token_urlsafe(32))\")\n"
+                "cat > data/agent/agent.toml <<EOF\n"
+                "console_url = \"http://127.0.0.1:8001\"\n"
+                "token = \"$T\"\n"
+                "spool_dir = \"data/agent/spool\"\n"
+                "sensor_id = \"laptop\"\n"
+                "capture_user = \"nobody\"\n"
+                "EOF\n"
+                "chmod 600 data/agent/agent.toml\n"
+                "MAXGUARD_INGEST_TOKEN=$T MAXGUARD_DATA_DIR=data/console \\\n"
+                "  uvicorn --factory maxguard.api.app:create_ingest_app --host 127.0.0.1 --port 8001 "
+                "> data/agent/console.log 2>&1 & U=$!\n"
+                "for i in $(seq 1 50); do python -c \"import socket; "
+                "socket.create_connection(('127.0.0.1', 8001), 1)\" 2> /dev/null && break; "
+                "sleep 0.2; done\n"
+                "python -m maxguard.sensor.agent --config data/agent/agent.toml --upload-only\n"
+                "ls data/agent/spool/uploaded\n"
+                "grep -o '\"POST /api/ingest HTTP/1.1\" [0-9]* [A-Za-z]*' data/agent/console.log\n"
+                "python -c \"from maxguard.storage.events import EventStore; "
+                "e = EventStore('data/console/events').query(ip='172.18.0.3', since=0); "
+                "print(len(e), 'event(s) from sensor', sorted({x['sensor_id'] for x in e}))\"\n"
+                "kill $U")
+
+
 TASKS = [
     {
         "id": "JAK-01", "owner": "jakub", "milestone": "W1",
@@ -157,7 +217,7 @@ TASKS = [
             "Run every rule on every lab fixture and count the findings:\n\n@@RUN try@@",
             pr_step("feat: cleartext and RDP rules, all 13 rules registered (JAK-03)", "flau0306"),
         ],
-        "files": ["maxguard/rules/cleartext.py", "maxguard/rules/__init__.py",
+        "files": ["maxguard/rules/cleartext.py", ("maxguard/rules/__init__.py", "snip:rules_init_jak03.py"),
                   "tests/unit/test_rules_cleartext.py", "tests/unit/test_rule_registry.py"],
         "commands": [
             {"id": "tests", "show": "pytest tests/unit/test_rules_cleartext.py tests/unit/test_rule_registry.py -q"},
@@ -588,40 +648,92 @@ TASKS = [
     {
         "id": "JAK-10", "owner": "jakub", "milestone": "S11",
         "title": "NetFlow and IPFIX input",
-        "labels": ["area:sensor"], "status": "design",
-        "depends": ["JAI-07", "JAI-03"],
+        "labels": ["area:sensor", "contract-change"], "hardware": True,
+        "depends": ["JAI-07", "JAI-03", "AHM-06"],
         "goal": (
             "Let a router that exports NetFlow v5/v9 or IPFIX feed MaxGuard: a collector "
             "container writes flow records, and `NetflowAdapter` (Contract 3) turns them into "
             "`conn.log`-shaped JSON records, so the normalizer, the timeline, and the "
             "flow-based checks work unchanged (payload rules simply find nothing)."
         ),
-        "prereq": "JAI-07 is merged. Ask Ahmad which collector to use if you prefer another one.",
+        "prereq": ("JAI-07 is merged. This task adds a `source` value to the event schema, a "
+                   "contract change: the pull request needs Jaiden's review and Ahmad's approval."),
         "steps": [
             start_step("jakub/netflow"),
-            "Pick the collector: `netsampler/goflow2` (check the image tag, its license, and that "
-            "it is published for arm64 and amd64; record it in `docs/DEPENDENCIES.md`). Write "
-            "`docker/netflow-compose.yaml` that listens on UDP 2055 and writes JSON lines to `/data/netflow/`.",
-            "Write `maxguard/adapters/netflow.py` with `NetflowAdapter`: `accepts()` is true for a "
-            "folder of the collector's JSON files; `to_zeek_logs()` writes `conn.log` with `ts`, "
-            "`uid` (a deterministic hash of the flow record), `id.orig_h`, `id.orig_p`, "
-            "`id.resp_h`, `id.resp_p`, `proto`, `orig_bytes`, `resp_bytes`, `duration`, and "
-            "`mg_source: netflow`.",
-            "Add it to `ADAPTERS` in `maxguard/pipeline.py` and `netflow` as a `source` value in the "
-            "normalizer (a contract change: label the pull request).",
-            "Write `tests/unit/test_netflow.py` with a few hand-written collector records using "
-            "documentation addresses (RFC 5737, e.g. `192.0.2.10`): the conversion, the "
-            "deterministic `uid`, and the normalizer reading the result.",
-            "Prove it end to end: a short Python script that sends NetFlow v5 packets "
-            "(`struct`-packed header and records, fake addresses) to the collector on your laptop, "
-            "then `maxguard analyze` on the output folder.",
-            pr_step("feat: NetFlow/IPFIX input through goflow2 (JAK-10)", "flau0306"),
+            "The collector is `netsampler/goflow2` (BSD-3-Clause, already in "
+            "`docs/DEPENDENCIES.md`). Pin the version **and** the digest: on Docker Hub the tag "
+            "`latest` still points at the old v1.3.8, not v2. Check the newest tag with "
+            "`git ls-remote --tags https://github.com/netsampler/goflow2` (on October 8, 2026 it "
+            "was `v2.2.7`, published for `linux/amd64` and `linux/arm64`). Create "
+            "`docker/netflow-compose.yaml`:\n\n@@FILE docker/netflow-compose.yaml@@\n\n"
+            "It listens on UDP 2055 of the address you give it, writes one JSON line per flow, "
+            "runs as a normal user with a read-only file system and no capabilities, and its "
+            "HTTP metrics server is switched off (`-addr=`), because nothing should be listening "
+            "that MaxGuard does not need. Check it; the second command fails on purpose, "
+            "because the listening address has no default:\n\n@@RUN compose@@",
+            "Create `maxguard/adapters/netflow.py`:\n\n@@FILE maxguard/adapters/netflow.py@@\n\n"
+            "Things to notice. A flow record has one direction, so `orig_bytes` is the flow's "
+            "byte count and `resp_bytes` is 0; the answer is its own record. The `uid` is `N` "
+            "plus 17 hex digits of a SHA-256 over the record without the time goflow2 received "
+            "it, so the same flow always gets the same uid and a file copied twice is counted "
+            "once. ICMP type and code go into the port fields, as Zeek does. `accepts()` also "
+            "takes a single goflow2 file, recognised by its first line: the dashboard and "
+            "`/api/ingest` save uploads under a random name with no `.json` suffix, so a "
+            "folder can never arrive that way. It never takes a folder that has `conn.log` or "
+            "`zeek/`, so it cannot steal a Zeek log folder or a sensor folder. An uploaded file "
+            "is attacker-controlled, so every number and address is checked "
+            "(`whole_number()`, `ip_text()`) and a damaged record is skipped, not fatal: "
+            "before the security review, one bad line made the upload answer HTTP 500.",
+            "Add the adapter **last** in `ADAPTERS` in `maxguard/pipeline.py` (the other "
+            "three always get the first look):\n\n@@FILE maxguard/pipeline.py@@\n\n"
+            "and give flow records their own `source` in `maxguard/events/normalize.py` (the "
+            "two new lines in `from_conn`):\n\n@@FILE maxguard/events/normalize.py@@",
+            "Create the test data `tests/fixtures/netflow/goflow2.json` (real goflow2 v2.2.7 "
+            "output from the generator below, documentation addresses only):\n\n"
+            "@@FILE tests/fixtures/netflow/goflow2.json@@\n\n"
+            "and the tests `tests/unit/test_netflow.py`:\n\n@@FILE tests/unit/test_netflow.py@@"
+            "\n\nRun them with the tests of the two files you changed:\n\n@@RUN tests@@",
+            "Create the flow generator `scripts/send_test_flows.py`. It packs NetFlow v5, v9 "
+            "and IPFIX packets by hand with `struct`, so you can see exactly what a router "
+            "sends:\n\n@@FILE scripts/send_test_flows.py@@",
+            "Prove it end to end: start the collector on `127.0.0.1`, send the test flows, "
+            "start a new file the way you would every hour (`mv`, then `SIGHUP`), and analyze "
+            "the finished file:\n\n@@RUN proof@@\n\n"
+            "No rule fires, and that is correct. The cleartext, TLS and certificate rules read "
+            "Zeek's protocol logs (`ftp.log`, `ssl.log`, ...), which only exist when someone "
+            "looked inside the packets. A flow to port 23 is not proof of Telnet, and MaxGuard "
+            "only reports what it can prove. What flows do give is the timeline (who talked "
+            "to whom, how much, when): upload the finished `.json` file on the dashboard and "
+            "open the timeline for `192.0.2.10`.",
+            "**On the lab** (*not run — verify on hardware*): if your router can export "
+            "NetFlow or IPFIX, point it at the console's LAN address, UDP port 2055, start the "
+            "collector with `MAXGUARD_NETFLOW_ADDRESS=<console address>`, and check that "
+            "`/data/netflow/goflow2.json` grows. Also run the collector once on the Raspberry "
+            "Pi 5 (the arm64 image was not run in planning). Many home routers cannot export "
+            "flows at all; write down what yours can do in the issue.",
+            pr_step("feat: NetFlow/IPFIX input through goflow2 (JAK-10)", "JWinborne1"),
         ],
-        "files": [], "commands": [
-            {"id": "tests", "env": "none", "show": "pytest tests/unit/test_netflow.py -q"},
+        "files": ["docker/netflow-compose.yaml", "maxguard/adapters/netflow.py",
+                  "maxguard/pipeline.py", "maxguard/events/normalize.py",
+                  "tests/fixtures/netflow/goflow2.json", "tests/unit/test_netflow.py",
+                  "scripts/send_test_flows.py"],
+        "commands": [
+            {"id": "compose", "expect_code": 1, "show": (
+                "MAXGUARD_NETFLOW_ADDRESS=127.0.0.1 \\\n"
+                "  docker compose -f docker/netflow-compose.yaml config --format json | python -c "
+                "\"import json, sys; s = json.load(sys.stdin)['services']['goflow2']; "
+                "print(s['image'].split('@')[0], s['user'], s['read_only'], s['cap_drop'], "
+                "[(p['host_ip'], p['published'], p['protocol']) for p in s['ports']])\"\n"
+                "docker compose -f docker/netflow-compose.yaml config --quiet")},
+            {"id": "tests", "show": ("pytest tests/unit/test_netflow.py tests/unit/test_normalize.py "
+                                     "tests/unit/test_pipeline.py -q")},
+            {"id": "proof", "show": JAK10_PROOF,
+             "run": JAK10_PROOF.replace("maxguard analyze", "python -m cli.main analyze"),
+             "note": ("goflow2 runs with your user ID here, so you can read the files without "
+                      "`sudo`; on the console the default is 1000:1000, the first user.")},
         ],
-        "test": "The unit tests pass, and the end-to-end check shows the generated flows on the "
-                "timeline page.",
+        "test": "The tests pass, the proof prints seven flows and zero findings, and an "
+                "uploaded flow file shows on the timeline page.",
         "why": (
             "Many small offices have a router that can export flows but no mirror port. Flow "
             "records carry no payload, so they cannot show a cleartext password, but they do show "
@@ -629,46 +741,94 @@ TASKS = [
             "and preview-before-you-block. Converting them to Zeek's `conn.log` shape means no "
             "rule or page needs to know they came from NetFlow."
         ),
-        "checklist": checklist(extra=["The collector's license is in `docs/DEPENDENCIES.md`",
-                                      "Test data uses only documentation addresses (RFC 5737)"]),
+        "checklist": checklist(extra=["The collector image is pinned by version and digest",
+                                      "Test data uses only documentation addresses (RFC 5737)",
+                                      "Jaiden reviewed the new `source` value"]),
     },
     {
         "id": "JAK-11", "owner": "jakub", "milestone": "S12",
         "title": "Host agent for one computer",
-        "labels": ["area:sensor"], "status": "design",
+        "labels": ["area:sensor"], "hardware": True,
         "depends": ["JAI-07"],
         "goal": (
             "For a home with no mirror port: a small agent on one computer captures that "
             "computer's own traffic with the operating system's built-in tools, in rotating "
             "files, and uploads each finished file to the console's `POST /api/ingest`."
         ),
-        "prereq": "JAI-07 is merged (ingest endpoint).",
+        "prereq": "JAI-07 is merged (ingest endpoint and the ingest-only app on port 8001).",
         "steps": [
             start_step("jakub/host-agent"),
-            "Write `maxguard/sensor/agent.py`. It builds the capture command for the operating "
-            "system without third-party drivers: Linux and macOS `tcpdump` with `-G` (rotate "
-            "every N seconds) and `-w` with a time pattern; Windows `pktmon start --capture` and "
-            "`pktmon etl2pcap` to convert each file. Check every flag against the tcpdump manual "
-            "page and Microsoft's pktmon documentation, and cite them in the docstring.",
-            "Upload each finished file with `requests` and `Authorization: Bearer <token>`; the "
-            "console URL and token come from a config file outside the repository. Document that "
-            "the console must be the user's own machine and that ingest is off unless "
-            "`MAXGUARD_INGEST_TOKEN` is set there.",
-            "Write `tests/unit/test_agent.py`: the command built for each operating system, and "
-            "uploads to a fake HTTP server on `127.0.0.1`. Never start a real capture in a test.",
-            pr_step("feat: host agent with OS-native capture (JAK-11)", "flau0306"),
+            "Create `maxguard/sensor/agent.py`:\n\n@@FILE maxguard/sensor/agent.py@@\n\n"
+            "The docstring lists every capture flag with the manual it comes from. Four "
+            "decisions to understand. tcpdump runs as root only long enough to open the network "
+            "card, then `-Z` drops to your normal user before it writes any file. tcpdump names "
+            "files with the *local* time, so the agent starts it with `TZ=UTC`: the names then "
+            "sort in time order all year. The newest file is the one tcpdump is still writing, "
+            "so it is never uploaded; a file counts as uploaded only after a `2xx` answer, "
+            "goes to `rejected/` on 400, 413 or 422 (answers that would be the same next time, "
+            "so one bad file cannot block the rest), and is retried (oldest first) on anything "
+            "else. Windows' `pktmon` rotates only by size, so the agent stops and restarts it "
+            "every interval and converts each finished `.etl` file to pcapng.\n\n"
+            "The security review added three more details. The upload uses a session with "
+            "`trust_env = False`: by default `requests` would send your captures through any "
+            "proxy in `HTTP_PROXY` and replace the token with a password from `~/.netrc`. A "
+            "`%` in the spool folder's name is doubled, because tcpdump runs the whole `-w` "
+            "name through `strftime`. And a spool folder the agent creates as root is given to "
+            "`capture_user`, because tcpdump opens its files only after `-Z` dropped root.",
+            "Create the tests `tests/unit/test_agent.py`. They check the command for each "
+            "operating system and upload to a fake server and to the real ingest app through "
+            "`TestClient`; no test ever starts a capture:\n\n@@FILE tests/unit/test_agent.py@@"
+            "\n\nRun them:\n\n@@RUN tests@@",
+            "See the capture flags work. This runs tcpdump inside a container that has no "
+            "network, on its own loopback, with 2-second files: the names are UTC and the "
+            "files belong to `nobody` (user 65534), which shows that `-Z` dropped root:"
+            "\n\n@@RUN tcpdump@@",
+            "Upload for real: the ingest-only app (the one sensors reach on port 8001) and the "
+            "agent in `--upload-only` mode, with the Telnet capture standing in for a finished "
+            "file. The config file must be private (`chmod 600`), because it holds the "
+            "token:\n\n@@RUN upload@@",
+            "**On your own laptop** (*not run — verify on hardware*). On the console set "
+            "`MAXGUARD_INGEST_TOKEN` (make one with "
+            "`python -c \"import secrets; print(secrets.token_urlsafe(32))\"`) and start "
+            "`docker/compose.lan.yaml`. On the laptop write `~/.config/maxguard/agent.toml` "
+            "(Windows: `%APPDATA%\\MaxGuard\\agent.toml`) with `console_url = "
+            "\"http://<console address>:8001\"`, the same token, `spool_dir`, `sensor_id`, "
+            "`capture_user` (your login name) and `rotate_seconds = 900`; `chmod 600` it; then "
+            "`sudo python -m maxguard.sensor.agent` (Windows: an Administrator terminal). After "
+            "15 minutes the first file appears on the console. Port 8001 is plain HTTP, so the "
+            "token and your captures cross the LAN unencrypted: use a wired or trusted network. "
+            "Check macOS's `tcpdump -Z` and Windows' `pktmon` too; neither could be run in "
+            "planning.",
+            pr_step("feat: host agent with OS-native capture (JAK-11)", "JWinborne1"),
         ],
-        "files": [], "commands": [
-            {"id": "tests", "env": "none", "show": "pytest tests/unit/test_agent.py -q"},
+        "files": ["maxguard/sensor/agent.py", "tests/unit/test_agent.py"],
+        "commands": [
+            {"id": "tests", "show": "pytest tests/unit/test_agent.py -q"},
+            {"id": "tcpdump", "show": (
+                "docker run --rm --network none --cap-add NET_RAW --cap-add NET_ADMIN -e TZ=UTC "
+                "nicolaka/netshoot:v0.15 sh -c '\n"
+                "  mkdir -p /spool && chown nobody /spool\n"
+                "  tcpdump -i lo -n -G 2 -w \"/spool/capture-%Y%m%d-%H%M%S.pcap\" -Z nobody "
+                "2> /dev/null & P=$!\n"
+                "  ping -i 0.5 -c 9 127.0.0.1 > /dev/null; kill -INT $P; wait $P\n"
+                "  ls -ln /spool'"),
+             "note": "The file names carry the time you run it, so yours differ."},
+            {"id": "upload", "env": "zeek", "show": JAK11_UPLOAD,
+             "run": (JAK11_UPLOAD.replace("python ", "python3 ")
+                     .replace("  uvicorn ", "  python3 -m uvicorn ")),
+             "note": ("`uvicorn` and the agent run inside the `zeek/zeek:9.0.0` image here, "
+                      "because the console needs Zeek to read a capture. The console refuses a "
+                      "token shorter than 32 characters.")},
         ],
-        "test": "The unit tests pass on Linux, and a manual run on your own laptop uploads one "
-                "file that appears on the console.",
+        "test": "The tests pass, the upload check prints `uploaded 1 file(s)` and `200 OK`, and "
+                "a manual run on your own laptop uploads one file that appears on the console.",
         "why": (
             "A host agent sees only its own computer, but it needs no extra hardware, which makes "
             "it the easiest way for a home user to try MaxGuard on live traffic. Using the "
             "built-in capture tools avoids installing a driver, and uploading finished files "
             "reuses the exact upload path the dashboard already tests."
         ),
-        "checklist": checklist(extra=["No test starts a real capture"]),
+        "checklist": checklist(extra=["No test starts a real capture",
+                                      "The token is read from a private config file"]),
     },
 ]

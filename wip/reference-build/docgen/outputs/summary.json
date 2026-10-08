@@ -1,17 +1,5 @@
 {
- "FIO-06/compose": {
-  "code": 1,
-  "ok": true
- },
- "FIO-06/proof": {
-  "code": 0,
-  "ok": true
- },
- "FIO-06/tests": {
-  "code": 0,
-  "ok": true
- },
- "FIO-07/tests": {
+ "KAR-01/look": {
   "code": 0,
   "ok": true
  }

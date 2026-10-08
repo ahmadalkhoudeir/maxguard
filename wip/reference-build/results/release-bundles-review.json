@@ -1,0 +1,156 @@
+{
+ "owner": "release-bundles",
+ "verdict": "fixed",
+ "fixed": [
+  {
+   "file": "scripts/install.sh",
+   "problem": "Someone could get past the unlisted-file check. Without --strict, `sha256sum -c` (and macOS `shasum -c`) only warns about a badly formatted line, skips it and still exits 0. require_listed then read file names with `cut -c 67-` and treated a name on that skipped line as listed. So an extra images.tar.part-ad plus a line of 64 'z' characters naming it passed every check and got joined into `docker load`. Reproduced with real Docker and in a unit test.",
+   "fix": "verify_checksums now runs `sha256 -c --strict SHA256SUMS`. GNU coreutils and shasum 6.04 both exit 1 with --strict when a line is malformed. A WHY comment explains this. Test added: test_install_refuses_a_badly_formatted_checksum_line."
+  },
+  {
+   "file": "scripts/install.sh",
+   "problem": "The file lists were built with unquoted word splitting (`for file in $files`, and `cat $files` under a shellcheck disable). A file name containing a space was split into pieces. For example, a file named 'images.tar.part-ab images.tar.part-ab' was split into two listed names, accepted, and made the script feed part ab twice into docker load. There was also a latent pipefail race: `cut ... | grep -q` can fail with SIGPIPE when grep stops reading early.",
+   "fix": "Replaced bundle_files with find_parts, which fills a bash array PARTS (works in bash 3.2) and dies when no part exists. require_listed and stream_bundle_file now use \"${PARTS[@]}\", and the shellcheck disable is gone. require_listed reads the listed names once and checks each with `grep -Fxq <<<\"$listed\"`, so there is no pipe. With real Docker, the space-named file is now refused with 'is not listed in SHA256SUMS'."
+  },
+  {
+   "file": ".github/workflows/release.yml",
+   "problem": "Too many permissions, and the actions could change under us. Top-level `contents: write` and `packages: write` applied to both jobs. All five third-party actions used movable major tags (@v7, @v4) in jobs that hold write tokens. actions/checkout left GITHUB_TOKEN in .git/config (persist-credentials defaults to true). GitHub's secure-use guide says: 'Pinning an action to a full-length commit SHA is currently the only way to use an action as an immutable release.'",
+   "fix": "Top level is now `permissions: contents: read`. The image job gets contents: read and packages: write; the release job gets contents: write only. Each action is pinned to the commit SHA of its newest release, with a version comment. The SHAs came from `git ls-remote` on 2026-10-08: checkout 3d3c42e5\u2026 v7.0.1, setup-qemu 99012661\u2026 v4.4.0, setup-buildx f87e5991\u2026 v4.4.1, login dbcb8138\u2026 v4.6.0, build-push c3c9e263\u2026 v7.4.0. Both checkouts have `persist-credentials: false`, and gh gets GH_REPO from env. The early check now also fails in seconds when docs/OFFLINE-INSTALL.md is missing, instead of after the 2-hour build. actionlint 1.7.12 is still clean, with shellcheck active."
+  },
+  {
+   "file": "scripts/build-offline-bundle.sh",
+   "problem": "`docker build` had no --target. Today it builds `runtime` only because that is the last stage of docker/Dockerfile (engine, test, runtime). If someone reorders the stages, the bundle would silently ship a different stage than the one release.yml builds.",
+   "fix": "Added `--target runtime`, with a WHY comment."
+  },
+  {
+   "file": "docs-draft/OFFLINE-INSTALL.md",
+   "problem": "Two problems. It said install.sh 'stops at the first problem', but sha256sum -c checks every file and then fails. It also never said that SHA256SUMS is unsigned, so a 'swapped file' is caught only if SHA256SUMS itself is the real one.",
+   "fix": "It now says install.sh stops if any file fails or a SHA256SUMS line is badly formatted. Step 2 adds a note: SHA256SUMS is not signed yet, so compare it with the copy on the GitHub Release page when the bundle came on a USB stick."
+  },
+  {
+   "file": "docs-draft/release-notes.md",
+   "problem": "It claimed 'On an Apple Silicon Mac it runs under emulation'. That was never run, and it is doubtful for Ollama under amd64 emulation.",
+   "fix": "Now says the bundle was not tested on Apple Silicon or a Raspberry Pi, and that emulation would be slow if it works at all."
+  },
+  {
+   "file": "tests/unit/test_bundle_scripts.py",
+   "problem": "The tests passed with three of my mutations: uninstall deleting the volumes when there is no keyboard (EOF), the tar container losing --network none, and SHA256SUMS checked without --strict.",
+   "fix": "Added three tests: test_install_refuses_a_badly_formatted_checksum_line, test_install_unpacks_the_model_without_network and test_uninstall_keeps_the_volumes_without_a_keyboard. The file now has 14 tests, all passing, and ruff is clean."
+  }
+ ],
+ "findings": [
+  {
+   "severity": "major",
+   "file": "docs-spec/roadmap/README.md (acceptance test) / .github/workflows/release.yml",
+   "problem": "Acceptance test steps 7 and 10 say 'Upload telnet.pcap from the release' and 'the clean TLS 1.3 capture'. Neither the release workflow nor the offline bundle attaches any capture, so an outside tester on an offline machine has nothing to upload. Step 8 (a zipped folder of Zeek logs) has the same problem.",
+   "suggestion": "Decide which synthetic captures ship. For example, add tests/pcaps/telnet.pcap, the clean TLS 1.3 pcap and a Zeek-logs zip to the release job's release/ folder (they then land in SHA256SUMS), or put them in the bundle. Then update the acceptance test text to match."
+  },
+  {
+   "severity": "major",
+   "file": "docs-spec/roadmap/jaiden.md (JAI-09 step 2)",
+   "problem": "The published step prescribes top-level `permissions: contents: write, packages: write` and major-tag actions (`@v7`). The reviewed workflow now uses per-job least privilege, SHA-pinned actions and persist-credentials: false, so the guide and the code disagree.",
+   "suggestion": "Update step 2: say the top level is contents: read, the image job gets packages: write and the release job gets contents: write. Show how to read a tag's commit with `git ls-remote https://github.com/<owner>/<action> refs/tags/vX.Y.Z` and pin `@<sha> # vX.Y.Z`. Consider a Dependabot github-actions config so the pins get updated."
+  },
+  {
+   "severity": "major",
+   "file": "docs-spec/roadmap/jaiden.md (JAI-09 step 5)",
+   "problem": "The builder already flagged this, and I confirm it. `gh release upload v2.0-alpha-rc1 dist/*` fails on the existing SHA256SUMS asset without --clobber. The bundle also contains the small files the workflow already attached. The bundle images are built by hand on a maintainer's machine, not by CI, so the release's 'built by CI from a tag' promise does not cover the multi-GB images.tar.",
+   "suggestion": "Step 5: check out the tag, `docker pull --platform linux/amd64 ghcr.io/<owner>/maxguard:2.0-alpha-rc1@<digest>` and tag it maxguard:2.0.0a0, build the bundle, then `gh release upload ... dist/* --clobber`. Longer term: build the bundle in a workflow job."
+  },
+  {
+   "severity": "minor",
+   "file": "scripts/install.sh",
+   "problem": "SHA256SUMS is unsigned and sits in the same folder as the files it protects. It protects against damage and partial downloads, not against someone who can replace the whole bundle (a malicious USB stick). There is also a small window between the check and the use: the parts are read once to verify and again when loading. That only matters if an attacker can write to the folder while install.sh runs.",
+   "suggestion": "Spring follow-up already suggested by the builder: sign SHA256SUMS with the JAI-08 Ed25519 key, and have install.sh verify the signature first. Add the threat to the ARCHITECTURE threat table."
+  },
+  {
+   "severity": "minor",
+   "file": "docs-draft/OFFLINE-INSTALL.md",
+   "problem": "It is still in docs-draft/. release.yml and build-offline-bundle.sh both read docs/OFFLINE-INSTALL.md, so a tag push or a default bundle build fails until it is moved. The workflow now fails within seconds when the file is missing.",
+   "suggestion": "The lead moves it to docs/OFFLINE-INSTALL.md, and docs-draft/release-notes.md to docs/releases/v2.0-alpha-rc1.md, when integrating. Also add dist/ to .gitignore (the builder asked)."
+  },
+  {
+   "severity": "minor",
+   "file": "scripts/install.sh",
+   "problem": "Model archive safety was verified, not assumed. GNU tar 1.35 in the engine image skips '../x' and 'a/../../x' members, strips a leading '/', and refuses to write through a symlink placed earlier in the same archive (tar exits 2, and install.sh stops through pipefail). This only holds because MG_IMAGE is the zeek-based image. With the alpine (busybox tar) stand-in that the guide suggests for testing, these protections were not checked.",
+   "suggestion": "Keep MG_IMAGE as the tar helper in the real bundle. In the guide, say the traversal guarantees come from GNU tar in the engine image."
+  }
+ ],
+ "mutations": [
+  "M1 install.sh: verify_checksums removed from main -> CAUGHT (2 failed)",
+  "M2 install.sh: require_listed images.tar removed -> CAUGHT (1 failed)",
+  "M3 install.sh: verify_checksums moved after load_images -> CAUGHT (2 failed)",
+  "M4 uninstall.sh: confirm_delete always true -> CAUGHT (1 failed)",
+  "M5 uninstall.sh: EOF (no keyboard) treated as yes -> SURVIVED originally; CAUGHT after adding test_uninstall_keeps_the_volumes_without_a_keyboard",
+  "M6 install.sh: --pull never removed -> CAUGHT",
+  "M8 install.sh: parts joined in reverse order -> CAUGHT",
+  "M9 install.sh: --network none removed from the tar container -> SURVIVED originally; CAUGHT after adding test_install_unpacks_the_model_without_network",
+  "M10 uninstall.sh: compose down -v (deletes volumes without asking) -> CAUGHT",
+  "M12 build: never split -> CAUGHT (4 failed)",
+  "M13 install.sh: tar -xf instead of -xzf -> SURVIVED (the fake docker cannot tell; only the real-Docker run checks it). Left as is.",
+  "M14 install.sh (after fix): --strict removed -> CAUGHT by the new test_install_refuses_a_badly_formatted_checksum_line (the same test FAILS against the builder's original install.sh, which proves the bypass)",
+  "M15 install.sh (after fix): require_listed loop emptied -> CAUGHT",
+  "M16 install.sh (after fix): parts collected in reverse order -> CAUGHT"
+ ],
+ "verified_facts": [
+  "GNU coreutils sha256sum -c without --strict: a line of 64 'z' characters plus a name prints 'WARNING: 1 line is improperly formatted' and exits 0. With --strict it exits 1 (run here).",
+  "shasum 6.04 (Perl Digest::SHA, in zeek/zeek:9.0.0) behaves the same: exit 0 without --strict, exit 1 with -c --strict. shasum already has --strict in the Perl 5.30.0 sources ('--strict  exit non-zero for improperly formatted checksum lines', https://raw.githubusercontent.com/Perl/perl5/v5.30.0/cpan/Digest-SHA/shasum line 51).",
+  "GNU tar in maxguard-sandbox:runtime (zeek 9.0.0 base) extracting a hostile model archive with install.sh's exact command: '../escape1: Member name contains ..' (skipped), '/etc/escape2' became /models/etc/escape2, 'a/../../escape3' skipped, 'lnk/escape4' through a symlink lnk->/etc: 'Cannot open: Not a directory'. tar exit=2. Nothing was written outside /models.",
+  "docker save --platform is documented in docker/cli v28.0.0 (docs/reference/commandline/image_save.md: '--platform string  Save only the given platform variant') and absent from v27.5.1, so 'Needs Docker Engine 28 or newer' is correct.",
+  "GitHub release limits (github/docs data/variables): large_files.max_file_size = '2 GiB', releases.release_asset_limit = '1000'. about-releases.md: 'Each file included in a release must be under {max_file_size}'. So 1900 MiB parts (1992294400 bytes) are under the limit.",
+  "GitHub secure-use guide (github/docs content/actions/reference/security/secure-use.md line 139): 'Pinning an action to a full-length commit SHA is currently the only way to use an action as an immutable release.'",
+  "git ls-remote on 2026-10-08: actions/checkout v7 = v7.0.1 = 3d3c42e5aac5ba805825da76410c181273ba90b1; docker/setup-qemu-action v4 = v4.4.0 = 99012661954931238ded8c8b007157a8430204e1; docker/setup-buildx-action v4 = v4.4.1 = f87e5991a6d7451dcb8d9637bfbc97413f497069; docker/login-action v4 = v4.6.0 = dbcb813823bdd20940b903addbd779551569679f; docker/build-push-action v7 = v7.4.0 = c3c9e263c25d99ce0380d002d59b67737d91b0dc. All are lightweight tags.",
+  "docker/compose.yaml sets `name: maxguard` and fixed volume names maxguard-data and maxguard-ollama-models. compose.lan.yaml is an overlay on the same project. So `docker compose -p maxguard down` in uninstall.sh stops everything, and the two volumes it offers to delete are the only named volumes.",
+  "docker/Dockerfile stages are engine, test, runtime (runtime is last). release.yml uses target runtime, and the bundle build now passes --target runtime too.",
+  "Real Docker, with the fixed scripts and stand-ins (alpine:3.20 retagged as the MG image, a docker-imported 1-file image as Ollama, a 3 MB random model, PART_BYTES=1500000): the bundle built (3 image parts, 3 model parts), install.sh verified it and loaded both images, and the model blob sha256 matched (1985091615\u2026). A malformed SHA256SUMS line plus an extra part was refused (exit 1, nothing loaded). A space-named copy of a part was refused ('is not listed in SHA256SUMS').",
+  "Real uninstall.sh with stdin from /dev/null kept both volumes. With --yes it deleted both.",
+  "The workflow passes untrusted values to run: lines only through env (GITHUB_REF_NAME, IMAGE, VERSION, DIGEST, GH_TOKEN). No `${{ }}` expression appears inside any run: script. The trigger is push of tags only: no pull_request_target and no secrets other than the per-run GITHUB_TOKEN."
+ ],
+ "commands": [
+  {
+   "command": "docker run --rm --network none -v \"$PWD/scripts\":/mnt:ro -w /mnt koalaman/shellcheck:v0.11.0 build-offline-bundle.sh install.sh uninstall.sh; echo \"shellcheck exit=$?\"",
+   "output": "shellcheck exit=0   (ShellCheck version: 0.11.0)"
+  },
+  {
+   "command": "python3 -m venv /tmp/claude-0/rbr/al && /tmp/claude-0/rbr/al/bin/pip install actionlint-py==1.7.12.25; PATH=<shim running koalaman/shellcheck:v0.11.0>:$PATH actionlint -verbose .github/workflows/release.yml",
+   "output": "1.7.12\nverbose: Found 0 parse errors in 0 ms for .github/workflows/release.yml\nverbose: Found total 0 errors in 709 ms for .github/workflows/release.yml\nactionlint exit=0\n(shim proven active: a workflow with `run: echo $FOO` reported SC2086)"
+  },
+  {
+   "command": "sha256sum -c SHA256SUMS; sha256sum -c --strict SHA256SUMS   (one good line + one line of 64 'z' chars naming f2)",
+   "output": "f1: OK\nsha256sum: WARNING: 1 line is improperly formatted\nexit=0\nf1: OK\nsha256sum: WARNING: 1 line is improperly formatted\nstrict exit=1"
+  },
+  {
+   "command": "cat evil.tar.gz | docker run --rm -i --network none --user 0:0 -v release-bundles-review-vol:/models --entrypoint sh maxguard-sandbox:runtime -c 'tar -xzf - -C /models; ...'",
+   "output": "tar: Removing leading `../' from member names\ntar: ../escape1: Member name contains '..'\ntar: Removing leading `/' from member names\ntar: a/../../escape3: Member name contains '..'\ntar: lnk/escape4: Cannot open: Not a directory\ntar: Exiting with failure status due to previous errors\ntar_exit=2"
+  },
+  {
+   "command": "(bundle + extra images.tar.part-ad + malformed SHA256SUMS line) MAXGUARD_SKIP_START=1 bash d2/install.sh",
+   "output": "uninstall.sh: OK\nsha256sum: WARNING: 1 line is improperly formatted\nERROR: a file is damaged or was changed. Nothing was installed. Download the bundle again.\nexit=1"
+  },
+  {
+   "command": "(bundle + a copy of part-ab named 'images.tar.part-ab images.tar.part-ab') bash d3/install.sh",
+   "output": "ERROR: images.tar.part-ab images.tar.part-ab is not listed in SHA256SUMS. Nothing was installed.\nexit=1"
+  },
+  {
+   "command": "MG_IMAGE=release-bundles-review/mg:test MODEL_VOLUME=release-bundles-review-models MAXGUARD_SKIP_START=1 bash dist/install.sh",
+   "output": "uninstall.sh: OK\nLoading the images (this takes a few minutes)...\nLoaded image: release-bundles-review/mg:test\nLoaded image: release-bundles-review/ollama:test\nRestoring the AI model into the volume release-bundles-review-models...\nMAXGUARD_SKIP_START=1: not starting MaxGuard.\ninstall exit=0"
+  },
+  {
+   "command": "bash dist/uninstall.sh </dev/null   (then with --yes)",
+   "output": "Kept the volumes release-bundles-review-data and release-bundles-review-models.\n... --yes:\nDeleted the volume release-bundles-review-data\nDeleted the volume release-bundles-review-models"
+  },
+  {
+   "command": "git ls-remote https://github.com/<action> refs/tags/vX.Y.Z refs/tags/vX",
+   "output": "actions/checkout 3d3c42e5aac5ba805825da76410c181273ba90b1 (v7, v7.0.1); setup-qemu 99012661954931238ded8c8b007157a8430204e1 (v4, v4.4.0); setup-buildx f87e5991a6d7451dcb8d9637bfbc97413f497069 (v4, v4.4.1); login dbcb813823bdd20940b903addbd779551569679f (v4, v4.6.0); build-push c3c9e263c25d99ce0380d002d59b67737d91b0dc (v7, v7.4.0)"
+  },
+  {
+   "command": "./.venv/bin/pytest tests/unit/test_bundle_scripts.py -q -p no:cacheprovider; ./.venv/bin/ruff check tests/unit/test_bundle_scripts.py",
+   "output": "14 passed in 0.85s\nAll checks passed!"
+  },
+  {
+   "command": "./.venv/bin/pytest -m \"not integration\" -q -p no:cacheprovider | tail -3",
+   "output": "870 passed, 1 skipped, 31 deselected in 19.34s"
+  }
+ ],
+ "tests_passed": true
+}

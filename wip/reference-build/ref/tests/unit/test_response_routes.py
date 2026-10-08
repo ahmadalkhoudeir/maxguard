@@ -153,3 +153,11 @@ def test_firewall_error_is_502_and_nothing_changes(client, firewall):
     assert response.status_code == 502
     assert client.get(f"/api/response/proposals/{pid}").json()["state"] == "approved"
     assert response_audit(client)[-1]["action"] == "response.apply_failed"
+
+
+def test_a_second_open_proposal_for_the_same_address_is_409(client):
+    propose(client)
+    response = client.post("/api/response/proposals",
+                           json={"actor": "fiona", "ip": BAD, "direction": "inbound"})
+    assert response.status_code == 409
+    assert len(client.get("/api/response/proposals").json()) == 1

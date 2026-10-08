@@ -1,0 +1,2 @@
+netsampler/goflow2:v2.2.7 1000:1000 True ['ALL'] [('127.0.0.1', '2055', 'udp')]
+error while interpolating services.goflow2.ports.[]: required variable MAXGUARD_NETFLOW_ADDRESS is missing a value: set MAXGUARD_NETFLOW_ADDRESS (this computer's LAN address)

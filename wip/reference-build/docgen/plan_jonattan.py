@@ -185,40 +185,94 @@ TASKS = [
     {
         "id": "JON-05", "owner": "jonattan", "milestone": "W6",
         "title": "Offline bundle: install MaxGuard on a machine with no internet",
-        "labels": ["area:release", "critical-path"], "status": "design",
+        "labels": ["area:release", "critical-path"], "hardware": True,
         "depends": ["JAI-04", "ALI-04"],
         "goal": (
             "Write `scripts/build-offline-bundle.sh` and `scripts/install.sh` so a user can install "
             "MaxGuard and its AI model from a USB stick or the GitHub Release without the "
-            "internet: the images, the model, the Compose file, and a checksum file, split into "
-            "parts smaller than 2 GiB."
+            "internet: the images, the model, the Compose file, sample data, and a checksum "
+            "file, split into parts smaller than 2 GiB."
         ),
         "prereq": "JAI-04 (the image and Compose file) is merged, and ALI-04 has chosen the models.",
         "steps": [
             start_step("jonattan/offline-bundle"),
-            "`scripts/build-offline-bundle.sh` (run on a machine **with** internet): build or "
-            "load the MaxGuard image; pull `ollama/ollama:0.35.1`; pull the chosen model into the "
-            "volume `maxguard-ollama-models` with a temporary Ollama container; then write into "
-            "`dist/`: `images.tar` (`docker save` of both images), `models.tar.gz` (the volume's "
-            "files), `compose.yaml`, `install.sh`, `OFFLINE-INSTALL.md`, and `SHA256SUMS`. Split "
-            "anything over 2 GiB with `split -b 1900M`. Read the image names and the model from "
-            "variables (`MG_IMAGE`, `OLLAMA_IMAGE`, `MAXGUARD_MODEL`) so it can be tested with "
-            "small stand-ins.",
-            "`scripts/install.sh` (run on the machine **without** internet): check every file "
-            "with `sha256sum -c SHA256SUMS` (macOS: `shasum -a 256 -c SHA256SUMS`) **before** "
-            "loading anything; stop on any mismatch; join the parts; `docker load`; restore the "
-            "model volume; `docker compose up -d`; print the dashboard address.",
-            "`scripts/uninstall.sh`: stop and remove the containers; ask before deleting the "
-            "data and model volumes.",
-            "Test the mechanics with small stand-in images (for example `MG_IMAGE=alpine:3.20`), "
-            "then change one byte in a part and check that `install.sh` refuses. Run "
-            "`shellcheck` on all three scripts.",
-            "With Karthik, run the real bundle on a laptop with Wi-Fi off (this is step 4 of the "
-            "acceptance test in `docs/roadmap/README.md`).",
+            "Create `scripts/build-offline-bundle.sh` (run on a machine **with** internet, from "
+            "the repository root):\n\n@@FILE scripts/build-offline-bundle.sh@@\n\n"
+            "What to notice. Every setting is a variable, so the same script can be tested with "
+            "small stand-in images. `docker save --platform` writes the images for one "
+            "processor type (Docker Engine 28 or newer needs the flag), so a bundle is for "
+            "one platform. `PART_BYTES` is 1900 MiB written in bytes, because GNU `split` "
+            "and macOS's `split` read size suffixes differently. The script refuses a "
+            "`dist/` folder that is not empty: old parts would otherwise be listed in "
+            "`SHA256SUMS` and joined into the new images. Three synthetic samples from "
+            "`tests/` go into the bundle, so a tester with no internet has something to "
+            "upload.",
+            "Create `scripts/install.sh` (run on the machine **without** internet, inside the "
+            "bundle folder):\n\n@@FILE scripts/install.sh@@\n\n"
+            "Three checks happen **before** anything is loaded. `sha256sum -c --strict`: "
+            "without `--strict`, a badly formatted line is skipped with a warning and the "
+            "check still passes, and the security review used exactly that to slip an extra "
+            "part into `docker load`. Every file the script is about to use must be listed in "
+            "`SHA256SUMS` (`sha256sum -c` only checks the files the list names). And the "
+            "parts are kept in a bash array, so a file name with a space cannot be split "
+            "into two names. The parts are then streamed (`cat parts | docker load`), so the "
+            "user never needs disk space for the joined file. The model is unpacked by a "
+            "container with `--network none`, using the MaxGuard image's GNU tar, which "
+            "refuses `..` paths and writing through links.",
+            "Create `scripts/uninstall.sh`. It deletes the data and model volumes only after "
+            "someone types `yes` (pressing Enter, or no keyboard at all, keeps them), or with "
+            "`--yes` for scripts:\n\n@@FILE scripts/uninstall.sh@@",
+            "Create the user's instructions `docs/OFFLINE-INSTALL.md`; the bundle ships "
+            "them:\n\n@@FILE docs/OFFLINE-INSTALL.md@@",
+            "Create the tests `tests/unit/test_bundle_scripts.py`. They put a fake `docker` "
+            "command first on `PATH`, so they run in a second and never touch your real "
+            "images:\n\n@@FILE tests/unit/test_bundle_scripts.py@@\n\n"
+            "Run them, and check the three scripts with ShellCheck:\n\n@@RUN tests@@\n\n"
+            "@@RUN shellcheck@@",
+            "Prove the mechanics with real Docker and small stand-ins: `alpine:3.20` plays "
+            "the MaxGuard image, a second tag of it plays Ollama, a 17-byte file plays the "
+            "model, and `PART_BYTES` is small so the images really get split. Then remove "
+            "the stand-in image and the volume, install from the bundle, and change one "
+            "byte in a part:\n\n@@RUN proof@@\n\n"
+            "`MAXGUARD_SKIP_START=1` loads everything but skips `docker compose up`, because "
+            "the stand-ins are not a real MaxGuard.",
+            "**With Karthik, on a real laptop** (*not run — verify on hardware*): build the "
+            "real bundle (it pulls `ollama/ollama:0.35.1` and the model chosen in ALI-04, "
+            "several GB), copy it to a laptop, switch Wi-Fi off, and run the acceptance test "
+            "in `docs/roadmap/README.md`. The bundle includes every model in your "
+            "`maxguard-ollama-models` volume (the script prints `ollama list`), so build on a "
+            "machine whose volume holds only the chosen model. macOS (bash 3.2, `shasum`) "
+            "and Windows WSL 2 were not run in planning either.",
             pr_step("feat: offline bundle build and install scripts (JON-05)", "JWinborne1"),
         ],
-        "files": [], "commands": [
-            {"id": "check", "env": "none", "show": "shellcheck scripts/*.sh"},
+        "files": ["scripts/build-offline-bundle.sh", "scripts/install.sh", "scripts/uninstall.sh",
+                  "docs/OFFLINE-INSTALL.md", "tests/unit/test_bundle_scripts.py"],
+        "commands": [
+            {"id": "tests", "show": "pytest tests/unit/test_bundle_scripts.py -q"},
+            {"id": "shellcheck", "show": (
+                "docker run --rm --network none -v \"$PWD/scripts:/s:ro\" koalaman/shellcheck:v0.11.0 \\\n"
+                "  /s/build-offline-bundle.sh /s/install.sh /s/uninstall.sh && echo \"ShellCheck: clean\"")},
+            {"id": "proof", "show": (
+                "mkdir -p data/fake-model/blobs && printf 'not a real model\\n' > data/fake-model/blobs/sha256-fake\n"
+                "docker tag alpine:3.20 maxguard-test/ollama:stand-in\n"
+                "docker volume rm -f maxguard-test-models > /dev/null; rm -rf data/dist-test\n"
+                "MG_IMAGE=alpine:3.20 OLLAMA_IMAGE=maxguard-test/ollama:stand-in MODEL_SOURCE_DIR=data/fake-model \\\n"
+                "  MODEL_VOLUME=maxguard-test-models DIST_DIR=data/dist-test PART_BYTES=3000000 \\\n"
+                "  bash scripts/build-offline-bundle.sh > data/build.log 2>&1 && echo \"bundle built\"\n"
+                "ls data/dist-test\n"
+                "echo \"--- a clean machine: no stand-in image, no model volume\"\n"
+                "docker rmi maxguard-test/ollama:stand-in > /dev/null && docker volume rm maxguard-test-models > /dev/null\n"
+                "cd data/dist-test\n"
+                "MG_IMAGE=alpine:3.20 MODEL_VOLUME=maxguard-test-models MAXGUARD_SKIP_START=1 bash install.sh 2>&1 | tail -n 4\n"
+                "docker image inspect maxguard-test/ollama:stand-in --format 'image loaded: {{.Id}}' | cut -c 1-28\n"
+                "docker run --rm --network none -v maxguard-test-models:/m:ro alpine:3.20 cat /m/blobs/sha256-fake\n"
+                "echo \"--- one changed byte\"\n"
+                "printf 'X' | dd of=images.tar.part-ab bs=1 seek=1000 conv=notrunc 2> /dev/null\n"
+                "MG_IMAGE=alpine:3.20 MODEL_VOLUME=maxguard-test-models MAXGUARD_SKIP_START=1 bash install.sh 2>&1 | grep -v ': OK$'\n"
+                "cd ../..\n"
+                "docker rmi maxguard-test/ollama:stand-in > /dev/null; docker volume rm maxguard-test-models > /dev/null"),
+             "note": ("Your image ID differs. If `docker tag` fails, pull the stand-in first: "
+                      "`docker pull alpine:3.20`.")},
         ],
         "test": (
             "A tampered part makes `install.sh` stop before `docker load`; a clean bundle installs "
@@ -228,9 +282,11 @@ TASKS = [
             "\"Offline\" has to include the install: a tool that needs the internet to install is "
             "not usable on an isolated network. Checking the checksums before loading anything "
             "means a damaged or swapped file is caught before it can run. Parts under 2 GiB fit "
-            "GitHub's limit for release files."
+            "GitHub's limit for release files. `SHA256SUMS` is not signed yet, so it catches "
+            "damage, not someone who replaces the whole bundle: signing it with the JAI-08 key "
+            "is a spring follow-up."
         ),
-        "checklist": checklist(extra=["`shellcheck` is clean", "The tamper test is in the pull request"]),
+        "checklist": checklist(extra=["ShellCheck is clean", "The tamper test is in the pull request"]),
     },
     {
         "id": "JON-06", "owner": "jonattan", "milestone": "S8",

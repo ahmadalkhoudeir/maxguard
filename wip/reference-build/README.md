@@ -1,4 +1,4 @@
-# Save point: MaxGuard v2.0 reference build (October 6, 2026, evening, stopped by the project lead)
+# Save point: MaxGuard v2.0 reference build (October 8, 2026: every design task built)
 
 **Not for merging.** This folder saves the planning session's scratch workspace
 so the work can continue in a new session or container. The deliverable is the
@@ -20,21 +20,22 @@ it continues when the project lead says "GO".
 
 ## Status of the 19 former design tasks
 
+All 19 are built, reviewed and in the docs on `v2-planning` (head `7062a6e`; the
+commits after `087121e` are not in `main` yet). The full simulation of every
+task passed; `ref` passes `ruff` and 872 unit tests.
+
 | Task | State |
 |---|---|
 | JAI-07, AMO-05, JAI-11, JON-06, KAR-03/04/06 | Built, tested, in the docs |
-| JAK-07 live sensor | Built, tested end to end with containers, in the docs |
-| AHM-07/08 response | Built, lead-reviewed (one-transaction audit added), in the docs. Adversarial review NOT run |
-| AHM-02/03/06 dashboard | Built, in the docs (stages made by `docgen/make_web_snippets.py`). Adversarial review NOT run |
-| FIO-06/07 decoys, baselines | Built, in the docs. Rule IDs wait for the Security Lead |
-| API changes by the lead | Host allow-list (`MAXGUARD_ALLOWED_HOSTS`), `create_ingest_app()` + `docker/compose.lan.yaml`, `report["devices"]` |
-| JAK-10/11 NetFlow, host agent | Interrupted: partial work in `results/wip-netflow.patch` (`git apply` it in `ref`); not reviewed |
-| JAI-09 + JON-05 release, offline bundle | Not built |
+| JAK-07 live sensor | Built, tested end to end with containers |
+| AHM-07/08 response | Built, adversarial review done (one open proposal per address, firewall lock, rollback, OPNsense rule order) |
+| AHM-02/03/06 dashboard | Built, adversarial review done (any display name, bounded timeline end); stages from `docgen/make_web_snippets.py` |
+| FIO-06/07 decoys, baselines | Built; rule IDs wait for the Security Lead |
+| JAK-10/11 NetFlow, host agent | Built, adversarial review done (hostile flow records, no proxy/netrc, spool owner); goflow2 v2.2.7 proven in Docker |
+| JAI-09 + JON-05 release, offline bundle | Built, adversarial review done (`--strict` checksums, SHA-pinned least-privilege workflow); bundle ships three synthetic samples |
 
-Builder reports: `results/*-result.json`. To continue: apply the patch, then
-re-run `workflows/maxguard-reference-build-5-*.js` with only the
-`jakub-netflow-agent` and `release-bundles` builders and the two reviews (it runs
-them one at a time; a usage cap stopped parallel builders twice).
+Builder and review reports: `results/*-result.json`, `results/*-review.json`.
+Open items for review are in `docs/ARCHITECTURE.md` (sections 5, 9, 10, 13, 14).
 
 ## Findings to carry forward
 

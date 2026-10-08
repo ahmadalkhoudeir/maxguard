@@ -116,21 +116,21 @@ ACCEPTANCE = """
 Run by someone who did not build the release, on a machine that has never run
 MaxGuard. Ahmad records each result (AHM-05).
 
-1. On a clean machine with only Docker installed, download the offline bundle
-   parts and the checksum file from the GitHub Release.
+1. On a clean machine with only Docker installed, download every file of the
+   GitHub Release (the offline bundle) into one empty folder.
 2. Verify the checksums (`sha256sum -c SHA256SUMS` on Linux,
    `shasum -a 256 -c SHA256SUMS` on macOS): every part prints `OK`.
-3. Reassemble and unpack the bundle.
+3. Nothing to reassemble or unpack: `install.sh` joins the parts itself.
 4. **Disconnect the network** (Wi-Fi off, cable out). Check that
    `ping -c 1 1.1.1.1` fails.
 5. Run `bash install.sh`. It finishes without errors.
 6. Open http://127.0.0.1:8000. The dashboard loads and shows the privacy note.
-7. Upload `telnet.pcap` from the release. The alert queue shows a
+7. Upload `sample-telnet.pcap` from the bundle. The alert queue shows a
    `cleartext.telnet` alert mapped to controls in all four frameworks, with
    ATT&CK techniques and a local AI explanation whose sentences cite record IDs.
-8. Upload a zipped folder of Zeek logs. A report appears (the log-import path works).
+8. Upload `sample-telnet-zeek-logs.tar.gz`. A report appears (the log-import path works).
 9. Download the JSON, CSV, and HTML reports. All three open and contain the same findings.
-10. Upload the clean TLS 1.3 capture. It produces zero findings.
+10. Upload `sample-clean-tls13.pcap`. It produces zero findings.
 
 The `v2.0` acceptance test (May 7, AHM-09) adds: the live sensor on the
 reference lab, a blocked IP address with preview, approval and revert, a

@@ -41,6 +41,7 @@ def routes() -> tuple[str, str]:
              '"""The dashboard\'s HTML pages (Ahmad, AHM-02).')
     v1 = re.sub(r"    GET   /alerts/\{finding_id\} .*\n    PATCH /alerts/.*\n", "", v1)
     v1 = sub(v1, "import time\n", "")
+    v1 = sub(v1, "from urllib.parse import quote, unquote\n", "")
     v1 = sub(v1, "from maxguard.ai import load_home_text\n", "")
     v1 = sub(v1, "from maxguard.api.app import notify_change\n", "")
     v1 = re.sub(r"MAX_NAME_LENGTH = 100 .*\n", "", v1)
@@ -73,6 +74,7 @@ def tests() -> tuple[str, str]:
     v2 = sub(final, '"""Tests for the dashboard pages (Ahmad, AHM-02, AHM-03, AHM-06).',
              '"""Tests for the dashboard pages (Ahmad, AHM-02, AHM-03).')
     v2 = sub(v2, "from maxguard.sensor.attribution import build_device_table\n", "")
+    v2 = sub(v2, "from maxguard.events.normalize import EVENT_KEYS\n", "")
     v2 = sub(v2, '@pytest.mark.parametrize("path", ["/", "/upload", "/timeline", "/assets"])',
              '@pytest.mark.parametrize("path", ["/", "/upload"])')
     v2 = sub(v2, '    for path in ("/", f"/alerts/{finding[\'finding_id\']}", "/timeline?ip=172.18.0.3"):',

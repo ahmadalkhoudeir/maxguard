@@ -1,0 +1,4 @@
+uploaded 1 file(s)
+capture-20261006-140000.pcap
+"POST /api/ingest HTTP/1.1" 200 OK
+1 event(s) from sensor ['laptop']

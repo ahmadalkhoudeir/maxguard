@@ -85,6 +85,8 @@ def zeek_event(log: str, rec: dict, sensor_id: str, kind: str, service: str) -> 
 
 def from_conn(rec: dict, sensor_id: str) -> dict:
     event = zeek_event("conn.log", rec, sensor_id, "conn", rec.get("service") or "")
+    if rec.get("mg_source") == "netflow":  # a router's flow record (JAK-10), not Zeek
+        event["source"] = "netflow"
     # Only conn events carry byte counts, so adding up bytes never counts twice.
     event["bytes_out"] = as_int(rec.get("orig_bytes")) or 0
     event["bytes_in"] = as_int(rec.get("resp_bytes")) or 0

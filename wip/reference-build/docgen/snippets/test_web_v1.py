@@ -82,7 +82,9 @@ def test_pages_return_200_with_the_layout(client, path):
     assert "Your data never leaves this computer." in page.text
     assert '<script src="/static/htmx-2.0.11.min.js"' in page.text
     assert 'href="/static/app.css"' in page.text
-    assert "default-src 'self'" in page.headers["content-security-policy"]
+    csp = page.headers["content-security-policy"]
+    assert "default-src 'self'" in csp and "script-src 'self';" in csp
+    assert "unsafe" not in csp  # no inline scripts, no eval: a second wall behind escaping
     # not "no-referrer": Chrome then sends "Origin: null" on form posts, which the API refuses
     assert page.headers["referrer-policy"] == "same-origin"
 
@@ -159,11 +161,15 @@ def test_mode_switch_sets_the_cookie(client):
                          follow_redirects=False)
     assert answer.status_code == 303
     assert answer.headers["location"] == "/assets"
-    assert "mg_mode=home" in answer.headers["set-cookie"]
+    cookie = answer.headers["set-cookie"].lower()
+    assert "mg_mode=home" in cookie and "httponly" in cookie and "samesite=lax" in cookie
 
 
-def test_mode_switch_never_redirects_off_site(client):
-    answer = client.post("/mode", data={"mode": "home", "next": "//evil.example/"},
+# Browsers read /\evil.example like //evil.example: another website.
+@pytest.mark.parametrize("next_path", ["//evil.example/", "/\\evil.example/",
+                                       "https://evil.example/", "javascript:alert(1)"])
+def test_mode_switch_never_redirects_off_site(client, next_path):
+    answer = client.post("/mode", data={"mode": "home", "next": next_path},
                          follow_redirects=False)
     assert answer.headers["location"] == "/"
 

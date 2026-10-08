@@ -1,0 +1,170 @@
+{
+ "owner": "jakub-netflow-agent",
+ "verdict": "fixed",
+ "fixed": [
+  {
+   "file": "maxguard/adapters/netflow.py",
+   "problem": "An uploaded flow file is untrusted, but to_conn() used int(...) and flow['src_addr'] with no checks, and read_flows() caught only JSONDecodeError. If the first line was a valid flow and any later line was damaged, POST /api/analyses returned HTTP 500. Reproduced with TestClient for six cases: bytes \"abc\", dst_port [1], bytes 1e400, bytes 2**70, a 100,000-deep [[[...]]] line (RecursionError) and time_flow_start_ns 10**40. src_addr null or a dict was stored as the address (200).",
+   "fix": "Added whole_number() (a JSON int from 0 to 2**63-1; ports up to 65535; ICMP type and code up to 255) and ip_text() (a str that ipaddress parses). to_zeek_logs() skips a record that raises ValueError or RecursionError, the same way it skips a half-written line. read_flows() now catches ValueError and RecursionError. All eight hostile uploads now return 200 and keep the good records. Also softened the v5 ICMP comment to 'the usual exporter convention'."
+  },
+  {
+   "file": "maxguard/sensor/agent.py",
+   "problem": "requests trusts the environment by default. Tested: with HTTP_PROXY=http://127.0.0.1:9 the upload went to that proxy (ProxyError), so the captures and token would leave through a proxy (rule 1). A ~/.netrc entry for the console host replaced 'Authorization: Bearer <token>' with 'Basic YWxpY2U6c2VjcmV0', which sent the netrc password to the console and broke ingest.",
+   "fix": "Added console_session(): a requests.Session with trust_env = False. upload() and upload_finished() take session=None and use it by default. Tests can still pass a TestClient. Added test_upload_ignores_proxy_settings_and_netrc."
+  },
+  {
+   "file": "maxguard/sensor/agent.py",
+   "problem": "tcpdump runs the whole -w name through strftime (tcpdump.c MakeFilename, tcpdump-4.99 branch), so a '%' in spool_dir would be expanded.",
+   "fix": "tcpdump_command() writes the folder with '%' replaced by '%%'. Added test_percent_in_the_spool_folder_is_not_a_time_pattern."
+  },
+  {
+   "file": "maxguard/sensor/agent.py",
+   "problem": "main() created spool_dir as root (the agent runs under sudo). tcpdump -Z opens its output files only after dropping to capture_user (tcpdump.1.in, -Z), so with a folder the agent had just created, tcpdump could not write and exited. main() still returned 0.",
+   "fix": "Added prepare_spool(): a folder the agent creates on Linux or macOS as root is chown'ed to capture_user. An existing folder is never changed. run_tcpdump() returns tcpdump's exit code and main() returns it. Added test_spool_folder_the_agent_creates_goes_to_capture_user."
+  },
+  {
+   "file": "maxguard/sensor/agent.py",
+   "problem": "--upload-only uses capture_running=False, so it also uploads and moves the file tcpdump is still writing if the agent's capture is running. Its help text did not say this.",
+   "fix": "Help text now says to use it only while the agent is stopped. Also added a docstring line, checked against pktmon-start.md: pktmon's default log mode is circular with a 512 MB file, so a very busy interval loses its oldest packets."
+  },
+  {
+   "file": "tests/unit/test_netflow.py",
+   "problem": "Three mutations survived: removing sort_keys from the uid hash, accepting any JSON line that has src_addr (no type check), and removing the time_received fallback when the flow times are missing.",
+   "fix": "Added test_uid_does_not_depend_on_the_order_of_the_fields, test_sflow_and_other_json_with_src_addr_are_not_flows and test_flow_without_flow_times_uses_the_receive_time. Also added test_damaged_records_are_skipped_not_fatal and test_icmp_type_and_code_must_fit_in_a_byte. All three mutations are now caught."
+  },
+  {
+   "file": "docs-draft/netflow-agent-notes.md",
+   "problem": "The notes did not describe the review fixes. They implied the user must make the spool folder writable by capture_user by hand.",
+   "fix": "Added a 'Review fixes' section with the reproduced failures and what changed."
+  }
+ ],
+ "findings": [
+  {
+   "severity": "major",
+   "file": "maxguard/sensor/agent.py",
+   "problem": "Head-of-line blocking: upload_finished() breaks on any status other than 2xx, 400 or 413 and retries the oldest file first. A capture the console always answers with 422 (ZeekError/SuricataError on that file) or 500 blocks every later upload forever. With 401 or 404 (wrong token, ingest off), the whole oldest file is re-sent every CHECK_EVERY=10 s, and spool_dir grows without limit.",
+   "suggestion": "Lead decision. Options: count attempts per file and move it to rejected/ after N tries; treat 422 as rejected if ZeekError cannot be transient; or back off exponentially and stop on 401/404 with a clear message. Also add a spool size limit (oldest unsent files deleted, with a log line)."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/sensor/agent.py",
+   "problem": "requests builds the whole multipart body in memory (requests/models.py _encode_files: fdata = fp.read()). Each upload therefore holds the whole capture file in RAM on the host (up to the console's 1 GiB limit).",
+   "suggestion": "Fine for 15-minute home captures. If large files are expected, stream the upload (requests-toolbelt MultipartEncoder is a new dependency and needs approval) or lower rotate_seconds."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/sensor/agent.py",
+   "problem": "finished_files() holds back the newest file by NAME. If the clock goes back (no RTC, NTP correction), a leftover file from an earlier run can sort after the file tcpdump is writing. That file would then be uploaded and moved while still open. run_pktmon() never converts .etl files left by a crash. A failing pktmon start or etl2pcap ends the agent with a traceback.",
+   "suggestion": "Optionally also hold back the most recently modified file, and convert leftover capture-*.etl at startup. Document as not run on Windows."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/adapters/netflow.py",
+   "problem": "read_flows() iterates text lines with no length limit. One giant line (up to the 1 GiB upload limit) is read into memory before json.loads. The NetFlow v5 ICMP decoding (type*256+code in dst_port) and the possible same convention in NetFlow v9 templates without ICMP_TYPE still lack a primary source. goflow2 docs/protocols.md shows icmp_type/icmp_code are not filled for v5. For v9 and IPFIX without the ICMP field, the adapter reports type 0 / code 0.",
+   "suggestion": "Accept the memory bound (the same as the Zeek log adapters) or read with a per-line cap. Ask the lead to soften the ICMP sentence in the guide or find a Cisco or IETF source. A dst_port fallback for v9 and IPFIX was not added because no primary source supports it."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/api/app.py",
+   "problem": "(Not the builder's file.) run_pipeline's 400 message does not mention goflow2 flow files, and pick_adapter's UnsupportedInput text in pipeline.py says only 'pcap/pcapng file or a Zeek log folder/archive'. Before the netflow.py fix, damaged flow uploads returned an unhandled 500.",
+   "suggestion": "Lead: add 'or a goflow2 NetFlow/IPFIX JSON file' to both messages. If the lead wants another layer of defence, run_pipeline could map unexpected ValueError to 400."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/sensor/agent.py",
+   "problem": "trust_env=False also ignores REQUESTS_CA_BUNDLE. An https console_url with a self-signed certificate therefore cannot be trusted through the environment. Port 8001 is plain HTTP, so the token crosses the LAN unencrypted (the builder already noted this).",
+   "suggestion": "If TLS on the ingest port is adopted, add an explicit ca_file setting to agent.toml and pass verify=<ca_file>."
+  }
+ ],
+ "mutations": [
+  "netflow: uid hashes time_received_ns too -> caught (1 failed)",
+  "netflow: json.dumps without sort_keys in uid -> SURVIVED originally; caught after new test test_uid_does_not_depend_on_the_order_of_the_fields",
+  "netflow: no dedup of repeated records -> caught",
+  "netflow: conn.log sorted by uid only -> caught",
+  "netflow: v5 ICMP type/code swapped -> caught",
+  "netflow: v5 ICMP branch removed -> caught",
+  "netflow: accepts() ignores zeek/ folder -> caught",
+  "netflow: accepts() ignores conn.log -> caught",
+  "netflow: is_flow_record without type check -> SURVIVED originally; caught after new test test_sflow_and_other_json_with_src_addr_are_not_flows",
+  "netflow: time_received fallback removed -> SURVIVED originally; caught after new test test_flow_without_flow_times_uses_the_receive_time",
+  "netflow: whole_number accepts anything -> caught (2 failed)",
+  "netflow: skip-on-ValueError removed in to_zeek_logs -> caught",
+  "agent: newest file not held back while capturing -> caught (2 failed)",
+  "agent: 401 treated like 400 (moved to rejected) -> caught",
+  "agent: continue instead of break after a failed upload -> caught",
+  "agent: session.trust_env = True -> caught",
+  "agent: check_private disabled -> caught",
+  "agent: prune keeps the oldest instead of the newest -> caught",
+  "agent: capture_env without TZ=UTC -> caught",
+  "agent: '%' escaping removed -> caught"
+ ],
+ "verified_facts": [
+  "tcpdump.1.in (raw.githubusercontent.com/the-tcpdump-group/tcpdump/tcpdump-4.99/tcpdump.1.in): -G 'rotates the dump file specified with the -w option every rotate_seconds seconds ... should include a time format as defined by strftime(3)'; -i 'If unspecified ... lowest numbered, configured up interface (excluding loopback)'; -n 'Don't convert addresses ... to names'; -Z 'after opening the capture device or input savefile, but before opening any savefiles for output, change the user ID to user and the group ID to the primary group of user ... can also be enabled by default at compile time'",
+  "tcpdump.c (tcpdump-4.99 branch): MakeFilename() fills the whole -w name with strftime(localtime(&Gflag_time)) (line ~889); rotation is checked in dump_packet_and_trunc ('if (t - Gflag_time >= Gflag)', line 3246), so the next file starts only when a packet arrives",
+  "pktmon-start.md (MicrosoftDocs/windowsserverdocs main): --comp 'all components (all), NICs only (nics) ... Defaults to all'; --pkt-size 'To always log the entire packet, set this to 0. Default is 128 bytes'; -f/--file-name default PktMon.etl; --file-size default 512 MB; --log-mode default circular (new events overwrite the oldest); multi-file creates a new file each time the log is full",
+  "pktmon-etl2pcap.md: 'pktmon etl2pcap <file> [--out <name>]', -o/--out 'Name of the formatted pcapng file'",
+  "goflow2 v2.2.7 checkout (commit 74af41bea8baddeac1e710acb5441a3e5896b68a): config.go -listen default 'sflow://:6343,netflow://:2055', -addr default ':8080'; app.go:84 'if cfg.Addr != \"\"'; transport/file/transport.go handles SIGHUP; render.go protoName 1 'ICMP', 58 'IPv6-ICMP'; producer_nf.go decodes NFV9 ICMP_TYPE (32) as type<<8|code and IPFIX icmpType/CodeIPv4/IPv6; producer_nflegacy.go copies the v5 DstPort unchanged; docs/protocols.md leaves the NetFlow v5 column empty for icmp_type/icmp_code",
+  "Docker Hub API hub.docker.com/v2/repositories/netsampler/goflow2/tags/v2.2.7: digest sha256:b8fdc8f3666b05b0022ada3a3c8c50dcde97f7d19e3f42d050695fa0571fb952 for amd64 and arm64, matching docker/netflow-compose.yaml",
+  "docker compose config: without MAXGUARD_NETFLOW_ADDRESS it refuses with the custom message; with it, the port binds host_ip 127.0.0.1, user 1000:1000, read_only true",
+  "requests trust_env: with HTTP_PROXY set, the agent's upload went to the proxy (ProxyError); a ~/.netrc entry replaced the Bearer header with Basic auth. Both reproduced before the fix and covered by a test after it",
+  "requests/models.py _encode_files reads the whole file (fdata = fp.read()), so multipart uploads are built in memory",
+  "The API's SENSOR_ID_PATTERN [A-Za-z0-9._-]{1,64} equals the agent's SENSOR_ID regex",
+  "models.py already lists 'netflow' as an event source value",
+  "Builder's and review tests pass on Python 3.13.5 (maxguard-sandbox:test, --network none, non-root): 41 passed"
+ ],
+ "commands": [
+  {
+   "command": "./.venv/bin/pytest tests/unit/test_netflow.py tests/unit/test_agent.py -q -p no:cacheprovider (before review)",
+   "output": "33 passed in 3.35s"
+  },
+  {
+   "command": "MAXGUARD_ALLOWED_HOSTS=testserver PYTHONPATH=. ./.venv/bin/python ../jnar-work/hostile.py (POST /api/analyses with damaged goflow2 files, before fix)",
+   "output": "deep 500\nbad_bytes 500\nlist_port 500\ninf 500\nhuge_bytes 500\nhuge_time 500\ndict_addr 200\nnull_addr 200"
+  },
+  {
+   "command": "same script after the netflow.py fix",
+   "output": "deep 200, bad_bytes 200, list_port 200, inf 200, huge_bytes 200, huge_time 200 (2**63-1 ns), dict_addr 200, null_addr 200 (bad records skipped)"
+  },
+  {
+   "command": "HOME=<dir with .netrc for 127.0.0.1> python envtest.py (agent.upload to a fake console, before fix)",
+   "output": "status 200 auth seen: ['Basic YWxpY2U6c2VjcmV0']"
+  },
+  {
+   "command": "HTTP_PROXY=http://127.0.0.1:9 NO_PROXY= python envtest.py (before fix)",
+   "output": "console not reachable ... Caused by ProxyError('Unable to connect to proxy' ...)\nstatus None auth seen: []"
+  },
+  {
+   "command": "curl -sS https://hub.docker.com/v2/repositories/netsampler/goflow2/tags/v2.2.7",
+   "output": "sha256:b8fdc8f3666b05b0022ada3a3c8c50dcde97f7d19e3f42d050695fa0571fb952 [('amd64', None), ('arm64', None)]"
+  },
+  {
+   "command": "grep in goflow2 v2.2.7 checkout (git rev-parse HEAD)",
+   "output": "74af41bea8baddeac1e710acb5441a3e5896b68a\n./pkg/goflow2/app/app.go:84:\tif cfg.Addr != \"\" {\n./transport/file/transport.go:60:\t\tsignal.Notify(c, syscall.SIGHUP)\nconfig.go:39 listen default \"sflow://:6343,netflow://:2055\"; config.go:44 addr default \":8080\""
+  },
+  {
+   "command": "MAXGUARD_NETFLOW_ADDRESS=127.0.0.1 docker compose -p jakub-netflow-agent-review- -f docker/netflow-compose.yaml config",
+   "output": "host_ip: 127.0.0.1 / published: \"2055\" / read_only: true / user: 1000:1000 (without the variable: 'required variable MAXGUARD_NETFLOW_ADDRESS is missing a value')"
+  },
+  {
+   "command": "mutation runs in /tmp/claude-0/jnar-mut (copy without .venv), 20 mutations",
+   "output": "17 caught at first; 3 survived (sort_keys, type check, time fallback). After the new tests: all caught"
+  },
+  {
+   "command": "./.venv/bin/ruff check maxguard/adapters/netflow.py maxguard/sensor/agent.py tests/unit/test_netflow.py tests/unit/test_agent.py",
+   "output": "All checks passed!"
+  },
+  {
+   "command": "./.venv/bin/pytest tests/unit/test_netflow.py tests/unit/test_agent.py tests/unit/test_normalize.py tests/unit/test_pipeline.py -q -p no:cacheprovider",
+   "output": "91 passed in 4.06s"
+  },
+  {
+   "command": "docker run --rm --name jakub-netflow-agent-review-py313 --network none --user $(id -u):$(id -g) -v $PWD:/src:ro maxguard-sandbox:test /opt/venv/bin/python -m pytest tests/unit/test_netflow.py tests/unit/test_agent.py -q -p no:cacheprovider",
+   "output": "41 passed in 3.51s (Python 3.13.5)"
+  },
+  {
+   "command": "./.venv/bin/pytest -m \"not integration\" -q -p no:cacheprovider | tail -3",
+   "output": "867 passed, 1 skipped, 31 deselected in 20.10s"
+  }
+ ],
+ "tests_passed": true
+}

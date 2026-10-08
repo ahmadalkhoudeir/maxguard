@@ -1,0 +1,179 @@
+{
+ "owner": "ahmad-response",
+ "verdict": "fixed",
+ "fixed": [
+  {
+   "file": "maxguard/response/approvals.py",
+   "problem": "Two proposals could be open at the same time for one address, for example two alerts about the same attacker. Reverting one of them removes the address from the nft set or OPNsense alias, while the other proposal still shows 'applied'. MaxGuard then says the address is blocked when the firewall no longer blocks it (CLAUDE.md rule 4: logged and reversible).",
+   "fix": "propose() now uses a single INSERT ... SELECT ... WHERE NOT EXISTS against OPEN_STATES (proposed, previewed, approved, applied). Because the check and the insert are one statement, two people proposing at the same moment cannot both succeed. A second open proposal raises WrongState, which the API turns into 409. After a reject or revert the address can be proposed again. New tests: test_one_open_proposal_per_address and test_a_second_open_proposal_for_the_same_address_is_409."
+  },
+  {
+   "file": "maxguard/response/approvals.py",
+   "problem": "A partial apply left the address half-blocked. With direction 'both', the 'in' alias add can succeed and the 'out' alias add fail; the state stays 'approved', so the API offers no revert, yet the firewall blocks the address. A retry then adds the address again. In opnsense/core 1177021c AliasUtilController::addAction tests `if (!array_search($address, $items))`, which is true when the address is item 0, so a second copy goes into the config. deleteAction removes only one copy, so after a revert the alias reconfigure can load the address back. A double click on apply had the same effect: both requests passed require_state before either changed the state, so the enforcer ran twice.",
+   "fix": "mark_applied() and revert() now run under a module-level FIREWALL_LOCK (one firewall change at a time; the API runs as one uvicorn process). After a failed apply, the new remove_everywhere() calls remove()+apply() on every enforcer. OPNsense deleteAction answers 'done' even when the address is not there, so this is safe. The apply_failed audit row records whether that worked ('undone': true/false). New tests: test_a_failed_apply_takes_the_address_off_the_other_firewall_lists and test_a_double_click_on_apply_reaches_the_firewall_once."
+  },
+  {
+   "file": "maxguard/response/generate.py",
+   "problem": "The OPNsense setup steps did not say where to put the Block rules. OPNsense rules are 'quick' by default and the first match wins. A Block rule placed below the LAN page's 'Default allow LAN to any rule' never matches, so outbound blocks silently did nothing.",
+   "fix": "Added a setup step: 'Once: on both pages, move these Block rules above every Pass rule (OPNsense uses the first rule that matches), then click Apply.' Sources: opnsense/docs source/manual/firewall.rst 'Processing order' (lines 116-141) and opnsense/core src/etc/config.xml.sample line 139. New test: test_opnsense_setup_puts_the_block_rules_first."
+  },
+  {
+   "file": "tests/unit/test_response_generate.py",
+   "problem": "Weak test: test_every_block_command_has_an_undo replaced ' -D ' with ' -I ' before comparing. An undo list that used -I (inserting the rule a second time) still passed. Mutation confirmed: MISSED.",
+   "fix": "The test now asserts every iptables undo has ' -D ' and every nft undo has 'delete element '. The mutation is now CAUGHT."
+  },
+  {
+   "file": "tests/unit/test_opnsense.py",
+   "problem": "No test covered allow_redirects=False: changing it to True left all tests passing (mutation MISSED). A followed redirect can send the request and the API key to another URL.",
+   "fix": "FakeOPNsense gained a `redirects` map that answers 307 with a Location header. New test_redirects_are_not_followed checks: EnforcerError mentions 307, only one request reached the fake, and the target alias is unchanged. The mutation is now CAUGHT."
+  },
+  {
+   "file": "docs-draft/response-notes.md",
+   "problem": "Several statements were stale or false. It said 'Every step calls StateStore.add_audit' (it is now insert_audit in the same transaction). It gave the alias type as 'Hosts' (the real label is 'Host(s)') and left out the LAN source rule and the rule order. It claimed the preview 'counts exactly what the rule stops', which is false for Suricata to_client alerts. It showed 127.0.0.1 output without the curl command that produced it, and stale counts (90 tests / 718 unit tests).",
+   "fix": "Corrected all of these. Added the one-open-proposal rule, the rollback and the lock. Added Host(s) with its source (Alias.xml line 28), the note that only host/network alias types are saved in the config (addAction), and the rule-order step. Added the pf-state and Pass-association limits with firewall.rst as source, the Suricata alert-direction gap, and the missing curl line. Added the live nft run showing that an already-open connection is cut, and the current test count (97 passed)."
+  },
+  {
+   "file": "maxguard/response/routes.py",
+   "problem": "The docstring's error list did not mention the new 409 for an address that already has an open proposal.",
+   "fix": "Updated the docstring line."
+  }
+ ],
+ "findings": [
+  {
+   "severity": "major",
+   "file": "maxguard/events/normalize.py (owner Jaiden) / maxguard/response/preview.py",
+   "problem": "preview decides inbound/outbound from src_ip/dst_ip. For Suricata 'alert' events the normalizer copies the top-level src_ip/dest_ip, which belong to the packet that matched, not to whoever started the connection. In the Suricata 7.0.10 user guide alert example (doc/userguide/output/eve/eve-json-format.rst, around line 60-148), a 'direction': 'to_client' alert has src_ip=142.11.240.191 (the server) and flow.src_ip=192.168.100.237 (the originator). An inbound preview can therefore count a connection our own device started.",
+   "suggestion": "In normalize.py, for eve alerts use flow.src_ip/flow.dest_ip (and the flow ports) when present, or add the alert's 'direction'. The other option is for preview to classify alert events by their community_id's conn.log event. This is a normalizer change, so it needs Jaiden; it is now documented in docs-draft/response-notes.md."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/response/routes.py",
+   "problem": "run_step maps every KeyError to 404 and every ValueError to 400. A programming error (for example a missing dict key) shows up as 'no such proposal'. A config error such as MAXGUARD_OPNSENSE_URL=http://... raises ValueError in OPNsenseEnforcer.__init__ and comes back as 400 'bad input' on apply. read_api_key errors such as PermissionError or UnicodeDecodeError give a 500. If enforcers_for() fails (for example a missing key file), apply is not audited as apply_failed.",
+   "suggestion": "Raise a dedicated ProposalNotFound instead of KeyError. Turn enforcer config problems (ValueError from the URL check, OSError reading the key) into EnforcerError inside opnsense.from_env, so they answer 502 and are audited."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/response/approvals.py",
+   "problem": "row_to_proposal re-runs rules_for() on every stored row, and GET /proposals is not wrapped in run_step. If parse_ip ever becomes stricter, an old stored address raises ValueError and the whole list returns 500.",
+   "suggestion": "Catch ValueError in row_to_proposal and return rules=None with an 'error' field, or store the generated rules once when the proposal is created."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/response/generate.py",
+   "problem": "Nothing stops a block of the firewall's own address, the console's address or the default gateway. Blocking these can lock the user out of the firewall or cut off the whole LAN. The preview shows the traffic, but there is no explicit warning.",
+   "suggestion": "Refuse or warn when the address equals the host in MAXGUARD_OPNSENSE_URL or the machine's own addresses. This is a product decision for the Security Lead."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/response/routes.py",
+   "problem": "'actor' is free text the client sends, with no authentication. The audit trail's 'who' is self-declared. This is acceptable only because the API is reachable on 127.0.0.1 only; ARCHITECTURE section 13 says 'with who and when' without this caveat.",
+   "suggestion": "State in ARCHITECTURE section 13 that the actor is self-declared until the dashboard has logins."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/response/generate.py",
+   "problem": "Running an iptables block command twice inserts two rules, and one undo removes only one of them (nft sets do not have this problem: add element is idempotent). OPNsense/pf blocks only new connections (stateful); existing connections keep their state. This is now documented, but MaxGuard does not kill states.",
+   "suggestion": "The guide should say: run each iptables block line once (check with iptables -S | grep maxguard). Optionally, a later task could kill the address's pf states; that needs another ACL privilege, so verify it on an OPNsense VM first."
+  },
+  {
+   "severity": "minor",
+   "file": "tests/unit/test_response_routes.py",
+   "problem": "The file imports FakeOPNsense from test_opnsense (the builder already reported this). It only works with pytest's default prepend import mode.",
+   "suggestion": "Move FakeOPNsense to tests/unit/conftest.py or a helper module (the lead owns conftest)."
+  },
+  {
+   "severity": "minor",
+   "file": "maxguard/response/approvals.py",
+   "problem": "There is an upstream OPNsense bug, verified in the source but not on a VM: addAction's `!array_search(...)` adds a duplicate config entry when the address is already item 0 of the alias. MaxGuard now avoids sending a duplicate (lock, rollback, one open proposal), but the bug still applies if the user put the address into the alias by hand.",
+   "suggestion": "Verify on an OPNsense VM. If confirmed, report it upstream (opnsense/core) and mention it in the guide."
+  }
+ ],
+ "mutations": [
+  "preview inbound uses dst_ip instead of src_ip: CAUGHT",
+  "approve allowed from 'proposed' (no preview): CAUGHT",
+  "same_address always True: CAUGHT",
+  "IPv6 scope-id check removed: CAUGHT",
+  "move() UPDATE without the state check: CAUGHT",
+  "OPNsense session.verify=False: CAUGHT",
+  "revert skips enforcer.remove: CAUGHT",
+  "preview connection_key = event_id (no dedup): CAUGHT",
+  "iptables undo uses -I instead of -D: MISSED before the review, CAUGHT after the test fix",
+  "audit row in a separate transaction from the state change: CAUGHT",
+  "apply_failed not audited: CAUGHT",
+  "IPv4-mapped IPv6 allowed: CAUGHT",
+  "link-local allowed: CAUGHT",
+  "preview window end inclusive (until=window_end+1): CAUGHT",
+  "samples sorted in reverse event_id order: CAUGHT",
+  "allow_redirects=True: MISSED before the review, CAUGHT after the new test",
+  "OPNsense status not checked: CAUGHT",
+  "trust_env=True: CAUGHT",
+  "approve refusal not audited: CAUGHT",
+  "revert of an enforcer block without an enforcer allowed: CAUGHT (first run)",
+  "new fix: FIREWALL_LOCK replaced by nullcontext: CAUGHT",
+  "new fix: no rollback after a failed apply: CAUGHT",
+  "new fix: duplicate open proposals allowed: CAUGHT"
+ ],
+ "verified_facts": [
+  "OPNsense endpoints and answers checked against opnsense/core 1177021c22d6dedb63ff9bffd6300e789a8822e2. AliasUtilController.php addAction (L166) refuses [^0-9a-f:./_] with 'not_an_address', returns 'done', and returns 'failed' for an unknown alias. deleteAction (L119) always answers 'done' when 'address' is posted. AliasController.php reconfigureAction answers {'status':'ok'}. actions_filter.conf [add.table] runs /sbin/pfctl -t %s -T add %s.",
+  "addAction and deleteAction update the configuration only for alias types 'host' and 'network' (in_array($cnfAlias->type, array('host','network'))). For other types only the pf table changes.",
+  "OPNsense upstream: addAction uses `if (!array_search($address, $items))`, which is true when the address is item 0, so adding an existing first entry appends a duplicate. deleteAction removes one occurrence per form (address and address/32).",
+  "ACL.xml: 'Diagnostics: PF Table IP addresses' = api/firewall/alias_util/*; 'Firewall: Alias: Edit' = api/firewall/alias/*.",
+  "Alias type label is 'Host(s)': src/opnsense/mvc/app/models/OPNsense/Firewall/Alias.xml line 28.",
+  "OPNsense rules are quick by default; the first match wins: https://raw.githubusercontent.com/opnsense/docs/master/source/manual/firewall.rst 'Processing order' (lines 116-141). Rules are stateful (lines 36-41). A port forward with Filter rule association 'Pass' skips the other rules (warning near line 153).",
+  "OPNsense's default config has 'Default allow LAN to any rule': https://raw.githubusercontent.com/opnsense/core/master/src/etc/config.xml.sample line 139.",
+  "Suricata 7.0.10 user guide (raw.githubusercontent.com/OISF/suricata/suricata-7.0.10/doc/userguide/output/eve/eve-json-format.rst) alert example: direction 'to_client', top-level src_ip = server, flow.src_ip = originator.",
+  "Ran for real in nicolaka/netshoot:v0.15 (sha256:47b907d6..., --network none, NET_ADMIN+NET_RAW) with the NFT_SETUP from generate.py: adding 127.0.0.2 to maxguard_block_in_v4 while a TCP connection from 127.0.0.2 was open stopped it ('one two' received, 'three' never arrived).",
+  "The app-wide middleware covers CSRF for /api/response (Sec-Fetch-Site / Origin); test_cross_site_requests_are_refused passes. The response routes are not in create_ingest_app (LAN port).",
+  "Response tests: 97 passed on Python 3.11 (.venv) and on Python 3.13.5 (maxguard-sandbox:test, --network none, non-root, read-only mount).",
+  "Whole unit suite after the fixes: 842 passed, 1 skipped, 31 deselected.",
+  "ruff check on all response files and tests: All checks passed!",
+  "Contracts untouched: no edits to models.py, adapters/base.py, api/app.py, storage/state.py, pipeline.py or normalize.py by this review."
+ ],
+ "commands": [
+  {
+   "command": "./.venv/bin/pytest tests/unit/test_response_generate.py tests/unit/test_response_preview.py tests/unit/test_response_approvals.py tests/unit/test_response_routes.py tests/unit/test_opnsense.py -q -p no:cacheprovider  (before the review)",
+   "output": "91 passed in 3.86s"
+  },
+  {
+   "command": "ref/.venv/bin/python ahmad-response-review-scripts/mutate.py <copy of repo without .venv> <python>  (before the test fixes)",
+   "output": "18 CAUGHT; MISSED: 'iptables undo uses -I' (91 passed), 'redirects followed' (91 passed)"
+  },
+  {
+   "command": "same mutation script after the fixes (+3 mutations of the new code)",
+   "output": "all CAUGHT (2 old patterns skipped because the code moved under the lock; both were CAUGHT in the first run)"
+  },
+  {
+   "command": "docker run --rm --name ahmad-response-review-nft --network none --cap-add NET_ADMIN --cap-add NET_RAW -v <dir>:/w:ro nicolaka/netshoot:v0.15 timeout 30 bash /w/run.sh   (nft -f setup from generate.NFT_SETUP; socat echo server on 127.0.0.1:9000; client bound to 127.0.0.2 sends one, two, three; block added after 'two')",
+   "output": "before block: one two\nblocked 127.0.0.2 (inbound) while the connection is open\nreceived in total: one two"
+  },
+  {
+   "command": "./.venv/bin/pytest <5 response test files> -q -p no:cacheprovider  (after the fixes)",
+   "output": "97 passed in 4.25s"
+  },
+  {
+   "command": "docker run --rm --name ahmad-response-review-py313 --network none --user $(id -u):$(id -g) -e PYTHONDONTWRITEBYTECODE=1 -e HOME=/tmp -v $PWD:/src:ro -w /src maxguard-sandbox:test /opt/venv/bin/python -m pytest <5 response test files> -q -p no:cacheprovider",
+   "output": "97 passed in 5.85s (Python 3.13.5)"
+  },
+  {
+   "command": "./.venv/bin/ruff check maxguard/response tests/unit/test_response_*.py tests/unit/test_opnsense.py",
+   "output": "All checks passed!"
+  },
+  {
+   "command": "./.venv/bin/pytest -m \"not integration\" -q -p no:cacheprovider | tail -3",
+   "output": "842 passed, 1 skipped, 31 deselected in 18.24s"
+  },
+  {
+   "command": "curl -sS -o firewall.rst https://raw.githubusercontent.com/opnsense/docs/master/source/manual/firewall.rst; grep -n -i 'quick' firewall.rst",
+   "output": "138:Rules can either be set to :code:`quick` or not set to quick, the default is to use quick. When set to quick, the rule is\n139:handled on \"first match\" basis, which means that the first rule matching the packet will take precedence over rules following in sequence."
+  },
+  {
+   "command": "curl -sS https://raw.githubusercontent.com/opnsense/core/master/src/etc/config.xml.sample | grep -n -i 'allow lan'",
+   "output": "139:            <description>Default allow LAN to any rule</description>\n163:            <description>Default allow LAN IPv6 to any rule</description>"
+  },
+  {
+   "command": "grep -n 'Host(s)' opnsense-core/core/src/opnsense/mvc/app/models/OPNsense/Firewall/Alias.xml",
+   "output": "28:                        <host>Host(s)</host>"
+  }
+ ],
+ "tests_passed": true
+}

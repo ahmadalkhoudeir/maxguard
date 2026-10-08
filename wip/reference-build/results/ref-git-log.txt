@@ -1,3 +1,12 @@
+a639afc rules: register ja4 as JAK-09's guide does
+2bbc6c0 lead: 422 counts as rejected in the agent; bundle ships three synthetic samples for the acceptance test; OFFLINE-INSTALL and rc1 notes moved into docs/; pipeline error names flow files
+ba89b63 release/bundle: adversarial review fixes (--strict checksums, no word splitting, least-privilege SHA-pinned workflow, --target runtime)
+9ede784 netflow/agent: adversarial review fixes (hostile flow records, no proxy or netrc, % in spool path, spool owner, exit code)
+dd5dc23 lead: IPv6 timeline test; scripts/send_test_flows.py (JAK-10 generator)
+2132797 release workflow and offline bundle (JAI-09, JON-05) from the builder
+782d2ce netflow adapter and host agent (JAK-10, JAK-11) from the builder
+0eff007 dashboard: adversarial review fixes (any display name, bounded timeline end, redirect/CSP/cookie tests)
+f6a26b5 response: adversarial review fixes (one open proposal per address, firewall lock and rollback, rule order, redirect and undo tests)
 d7768a8 decoys and baselines (FIO-06, FIO-07) from the builder
 d75a4c8 dashboard (AHM-02, AHM-03, AHM-06) from the builder; report['devices'] from the device table (lead)
 d41e393 response: a state change and its audit row in one transaction (insert_audit); rollback test

@@ -160,6 +160,10 @@ def opnsense_steps(ip, direction: str) -> dict:
         "(stops connections a device on your network starts through the firewall), and "
         "a Block rule with destination maxguard_block_out (stops connections your devices "
         "start toward that address).",
+        # Rules are "quick" by default: the first rule that matches wins. A Block rule
+        # below the LAN page's default allow rule would never match anything.
+        "Once: on both pages, move these Block rules above every Pass rule "
+        "(OPNsense uses the first rule that matches), then click Apply.",
     ]
     return {"setup": setup, "block": block, "undo": undo}
 

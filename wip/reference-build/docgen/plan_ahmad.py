@@ -182,7 +182,11 @@ TASKS = [
             "too):\n\n@@FILE maxguard/web/routes.py@@\n\n"
             "`update_alert()` needs `at=now()`: the stores never read the clock, the web layer "
             "does, in one place (`now()`), so tests can replace it. After a change, "
-            "`notify_change()` makes every open queue refresh itself.",
+            "`notify_change()` makes every open queue refresh itself. The person's name is "
+            "checked **before** anything is saved (`valid_name()`: 1 to 100 printable "
+            "characters) and kept in the `mg_actor` cookie percent-encoded: a cookie can only "
+            "hold Latin-1 text, so a name such as *Łukasz* or *علي* used to crash the page "
+            "*after* the change was saved (found by the security review).",
             "Create `maxguard/web/templates/alert.html`:\n\n"
             "@@FILE maxguard/web/templates/alert.html@@\n\n"
             "and the status form fragment `_status.html`, which the `PATCH` answer replaces "
@@ -447,7 +451,15 @@ TASKS = [
             "`storage/state.py` does not change. Each state change and its audit row are "
             "written in **one** transaction (`insert_audit(conn, ...)` from `storage/state.py`), "
             "so a crash can never leave a block without its record; the last test proves it by "
-            "making the audit write fail.",
+            "making the audit write fail.\n\n"
+            "Three more guards came out of the security review. Only **one** open proposal "
+            "per address: `propose()` checks and inserts in a single `INSERT ... SELECT ... "
+            "WHERE NOT EXISTS`, because reverting one of two blocks on the same address would "
+            "take it off the firewall while the other still said *applied*. Only **one** "
+            "firewall change at a time (`FIREWALL_LOCK`), so a double click on Apply reaches "
+            "the firewall once. And if a block with direction `both` fails half-way, "
+            "`remove_everywhere()` takes the address off every list again, so the firewall "
+            "never stays half-blocked while MaxGuard says *approved*.",
             "Create the enforcer interface `maxguard/response/enforcers/__init__.py` and "
             "`maxguard/response/enforcers/base.py`:\n\n"
             "@@FILE maxguard/response/enforcers/__init__.py@@\n\n"
@@ -470,8 +482,10 @@ TASKS = [
             "`create_app()` (JAI-07) includes this router automatically now that the module "
             "exists. It is part of the dashboard's app on `127.0.0.1` only, never the "
             "ingest-only app that sensors reach. Errors: 400 bad input or a wrong typed IP, 404 "
-            "no such proposal, 409 a step that is not allowed now, 502 the firewall refused or "
-            "could not be reached.",
+            "no such proposal, 409 a step that is not allowed now (or the address already has an "
+            "open proposal), 502 the firewall refused or could not be reached. The `actor` "
+            "name is typed by the person, not checked by a login: that is acceptable only "
+            "because this API listens on `127.0.0.1`.",
             "Create the tests `tests/unit/test_response_approvals.py`:\n\n"
             "@@FILE tests/unit/test_response_approvals.py@@\n\n"
             "`tests/unit/test_opnsense.py` (a fake OPNsense: `http.server` on `127.0.0.1` "
@@ -487,7 +501,10 @@ TASKS = [
             "type *Host(s)*, empty.\n"
             "2. **Firewall > Rules > WAN**: a *Block* rule with source `maxguard_block_in`. "
             "**Firewall > Rules > LAN**: a *Block* rule with source `maxguard_block_in` (a "
-            "device on your own network) and one with destination `maxguard_block_out`. Apply.\n"
+            "device on your own network) and one with destination `maxguard_block_out`. On both "
+            "pages, drag these Block rules **above** every Pass rule (such as *Default allow "
+            "LAN to any rule*): OPNsense uses the first rule that matches, so a Block rule "
+            "below a Pass rule never blocks anything. Apply.\n"
             "3. **System > Access > Users**: a user `maxguard` with only the privileges "
             "*Diagnostics: PF Table IP addresses* and *Firewall: Alias: Edit* (OPNsense's "
             "`ACL.xml`). In its API keys section click **+**; the browser downloads the key "
@@ -505,7 +522,10 @@ TASKS = [
             "5. Repeat the walk-through: `apply` now adds the address to the alias (check "
             "**Firewall > Diagnostics > Aliases**), and `revert` removes it. Without "
             "`MAXGUARD_OFFLINE_ALLOW`, apply answers 502 with the hint to add the firewall "
-            "there.",
+            "there. Two limits to know: `pf` is stateful, so a connection that was already open "
+            "keeps working until its state ends (check **Firewall > Diagnostics > States**); "
+            "and a port forward whose *Filter rule association* is *Pass* skips all filter "
+            "rules (OPNsense manual, *Firewall: Processing order*).",
             pr_step("feat: approvals, audit and OPNsense enforcer (AHM-08)", "JWinborne1"),
         ],
         "files": ["maxguard/response/approvals.py", "maxguard/response/enforcers/__init__.py",

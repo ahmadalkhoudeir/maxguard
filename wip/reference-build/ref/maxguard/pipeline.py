@@ -13,6 +13,7 @@ from pathlib import Path
 
 import maxguard.rules  # noqa: F401  (importing registers every rule)
 from maxguard.adapters.live import LiveSensorAdapter
+from maxguard.adapters.netflow import NetflowAdapter
 from maxguard.adapters.pcap import PcapAdapter
 from maxguard.adapters.zeeklogs import ZeekLogAdapter
 from maxguard.mapping.loader import ATTACK, apply, load_all
@@ -20,8 +21,10 @@ from maxguard.models import SEVERITIES, Finding
 from maxguard.rules.base import run_all
 
 # Order matters only for clarity: each adapter accepts a different kind of input
-# (a capture file; a folder with conn.log; a sensor folder with zeek/<interval>/).
-ADAPTERS = [PcapAdapter(), ZeekLogAdapter(), LiveSensorAdapter()]
+# (a capture file; a folder with conn.log; a sensor folder with zeek/<interval>/;
+# a folder of goflow2 flow files without conn.log or zeek/). NetflowAdapter is last
+# so the other three always get the first look.
+ADAPTERS = [PcapAdapter(), ZeekLogAdapter(), LiveSensorAdapter(), NetflowAdapter()]
 REPO_MAPPINGS_DIR = Path(__file__).resolve().parent.parent / "mappings"
 
 
@@ -49,7 +52,8 @@ def pick_adapter(path: Path):
     for adapter in ADAPTERS:
         if adapter.accepts(path):
             return adapter
-    raise UnsupportedInput(f"{path.name}: not a pcap/pcapng file or a Zeek log folder/archive")
+    raise UnsupportedInput(f"{path.name}: not a pcap/pcapng file, a Zeek log folder/archive, "
+                           "or a goflow2 flow file")
 
 
 def sha256_of(path: Path) -> str:

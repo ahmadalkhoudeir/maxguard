@@ -1,7 +1,7 @@
 # Response module notes (Ahmad, AHM-07 and AHM-08)
 
 Notes for the guide in `docs/roadmap/ahmad.md` and `docs/ARCHITECTURE.md` section 13.
-Everything below was run on October 6, 2026, unless marked **not run - verify on hardware**.
+Everything below was run on October 6, 2026 (reviewed and partly re-run on October 8, 2026), unless marked **not run - verify on hardware**.
 
 ## What was built
 
@@ -9,7 +9,7 @@ Everything below was run on October 6, 2026, unless marked **not run - verify on
 |---|---|
 | `maxguard/response/generate.py` | `rules_for(ip, direction) -> dict`: nftables (with a one-time setup file), iptables, OPNsense and home-router steps, each with its undo. `parse_ip()` is the only way an address gets in. |
 | `maxguard/response/preview.py` | `preview(ip, direction, event_store, *, window_end)`: connections in `[window_end - 7 days, window_end)`, devices, services/ports, first/last seen, up to 10 samples. |
-| `maxguard/response/approvals.py` | `ProposalStore(state_store)`: the table `response_proposals` in `state.db` and the steps propose, record_preview, approve, mark_applied, revert, reject. Every step calls `StateStore.add_audit` (`response.<step>`, target = proposal id). |
+| `maxguard/response/approvals.py` | `ProposalStore(state_store)`: the table `response_proposals` in `state.db` and the steps propose, record_preview, approve, mark_applied, revert, reject. Every step writes its audit row (`response.<step>`, target = proposal id) with `storage.state.insert_audit` in the same SQLite transaction as the state change, so a change never exists without its audit row. |
 | `maxguard/response/routes.py` | `APIRouter` under `/api/response` (included by `create_app()`). |
 | `maxguard/response/enforcers/base.py` | `Enforcer` protocol (`add(ip)`, `remove(ip)`, `apply()`) and `EnforcerError`. |
 | `maxguard/response/enforcers/opnsense.py` | `OPNsenseEnforcer` for one firewall alias, `read_api_key()`, `from_env()`. |
@@ -28,6 +28,16 @@ proposed / previewed -> rejected
   two people clicking at the same moment cannot both approve or both revert.
 - An enforcer error keeps the state (`approved` or `applied`), is audited as
   `response.apply_failed` / `response.revert_failed`, and the API answers 502.
+  After a failed apply the address is removed again from every enforcer (with
+  `direction: both` the `in` alias may already have it), so nothing stays
+  half-blocked; the audit row says `"undone": true` or `false` (check the firewall
+  by hand when it is false).
+- One open proposal per address: proposing an address that already has a
+  proposal in `proposed`, `previewed`, `approved` or `applied` is refused with 409.
+  Otherwise reverting one proposal would silently remove the block that the
+  other one still shows as `applied`. Reject or revert the old one first.
+- Apply and revert run one at a time (a lock), so a double click cannot send the
+  address to the firewall twice.
 - Revert uses the same method as apply: a block applied by hand is undone by hand,
   a block applied by OPNsense is removed from OPNsense.
 
@@ -38,7 +48,24 @@ proposed / previewed -> rejected
 - `both`: either.
 
 The firewall rules match the connection's original direction (conntrack), and the
-preview uses the same definition, so the preview counts exactly what the rule stops.
+preview uses the same definition (`src_ip` = the side that started the connection).
+That holds for Zeek events. One known gap: a Suricata `alert` event keeps the
+addresses of the packet that matched, so an alert on a server's answer
+(`"direction": "to_client"`) has the server as `src_ip`; the connection's real
+originator is in its `flow.src_ip` (Suricata 7.0.10 user guide,
+`doc/userguide/output/eve/eve-json-format.rst`, the alert example). The normalizer
+copies the top-level `src_ip`, so such an alert can be counted in the wrong direction.
+
+A block that nftables applies also stops a connection that is already open: run
+for real in `nicolaka/netshoot:v0.15` (`--network none`), a TCP connection from
+127.0.0.2 to 127.0.0.1 sent `one`, `two`, then 127.0.0.2 was added to
+`maxguard_block_in_v4`, and `three` never arrived:
+
+```
+before block: one two
+blocked 127.0.0.2 (inbound) while the connection is open
+received in total: one two
+```
 
 ### Address safety
 
@@ -133,7 +160,7 @@ forwarding traffic (the `forward` chain was loaded but no routed packets went th
 | `POST /api/response/proposals/{id}/revert` | `{actor}` | undo, the same way it was applied |
 | `POST /api/response/proposals/{id}/reject` | `{actor, reason?}` | |
 
-Errors: 400 bad input, 404 no such proposal, 409 step not allowed now, 502 firewall error.
+Errors: 400 bad input, 404 no such proposal, 409 step not allowed now (or the address already has an open proposal), 502 firewall error.
 Cross-site requests are refused (403) by the API's middleware like every other change.
 
 A real session (uvicorn on 127.0.0.1:8765, the telnet lab logs uploaded as a .zip):
@@ -144,6 +171,8 @@ curl -s -F file=@telnet-logs.zip http://127.0.0.1:8765/api/analyses
 B=http://127.0.0.1:8765/api/response/proposals
 curl -s -X POST $B -H 'Content-Type: application/json' \
   -d '{"actor": "ahmad", "ip": "1.2.3.4; rm -rf /", "direction": "both"}'
+curl -s -X POST $B -H 'Content-Type: application/json' \
+  -d '{"actor": "ahmad", "ip": "127.0.0.1", "direction": "both"}'
 curl -s -X POST $B -H 'Content-Type: application/json' \
   -d '{"actor": "ahmad", "ip": "172.18.0.3", "direction": "both", "reason": "telnet client"}'
 curl -s -X POST $B/1/preview -H 'Content-Type: application/json' -d '{"actor": "ahmad"}'
@@ -207,9 +236,21 @@ reachable from the sandbox; the files were read from raw.githubusercontent.com.
 
 ### Setting it up (**not run - verify on hardware**: an OPNsense VM, never a real firewall)
 
-1. **Firewall > Aliases**: create `maxguard_block_in` and `maxguard_block_out`, type Hosts, empty.
+1. **Firewall > Aliases**: create `maxguard_block_in` and `maxguard_block_out`, type
+   **Host(s)**, empty (the type is named `Host(s)` in `src/opnsense/mvc/app/models/OPNsense/Firewall/Alias.xml`).
+   Only Host(s) and Network(s) aliases keep the address in the configuration;
+   `AliasUtilController.php` `addAction` only changes the live pf table for other types.
 2. **Firewall > Rules > WAN**: Block, source `maxguard_block_in`.
-   **Firewall > Rules > LAN**: Block, destination `maxguard_block_out`. Apply.
+   **Firewall > Rules > LAN**: Block, source `maxguard_block_in`, and Block, destination
+   `maxguard_block_out`.
+   Move these Block rules **above every Pass rule** on both pages, then Apply. OPNsense
+   rules are "quick" by default, so the first rule that matches wins (opnsense/docs
+   `source/manual/firewall.rst`, "Processing order"); below the LAN page's
+   "Default allow LAN to any rule" (`src/etc/config.xml.sample`) a Block rule never matches.
+   Two limits to know: pf is stateful, so a connection that already exists keeps
+   working until its state ends (the nftables rules, by contrast, match every packet
+   of a tracked connection); and a port forward whose **Filter rule association**
+   is **Pass** skips all filter rules (firewall.rst, warning under "Processing order").
 3. **System > Access > Users**: a user `maxguard` with only the two privileges above.
    In its API keys section click **+**; the browser downloads the key file once.
 4. On the MaxGuard machine:
@@ -243,13 +284,12 @@ pytest tests/unit/test_response_generate.py tests/unit/test_response_preview.py 
 ```
 
 ```
-........................................................................ [ 80%]
-..................                                                       [100%]
-90 passed
+........................................................................ [ 74%]
+.........................                                                [100%]
+97 passed in 3.9s
 ```
 
 (Python 3.11 in .venv, and Python 3.13.5 in the `maxguard-sandbox:test` image, both pass.)
-The whole unit suite: `718 passed, 1 skipped`.
 
 - The fake OPNsense (`FakeOPNsense` in `tests/unit/test_opnsense.py`) is an
   `http.server` on 127.0.0.1 wrapped in TLS, with a certificate from a throwaway

@@ -1,0 +1,113 @@
+{
+ "owner": "jakub-netflow-agent",
+ "files": [
+  "maxguard/adapters/netflow.py",
+  "docker/netflow-compose.yaml",
+  "maxguard/pipeline.py",
+  "maxguard/events/normalize.py",
+  "maxguard/sensor/agent.py",
+  "tests/unit/test_netflow.py",
+  "tests/unit/test_agent.py",
+  "tests/fixtures/netflow/goflow2.json",
+  "docs-draft/netflow-agent-notes.md"
+ ],
+ "commands": [
+  {
+   "command": "docker image inspect / docker history jakub-netflow-agent-goflow2:v2.2.7-local (the earlier attempt's image)",
+   "output": "FROM alpine:3.20 + COPY goflow2 /goflow2 (USER 65534). The binary was compiled from the upstream git checkout at tag v2.2.7 (commit 74af41b) in scratchpad/jakub-netflow-dl/src, not taken from the published image. Removed (docker rmi). The published image is used now."
+  },
+  {
+   "command": "curl -sS 'https://hub.docker.com/v2/repositories/netsampler/goflow2/tags/?page_size=8&ordering=last_updated'",
+   "output": "v2.2.7 2026-09-30 sha256:b8fdc8f3666b05b0022ada3a3c8c50dcde97f7d19e3f42d050695fa0571fb952 [amd64, arm64]\nlatest sha256:d060da53962a... [amd64, arm64]   (same digest as v1.3.8)"
+  },
+  {
+   "command": "git ls-remote --tags https://github.com/netsampler/goflow2 | sort -V | tail",
+   "output": "... v2.2.5 v2.2.6 v2.2.7  (v2.2.7 = 74af41bea8baddeac1e710acb5441a3e5896b68a)"
+  },
+  {
+   "command": "docker pull netsampler/goflow2:v2.2.7@sha256:b8fdc8f3...; docker run --rm --network none <image> -v",
+   "output": "first attempt: 429 Too Many Requests; retry: Downloaded. GoFlow2 v2.2.7 (2026-09-30T06:45:52+0000). Labels: licenses=BSD-3-Clause, revision=74af41bea8ba..., version=v2.2.7. /etc/os-release: Alpine 3.24.2"
+  },
+  {
+   "command": "MAXGUARD_NETFLOW_ADDRESS=127.0.0.1 MAXGUARD_NETFLOW_DATA=... docker compose -p jakub-netflow-agent -f docker/netflow-compose.yaml up -d; docker logs",
+   "output": "level=INFO msg=\"starting GoFlow2\"\nlevel=INFO msg=\"starting collection\" scheme=netflow hostname=\"\" port=2055 count=1 workers=2 blocking=false queue_size=1000000"
+  },
+  {
+   "command": "docker run --rm --network jakub-netflow-agent_default -v send_flows.py:/send_flows.py:ro python:3.11-slim-bookworm python3 /send_flows.py goflow2",
+   "output": "sent 4 packets (2 NetFlow v5, 1 NetFlow v9, 1 IPFIX) to goflow2:2055\n7 lines in goflow2.json:\nNETFLOW_V5 192.0.2.10 49152 -> 198.51.100.20 23 TCP 900\nNETFLOW_V5 192.0.2.10 49153 -> 198.51.100.20 80 TCP 640\nNETFLOW_V5 198.51.100.20 23 -> 192.0.2.10 49152 TCP 1400\nNETFLOW_V5 192.0.2.10 40000 -> 198.51.100.53 53 UDP 60\nNETFLOW_V5 192.0.2.10 0 -> 198.51.100.20 2048 ICMP 84 (icmp_type 0, icmp_code 0)\nNETFLOW_V9 192.0.2.12 50022 -> 198.51.100.22 22 TCP 4200\nIPFIX 192.0.2.11 50000 -> 203.0.113.5 443 TCP 5200"
+  },
+  {
+   "command": "mv goflow2.json netflow-done/2026-10-06-1400.json; docker compose ... kill -s HUP goflow2; send again from host to 127.0.0.1:2055",
+   "output": "new empty goflow2.json created, restarts=0, then 7 new lines (published UDP port works). Container: user 0:0 in this run, ro=true caps=[ALL] ports={\"2055/udp\":[{\"HostIp\":\"127.0.0.1\",\"HostPort\":\"2055\"}]}. Re-run with defaults (1000:1000, folder chowned 1000): -rw-r--r-- 1 1000 1000 6794 goflow2.json"
+  },
+  {
+   "command": "python: analyze(netflow-done, workdir, explain=False) twice",
+   "output": "adapter: netflow\nfindings: 0 []\ntools: {'zeek': False, 'suricata': False}\n7 events, source netflow, kind conn (e.g. 'netflow conn 192.0.2.10 49152 -> 198.51.100.20 23 tcp tcp/23 out=900 in=0 N1eb2a08b7a1c81b41'; ICMP: '192.0.2.10 8 -> 198.51.100.20 0 icmp')\nassets: []\nsame report twice: True"
+  },
+  {
+   "command": "docker run --rm --network none --cap-add NET_RAW --cap-add NET_ADMIN -e TZ=UTC nicolaka/netshoot:v0.15 sh -c 'tcpdump -i lo -n -G 2 -w \"/spool/capture-%Y%m%d-%H%M%S.pcap\" -Z nobody & ping -c 9 127.0.0.1; ...; ls -ln /spool'",
+   "output": "tcpdump version 4.99.6 / libpcap 1.10.6\n36 packets received by filter\n-rw-r--r-- 1 65534 65534 480 capture-20261008-214356.pcap\n-rw-r--r-- 1 65534 65534 936 capture-20261008-214358.pcap\n-rw-r--r-- 1 65534 65534 480 capture-20261008-214400.pcap"
+  },
+  {
+   "command": "uvicorn --factory maxguard.api.app:create_ingest_app --host 127.0.0.1 --port 8001 (MAXGUARD_INGEST_TOKEN set); python -m maxguard.sensor.agent --config agent.toml --upload-only",
+   "output": "uploaded 1 file(s)\nINFO: 127.0.0.1:48912 - \"POST /api/ingest HTTP/1.1\" 200 OK\nspool/uploaded/capture-20261006-140000.pcap; EventStore: 'laptop netflow 192.0.2.10 -> 198.51.100.20 23'"
+  },
+  {
+   "command": "./.venv/bin/pytest tests/unit/test_netflow.py tests/unit/test_agent.py -q -p no:cacheprovider",
+   "output": "33 passed in 2.91s"
+  },
+  {
+   "command": "docker run ... maxguard-sandbox:test /opt/venv/bin/python -m pytest tests/unit/test_netflow.py tests/unit/test_agent.py (Python 3.13)",
+   "output": "33 passed in 7.47s"
+  },
+  {
+   "command": "./.venv/bin/pytest tests/unit/test_normalize.py tests/unit/test_pipeline.py tests/unit/test_api.py -q -p no:cacheprovider",
+   "output": "89 passed in 3.89s"
+  },
+  {
+   "command": "./.venv/bin/pytest -m \"not integration\" -q -p no:cacheprovider | tail -3",
+   "output": "825 passed, 1 skipped, 31 deselected in 16.91s"
+  },
+  {
+   "command": "./.venv/bin/ruff check maxguard/adapters/netflow.py maxguard/sensor/agent.py tests/unit/test_netflow.py tests/unit/test_agent.py maxguard/pipeline.py maxguard/events/normalize.py",
+   "output": "All checks passed!"
+  }
+ ],
+ "tests_passed": true,
+ "verified_facts": [
+  "goflow2 newest tag is v2.2.7 (git ls-remote --tags https://github.com/netsampler/goflow2), commit 74af41bea8baddeac1e710acb5441a3e5896b68a; Docker Hub digest sha256:b8fdc8f3666b05b0022ada3a3c8c50dcde97f7d19e3f42d050695fa0571fb952 is published for linux/amd64 and linux/arm64 (hub.docker.com/v2/repositories/netsampler/goflow2/tags); it matches docs-spec/DEPENDENCIES.md",
+  "goflow2 license BSD-3-Clause: LICENSE in the upstream v2.2.7 checkout ('Copyright (c) 2021, NetSampler') and image label org.opencontainers.image.licenses=BSD-3-Clause; the published image is based on Alpine 3.24.2 (/etc/os-release)",
+  "Docker Hub 'latest' for netsampler/goflow2 has the same digest as v1.3.8 (sha256:d060da53...), so the tag must be pinned",
+  "goflow2 flags at v2.2.7 (pkg/goflow2/config/config.go, common.go): -listen default 'sflow://:6343,netflow://:2055', -format default json, -transport default file, -transport.file, -addr default ':8080' and the HTTP server starts only if cfg.Addr != '' (pkg/goflow2/app/app.go:84); SIGHUP reopens the output file (transport/file/transport.go) - also verified by running it",
+  "goflow2 decodes NetFlow v5, v9 and IPFIX from our generator into JSON lines (run in Docker); for NetFlow v5 ICMP it leaves icmp_type/icmp_code 0 and passes type*256+code in dst_port (observed: dst_port 2048 for echo request; producer_nflegacy.go copies record.DstPort)",
+  "Flow-only data fires no rule: cleartext/tls/cert/ja4 rules read ftp/http/maxguard_cleartext/rdp/ssl/x509/eve logs (grep of maxguard/rules); baseline.new_service is not run by analyze(); inventory.build reads only known_hosts/known_services/software logs, so assets are empty",
+  "tcpdump -G/-w/-Z/-i/-n wording from tcpdump.1.in (raw.githubusercontent.com/the-tcpdump-group/tcpdump/master/tcpdump.1.in, the source of https://www.tcpdump.org/manpages/tcpdump.1.html, which was blocked here); tcpdump.c fills the -G pattern with localtime() (line ~843), so TZ=UTC gives UTC names",
+  "tcpdump 4.99.6 in nicolaka/netshoot:v0.15: -G 2 rotated files every 2 s, strftime names were UTC with TZ=UTC, -Z nobody made the files owned by 65534",
+  "pktmon start --capture, --comp nics ('NICs only'), --pkt-size 0 ('log the entire packet', default 128), --file-name, multi-file mode rotates by size only; pktmon stop; pktmon etl2pcap <file> --out <name> writes pcapng: MicrosoftDocs/windowsserverdocs pktmon-start.md, pktmon-etl2pcap.md, pktmon.md (raw.githubusercontent.com; learn.microsoft.com itself was blocked)",
+  "PcapAdapter accepts the pcapng magic 0a0d0d0a (maxguard/adapters/pcap.py), so pktmon's etl2pcap output is accepted by the console",
+  "The agent's request (multipart 'file', form 'sensor_id', Authorization Bearer) is accepted by create_ingest_app: 200 through TestClient and through uvicorn on 127.0.0.1:8001; a wrong token gives 401; events are stored with sensor_id 'laptop'",
+  "Both new test files pass on Python 3.11 (.venv) and Python 3.13 (maxguard-sandbox:test)"
+ ],
+ "not_run": [
+  "A real router or switch exporting NetFlow/IPFIX to goflow2 (only the synthetic generator was used): not run - verify on hardware",
+  "goflow2 on arm64 / Raspberry Pi 5: the arm64 image is listed on Docker Hub but was not run here - verify on hardware",
+  "Host agent with a real capture on Linux (sudo + tcpdump -Z to a login user) and on macOS (Apple's tcpdump, -Z support): not run - verify on hardware. tcpdump flags were only run in a network-less container on its own loopback",
+  "Windows agent: pktmon start/stop/etl2pcap and the pcapng going through Zeek: not run (no Windows here) - verify on hardware",
+  "The agent's long-running loops (run_tcpdump, run_pktmon) were never started; only --upload-only and the building blocks ran",
+  "A real pcap through POST /api/ingest from the agent (needs Zeek on the console; the host here has none): the goflow2 fixture stood in for the capture",
+  "The dashboard timeline page itself was not opened; GET /api/events returning the flow events was tested instead"
+ ],
+ "issues_for_lead": [
+  "Earlier attempt: its local image jakub-netflow-agent-goflow2:v2.2.7-local was built from source (upstream git tag v2.2.7 compiled to a binary, copied into alpine:3.20). It was not a downloaded binary. I removed it and the scratch folder jakub-netflow-img. The compose file and the end-to-end run use the published netsampler/goflow2:v2.2.7@sha256:b8fdc8f3... (pulled after one Docker Hub 429). I kept that 45 MB image on the host so the compose file can be run again; remove it if disk is needed. Source checkout left in scratchpad/jakub-netflow-dl.",
+  "Spec difference (JAK-10 step 3): NetflowAdapter.accepts() also accepts a single goflow2 JSON file, recognised by its first line (at most 64 KiB read). Reason: the dashboard upload and /api/ingest save uploads under a random name with no suffix, so a folder can never arrive that way. Without this the 'How to test: flows on the timeline page' step could not work. A .zip of a goflow2 folder still goes to ZeekLogAdapter (it matches .zip by suffix) and gives an empty analysis. The docs should say 'upload the single .json flow file, not a zip'.",
+  "app.py's 400 message 'not a .pcap/.pcapng capture or a .zip/.tar.gz of Zeek logs' does not mention goflow2 flow files now. Suggest adding 'or a goflow2 NetFlow/IPFIX JSON file' (I did not edit app.py).",
+  "Contract note (JAK-10 step 4): normalize.py now sets source 'netflow' for conn.log records with mg_source 'netflow'. pipeline's default sensor_id for netflow input is 'import' (not 'pcap'). The pull request needs the contract-change label, review by Jaiden and approval by the Security Lead.",
+  "Flow-only data fires no rule. A flow to port 23 is not reported as cleartext.telnet because the rules need Zeek's protocol evidence. The asset inventory is empty for flow-only input because inventory.build reads only known_hosts/known_services/software. If assets from flows are wanted, that is a change in Jakub's inventory.py (needs a decision). baseline.new_service keys on (port, proto, service): flows have service '', so mixing a Zeek-learned baseline with NetFlow input would report every service as new. Fiona should know this.",
+  "NetFlow v5 ICMP: the adapter decodes the type and code from dst_port (type*256+code). I verified that goflow2 passes the value through unchanged, but I found no primary source for the exporter convention itself. The code comment calls it what exporters do. Please confirm or soften it in the docs.",
+  "JAK-11 design choices to put in the guide: (1) Windows pktmon rotates only by size, so the agent stops and restarts pktmon every rotate_seconds, which leaves a gap of under a second between files. (2) tcpdump is started with TZ=UTC because it fills the -w pattern with localtime(). (3) capture_user is required on Linux/macOS (-Z). Debian builds of tcpdump may already drop to a 'tcpdump' user by default (the man page says this can be a compile-time default), so the spool folder must be writable by whoever writes the files. (4) A file counts as uploaded only after a 2xx and then moves to spool/uploaded/ (newest 4 kept). 400/413 go to rejected/. Everything else is retried, oldest first. (5) The config file must be chmod 600 or the agent refuses it.",
+  "Security note for the docs: port 8001 is plain HTTP, so the agent's Bearer token and the captures cross the LAN unencrypted. The agent docstring says to use a trusted network. TLS on the ingest port may deserve a GitHub Discussion.",
+  "The flow generator (send_flows.py: NetFlow v5 + v9 + IPFIX, documentation addresses only) has no owned path in the repo. The full source is in docs-draft/netflow-agent-notes.md and scratchpad/jakub-netflow-work2/send_flows.py. The lead may want it at scripts/send_test_flows.py.",
+  "tests/fixtures/netflow/goflow2.json is real goflow2 v2.2.7 output from the generator, with sampler_address changed from the Docker address 172.18.0.3 to 203.0.113.1. All addresses are RFC 5737."
+ ],
+ "doc_notes": "JAK-10: goflow2 (netsampler/goflow2:v2.2.7 pinned by digest, BSD-3-Clause, amd64+arm64) listens on UDP 2055 (NetFlow v5/v9/IPFIX only, no sFlow) and writes JSON lines to /data/netflow/goflow2.json. It runs as 1000:1000 with a read-only root file system, all capabilities dropped and its HTTP server off (-addr=). The port is published only on MAXGUARD_NETFLOW_ADDRESS, which is required. Never use the 'latest' tag: it is v1.3.8. To rotate, mv the file and send SIGHUP (docker compose kill -s HUP goflow2); goflow2 reopens a fresh file. NetflowAdapter turns each flow into a conn.log line: ts = flow start, uid = 'N' + 17 hex digits of SHA-256 of the record without time_received_ns (deterministic, same length as a Zeek uid), orig_bytes = the flow's bytes, resp_bytes = 0 because a flow is one direction, ICMP type/code go in the ports as in Zeek, plus mg_source 'netflow'. Records that appear twice are written once, a half-written last line is skipped, and the output is sorted, so the same files always give the same conn.log. accepts() never takes a Zeek folder (it has conn.log), a sensor folder (it has zeek/), eve.json or a pcap; NetflowAdapter is last in ADAPTERS. Why no alerts: flows carry no payload, and every MaxGuard rule needs payload evidence from Zeek or Suricata, so flows only feed the timeline (later baselines and block previews). Gotcha: with sampling_rate > 1 the byte counts are sampled. JAK-11: maxguard/sensor/agent.py reads a TOML config outside the repo (~/.config/maxguard/agent.toml, chmod 600), builds `tcpdump [-i IF] -n -G N -w SPOOL/capture-%Y%m%d-%H%M%S.pcap -Z USER` (run with TZ=UTC) or, on Windows, `pktmon start --capture --comp nics --pkt-size 0 --file-name X.etl` / `pktmon stop` / `pktmon etl2pcap X.etl --out X.pcapng`. It uploads every finished file (never the newest while capturing) to <console>/api/ingest as multipart 'file' + 'sensor_id' with an 'Authorization: Bearer' header. `python -m maxguard.sensor.agent --config FILE --upload-only` uploads once without capturing, which is good for a first test. The console must be the user's own machine, and ingest is off (404) unless MAXGUARD_INGEST_TOKEN (at least 32 characters) is set there. Tests never start a capture: they compare the command lists and upload to a ThreadingHTTPServer on 127.0.0.1 and to create_ingest_app through TestClient. Full commands and real output are in docs-draft/netflow-agent-notes.md."
+}

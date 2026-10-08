@@ -15,6 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from maxguard.api.app import STATIC_DIR, create_app
+from maxguard.events.normalize import EVENT_KEYS
 from maxguard.pipeline import analyze
 from maxguard.sensor.attribution import build_device_table
 from maxguard.web import routes
@@ -84,7 +85,9 @@ def test_pages_return_200_with_the_layout(client, path):
     assert "Your data never leaves this computer." in page.text
     assert '<script src="/static/htmx-2.0.11.min.js"' in page.text
     assert 'href="/static/app.css"' in page.text
-    assert "default-src 'self'" in page.headers["content-security-policy"]
+    csp = page.headers["content-security-policy"]
+    assert "default-src 'self'" in csp and "script-src 'self';" in csp
+    assert "unsafe" not in csp  # no inline scripts, no eval: a second wall behind escaping
     # not "no-referrer": Chrome then sends "Origin: null" on form posts, which the API refuses
     assert page.headers["referrer-policy"] == "same-origin"
 
@@ -162,11 +165,15 @@ def test_mode_switch_sets_the_cookie(client):
                          follow_redirects=False)
     assert answer.status_code == 303
     assert answer.headers["location"] == "/assets"
-    assert "mg_mode=home" in answer.headers["set-cookie"]
+    cookie = answer.headers["set-cookie"].lower()
+    assert "mg_mode=home" in cookie and "httponly" in cookie and "samesite=lax" in cookie
 
 
-def test_mode_switch_never_redirects_off_site(client):
-    answer = client.post("/mode", data={"mode": "home", "next": "//evil.example/"},
+# Browsers read /\evil.example like //evil.example: another website.
+@pytest.mark.parametrize("next_path", ["//evil.example/", "/\\evil.example/",
+                                       "https://evil.example/", "javascript:alert(1)"])
+def test_mode_switch_never_redirects_off_site(client, next_path):
+    answer = client.post("/mode", data={"mode": "home", "next": next_path},
                          follow_redirects=False)
     assert answer.headers["location"] == "/"
 
@@ -300,6 +307,34 @@ def test_unknown_status_is_refused(app, client, telnet_report):
     assert answer.status_code == 400
 
 
+def test_status_change_refreshes_open_queues(app, client, telnet_report):
+    save(app, telnet_report)
+    before = app.state.changes  # /api/stream sends alerts-changed when this goes up
+    client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                 data={"actor": "Ahmad", "status": "investigating"})
+    assert app.state.changes == before + 1
+
+
+@pytest.mark.parametrize("name", ["José", "Łukasz", "علي", "Ann Lee"])
+def test_any_name_works_and_is_remembered(app, client, telnet_report, name):
+    save(app, telnet_report)
+    path = f"/alerts/{telnet_id(telnet_report)}/status"
+    first = client.patch(path, data={"actor": name, "status": "investigating"})
+    assert first.status_code == 200
+    second = client.patch(path, data={"status": "resolved"})  # the name now comes from the cookie
+    assert second.status_code == 200
+    assert [row["actor"] for row in app.state.state_store.list_audit()] == [name, name]
+
+
+@pytest.mark.parametrize("name", ["Ann\nAdmin approved", "Ann\x00", " ", "x" * 101])
+def test_bad_names_are_refused(app, client, telnet_report, name):
+    save(app, telnet_report)
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"actor": name, "status": "resolved"})
+    assert answer.status_code == 400
+    assert app.state.state_store.list_audit() == []
+
+
 def test_cross_site_status_change_is_refused(app, client, telnet_report):
     save(app, telnet_report)
     answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
@@ -360,8 +395,25 @@ def test_timeline_end_moves_the_window(app, client, telnet_report):
     assert "tcp/23 SF out=23 in=40" in page
 
 
+def test_timeline_finds_ipv6_typed_in_any_form(app, client):
+    """Zeek writes IPv6 in short lower-case form; a user may type 2001:DB8:0::1."""
+    event = dict.fromkeys(EVENT_KEYS, "")
+    event.update(event_id="v6-1", ts=RECEIVED_AT, sensor_id="lab", source="zeek",
+                 log="conn.log", kind="conn", uid="Cv6", src_ip="2001:db8::1",
+                 dst_ip="2001:db8::2", src_port=50000, dst_port=22, proto="tcp",
+                 service="ssh", bytes_out=10, bytes_in=20, summary="tcp/22 ipv6 test")
+    app.state.event_store.write([event])
+    page = client.get("/timeline", params={"ip": "2001:DB8:0::1", "end": RECEIVED_AT + 1}).text
+    assert "tcp/22 ipv6 test" in page
+
+
 def test_timeline_window_is_at_most_7_days(client):
     assert client.get("/timeline", params={"ip": "192.0.2.1", "hours": 169}).status_code == 422
+
+
+@pytest.mark.parametrize("end", ["nan", "inf", "-1", "1e20"])
+def test_timeline_refuses_an_impossible_end(client, end):
+    assert client.get("/timeline", params={"ip": "192.0.2.1", "end": end}).status_code == 422
 
 
 def test_assets_join_the_device_table(app, client, tmp_path):

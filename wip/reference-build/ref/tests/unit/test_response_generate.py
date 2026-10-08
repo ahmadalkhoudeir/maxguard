@@ -78,8 +78,10 @@ def test_every_block_command_has_an_undo():
     for method in ("nftables", "opnsense"):
         assert len(rules[method]["block"]) == len(rules[method]["undo"]) == 2  # in + out
     assert len(rules["iptables"]["block"]) == len(rules["iptables"]["undo"]) == 4
+    assert all(" -D " in c for c in rules["iptables"]["undo"])  # -D deletes, -I inserts
     undo = [c.replace(" -D ", " -I ") for c in rules["iptables"]["undo"]]
     assert undo == rules["iptables"]["block"]  # the same rule, deleted instead of inserted
+    assert all("'delete element " in c for c in rules["nftables"]["undo"])
 
 
 def test_ipv6_uses_the_v6_sets_and_ip6tables():
@@ -111,3 +113,10 @@ def test_setup_declares_every_set_the_commands_use():
 
 def test_same_input_same_output():
     assert rules_for("203.0.113.7", "both") == rules_for("203.0.113.7", "both")
+
+
+def test_opnsense_setup_puts_the_block_rules_first():
+    # OPNsense rules are "quick": the first match wins, so a Block rule below the
+    # default allow rule would never match.
+    setup = rules_for("203.0.113.7", "both")["opnsense"]["setup"]
+    assert any("above every Pass rule" in step for step in setup)

@@ -1,6 +1,7 @@
 """Tests for maxguard.response.approvals (Ahmad, AHM-08)."""
 
 import sqlite3
+import threading
 
 import pytest
 
@@ -19,6 +20,7 @@ class FakeEnforcer:
     def __init__(self, fail: bool = False):
         self.blocked: set[str] = set()
         self.applied = 0
+        self.removed = 0
         self.fail = fail
 
     def add(self, ip: str) -> None:
@@ -27,6 +29,7 @@ class FakeEnforcer:
         self.blocked.add(ip)
 
     def remove(self, ip: str) -> None:
+        self.removed += 1
         self.blocked.discard(ip)
 
     def apply(self) -> None:
@@ -181,3 +184,66 @@ def test_a_state_change_and_its_audit_row_are_one_transaction(store, state, monk
     # The UPDATE was rolled back with the failed audit row: no change without its record.
     assert store.get(proposal_id)["state"] == "proposed"
     assert actions(state) == ["response.proposed"]
+
+
+def test_one_open_proposal_per_address(store, state):
+    first = store.propose(ip="203.0.113.7", direction="inbound", actor="a", at=T0)
+    # Two open proposals for one address: reverting one would silently remove the
+    # block the other still shows as applied. So the second one is refused.
+    with pytest.raises(WrongState, match="open proposal"):
+        store.propose(ip="203.0.113.7", direction="both", actor="b", at=T0 + 1)
+    store.reject(first["proposal_id"], actor="a", at=T0 + 2)
+    again = store.propose(ip="203.0.113.7", direction="both", actor="b", at=T0 + 3)
+    assert again["state"] == "proposed"
+    assert actions(state) == ["response.proposed", "response.rejected", "response.proposed"]
+
+
+def test_a_failed_apply_takes_the_address_off_the_other_firewall_lists(store, state):
+    proposal_id = approved(store)
+    inbound, outbound = FakeEnforcer(), FakeEnforcer(fail=True)
+    with pytest.raises(EnforcerError):
+        store.mark_applied(proposal_id, actor="a", at=T0 + 3, enforcers=[inbound, outbound])
+    # The first list had the address; it was removed again, so nothing stays half-blocked.
+    assert inbound.blocked == set() and inbound.removed == 1
+    assert store.get(proposal_id)["state"] == "approved"
+    assert state.list_audit()[0]["details"] == {"error": "firewall said no", "undone": True}
+
+
+class SlowEnforcer(FakeEnforcer):
+    """add() waits until the test says go, like a slow firewall."""
+
+    def __init__(self):
+        super().__init__()
+        self.adds = 0
+        self.entered = threading.Event()
+        self.go = threading.Event()
+
+    def add(self, ip: str) -> None:
+        self.adds += 1
+        self.entered.set()
+        self.go.wait(5)
+        super().add(ip)
+
+
+def test_a_double_click_on_apply_reaches_the_firewall_once(store):
+    proposal_id = approved(store)
+    firewall = SlowEnforcer()
+    results = []
+
+    def click():
+        try:
+            store.mark_applied(proposal_id, actor="a", at=T0 + 3, enforcers=[firewall])
+            results.append("applied")
+        except WrongState:
+            results.append("refused")
+
+    first, second = threading.Thread(target=click), threading.Thread(target=click)
+    first.start()
+    assert firewall.entered.wait(5)  # the first click is talking to the firewall
+    second.start()
+    second.join(0.2)                 # the second click waits for the first one
+    firewall.go.set()
+    first.join(5)
+    second.join(5)
+    assert firewall.adds == 1
+    assert sorted(results) == ["applied", "refused"]

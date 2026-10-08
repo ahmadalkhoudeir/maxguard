@@ -1,0 +1,12 @@
+sent 4 packets (2 NetFlow v5, 1 NetFlow v9, 1 IPFIX) to 127.0.0.1:2055
+flows written: 7
+goflow2.json
+maxguard: 0 finding(s), report written to data/netflow-report.json
+findings: 0 | zeek and suricata ran: {'suricata': False, 'zeek': False}
+netflow N21c703d6223fff025 192.0.2.10 49152 -> 198.51.100.20 23 tcp/23 out=900 in=0
+netflow Nd75eaed68a20131ed 198.51.100.20 23 -> 192.0.2.10 49152 tcp/49152 out=1400 in=0
+netflow Nf80b3e8c076fe446f 192.0.2.12 50022 -> 198.51.100.22 22 tcp/22 out=4200 in=0
+netflow N328b3296b8be401c5 192.0.2.11 50000 -> 203.0.113.5 443 tcp/443 out=5200 in=0
+netflow N775574a24a9332000 192.0.2.10 49153 -> 198.51.100.20 80 tcp/80 out=640 in=0
+netflow Ne403487b7714c8d0a 192.0.2.10 40000 -> 198.51.100.53 53 udp/53 out=60 in=0
+netflow N6d97c91022c3a171a 192.0.2.10 8 -> 198.51.100.20 0 icmp/0 out=84 in=0
