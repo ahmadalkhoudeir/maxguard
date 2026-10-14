@@ -251,37 +251,37 @@ How the team avoids waiting:
 | W3 | [AMO-02](amory.md#amo-02-pci-dss-v401-rows-checked-in-the-official-document) | Amory | PCI DSS v4.0.1 rows, checked in the official document | process |
 | W3 | [ALI-03](ali.md#ali-03-benchmark-script-speed-citations-and-unsupported-details) | Ali | Benchmark script: speed, citations, and unsupported details | code, tested |
 | W3 | [KAR-04](karthik.md#kar-04-ci-runs-the-integration-tests-plus-a-determinism-test) | Karthik | CI runs the integration tests, plus a determinism test | code, written |
-| W3 | [AHM-02](ahmad.md#ahm-02-dashboard-layout-alert-queue-and-upload-page) | Ahmad | Dashboard: layout, alert queue, and upload page | design |
+| W3 | [AHM-02](ahmad.md#ahm-02-dashboard-layout-alert-queue-and-upload-page) | Ahmad | Dashboard: layout, alert queue, and upload page | code, tested |
 | W4 | [JAK-05](jakub.md#jak-05-suricata-in-the-pipeline) | Jakub | Suricata in the pipeline | code, tested |
 | W4 | [AMO-03](amory.md#amo-03-report-export-json-csv-and-html) | Amory | Report export: JSON, CSV, and HTML | code, tested |
 | W4 | [FIO-05](fiona.md#fio-05-cli-csv-and-html-reports-and---offline) | Fiona | CLI: CSV and HTML reports, and --offline | code, tested |
 | W4 | [JON-04](jonattan.md#jon-04-home-mode-text-for-every-rule) | Jonattan | Home mode text for every rule | code, tested |
-| W4 | [AHM-03](ahmad.md#ahm-03-alert-detail-page-with-analyst-and-home-modes) | Ahmad | Alert detail page with Analyst and Home modes | design |
+| W4 | [AHM-03](ahmad.md#ahm-03-alert-detail-page-with-analyst-and-home-modes) | Ahmad | Alert detail page with Analyst and Home modes | code, tested |
 | W4 | [ALI-04](ali.md#ali-04-run-the-benchmark-on-both-tiers-and-propose-the-default-models) | Ali | Run the benchmark on both tiers and propose the default models | process |
 | W5 | [JAI-08](jaiden.md#jai-08-ed25519-signing-library) | Jaiden | Ed25519 signing library | code, tested |
 | W5 | [AMO-04](amory.md#amo-04-cisa-cpg-20-and-cjis-v61-rows) | Amory | CISA CPG 2.0 and CJIS v6.1 rows | process |
 | W5 | [AHM-04](ahmad.md#ahm-04-security-review-of-the-alpha) | Ahmad | Security review of the alpha | process |
-| W6 | [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) | Jonattan | Offline bundle: install MaxGuard on a machine with no internet | design |
-| W6 | [JAI-09](jaiden.md#jai-09-release-workflow-and-v20-alpha-rc1) | Jaiden | Release workflow and v2.0-alpha-rc1 | design |
+| W6 | [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) | Jonattan | Offline bundle: install MaxGuard on a machine with no internet | code, tested |
+| W6 | [JAI-09](jaiden.md#jai-09-release-workflow-and-v20-alpha-rc1) | Jaiden | Release workflow and v2.0-alpha-rc1 | code, tested |
 | W6 | [KAR-05](karthik.md#kar-05-release-candidate-test-with-an-outside-tester) | Karthik | Release-candidate test with an outside tester | process |
 | W8 | [JAI-10](jaiden.md#jai-10-release-v20-alpha) | Jaiden | Release v2.0-alpha | process |
 | W8 | [JAK-06](jakub.md#jak-06-build-the-reference-lab-and-prove-the-mirror-works) | Jakub | Build the reference lab and prove the mirror works | process |
 | W8 | [AHM-05](ahmad.md#ahm-05-alpha-acceptance-test-and-presentation) | Ahmad | Alpha acceptance test and presentation | process |
-| S4 | [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) | Jakub | Live sensor: capture, rotation, and shipping to the console | design |
 | S4 | [JAK-08](jakub.md#jak-08-device-attribution-which-device-is-behind-each-ip-address) | Jakub | Device attribution: which device is behind each IP address | code, tested |
+| S4 | [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console) | Jakub | Live sensor: capture, rotation, and shipping to the console | code, tested |
 | S4 | [AMO-05](amory.md#amo-05-chain-of-custody-log) | Amory | Chain-of-custody log | code, tested |
-| S4 | [AHM-06](ahmad.md#ahm-06-ip-timeline-and-device-inventory-pages) | Ahmad | IP timeline and device inventory pages | design |
+| S4 | [AHM-06](ahmad.md#ahm-06-ip-timeline-and-device-inventory-pages) | Ahmad | IP timeline and device inventory pages | code, tested |
 | S4 | [KAR-06](karthik.md#kar-06-end-to-end-test-of-the-live-sensor-on-the-lab) | Karthik | End-to-end test of the live sensor on the lab | code, tested |
 | S8 | [JAK-09](jakub.md#jak-09-ja4-watchlist-rule) | Jakub | JA4 watchlist rule | code, tested |
 | S8 | [JAI-11](jaiden.md#jai-11-signed-offline-intel-bundles) | Jaiden | Signed offline intel bundles | code, tested |
-| S8 | [AHM-07](ahmad.md#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block) | Ahmad | Response: block proposals, generated rules, and preview before you block | design |
-| S8 | [AHM-08](ahmad.md#ahm-08-response-approvals-audit-revert-and-the-opnsense-connector) | Ahmad | Response: approvals, audit, revert, and the OPNsense connector | design |
+| S8 | [AHM-07](ahmad.md#ahm-07-response-block-proposals-generated-rules-and-preview-before-you-block) | Ahmad | Response: block proposals, generated rules, and preview before you block | code, tested |
+| S8 | [AHM-08](ahmad.md#ahm-08-response-approvals-audit-revert-and-the-opnsense-connector) | Ahmad | Response: approvals, audit, revert, and the OPNsense connector | code, tested |
 | S8 | [JON-06](jonattan.md#jon-06-prompt-injection-tests-for-the-ai-layer) | Jonattan | Prompt-injection tests for the AI layer | code, tested |
 | S8 | [ALI-05](ali.md#ali-05-re-evaluate-the-models-against-prompt-injection-and-the-spring-rules) | Ali | Re-evaluate the models against prompt injection and the spring rules | process |
-| S11 | [FIO-06](fiona.md#fio-06-decoys-fake-services-on-their-own-ip-address) | Fiona | Decoys: fake services on their own IP address | design |
-| S11 | [FIO-07](fiona.md#fio-07-per-device-baselines) | Fiona | Per-device baselines | design |
-| S11 | [JAK-10](jakub.md#jak-10-netflow-and-ipfix-input) | Jakub | NetFlow and IPFIX input | design |
-| S12 | [JAK-11](jakub.md#jak-11-host-agent-for-one-computer) | Jakub | Host agent for one computer | design |
+| S11 | [FIO-06](fiona.md#fio-06-decoys-fake-services-on-their-own-ip-address) | Fiona | Decoys: fake services on their own IP address | code, tested |
+| S11 | [FIO-07](fiona.md#fio-07-per-device-baselines) | Fiona | Per-device baselines | code, tested |
+| S11 | [JAK-10](jakub.md#jak-10-netflow-and-ipfix-input) | Jakub | NetFlow and IPFIX input | code, tested |
+| S12 | [JAK-11](jakub.md#jak-11-host-agent-for-one-computer) | Jakub | Host agent for one computer | code, tested |
 | S13 | [JAI-12](jaiden.md#jai-12-release-v20-rc1-and-v20) | Jaiden | Release v2.0-rc1 and v2.0 | process |
 | S14 | [AHM-09](ahmad.md#ahm-09-v20-acceptance-test) | Ahmad | v2.0 acceptance test | process |
 
@@ -290,21 +290,21 @@ How the team avoids waiting:
 Run by someone who did not build the release, on a machine that has never run
 MaxGuard. Ahmad records each result (AHM-05).
 
-1. On a clean machine with only Docker installed, download the offline bundle
-   parts and the checksum file from the GitHub Release.
+1. On a clean machine with only Docker installed, download every file of the
+   GitHub Release (the offline bundle) into one empty folder.
 2. Verify the checksums (`sha256sum -c SHA256SUMS` on Linux,
    `shasum -a 256 -c SHA256SUMS` on macOS): every part prints `OK`.
-3. Reassemble and unpack the bundle.
+3. Nothing to reassemble or unpack: `install.sh` joins the parts itself.
 4. **Disconnect the network** (Wi-Fi off, cable out). Check that
    `ping -c 1 1.1.1.1` fails.
 5. Run `bash install.sh`. It finishes without errors.
 6. Open http://127.0.0.1:8000. The dashboard loads and shows the privacy note.
-7. Upload `telnet.pcap` from the release. The alert queue shows a
+7. Upload `sample-telnet.pcap` from the bundle. The alert queue shows a
    `cleartext.telnet` alert mapped to controls in all four frameworks, with
    ATT&CK techniques and a local AI explanation whose sentences cite record IDs.
-8. Upload a zipped folder of Zeek logs. A report appears (the log-import path works).
+8. Upload `sample-telnet-zeek-logs.tar.gz`. A report appears (the log-import path works).
 9. Download the JSON, CSV, and HTML reports. All three open and contain the same findings.
-10. Upload the clean TLS 1.3 capture. It produces zero findings.
+10. Upload `sample-clean-tls13.pcap`. It produces zero findings.
 
 The `v2.0` acceptance test (May 7, AHM-09) adds: the live sensor on the
 reference lab, a blocked IP address with preview, approval and revert, a

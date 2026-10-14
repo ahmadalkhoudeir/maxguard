@@ -17,7 +17,7 @@ This is your part of the MaxGuard v2.0 roadmap. Read [the roadmap overview](READ
 | [JAI-06](#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files) | W3 | Storage: alerts in SQLite, events in hourly Parquet files | [JAI-03](#jai-03-common-event-schema-the-normalizer-and-record-lookup) | code, tested |
 | [JAI-07](#jai-07-the-api-uploads-alerts-events-live-updates-sensor-ingest) | W3 | The API: uploads, alerts, events, live updates, sensor ingest | [JAI-05](#jai-05-the-pipeline-one-function-from-input-to-report), [JAI-06](#jai-06-storage-alerts-in-sqlite-events-in-hourly-parquet-files), [JON-03](jonattan.md#jon-03-offline-guard-make-accidental-network-access-fail-loudly) | code, tested |
 | [JAI-08](#jai-08-ed25519-signing-library) | W5 | Ed25519 signing library | [JAI-01](#jai-01-restructure-the-repository-add-packaging-and-ci) | code, tested |
-| [JAI-09](#jai-09-release-workflow-and-v20-alpha-rc1) | W6 | Release workflow and v2.0-alpha-rc1 | [JAI-04](#jai-04-the-engine-image-and-the-compose-files), [KAR-04](karthik.md#kar-04-ci-runs-the-integration-tests-plus-a-determinism-test), [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) | design |
+| [JAI-09](#jai-09-release-workflow-and-v20-alpha-rc1) | W6 | Release workflow and v2.0-alpha-rc1 | [JAI-04](#jai-04-the-engine-image-and-the-compose-files), [KAR-04](karthik.md#kar-04-ci-runs-the-integration-tests-plus-a-determinism-test), [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) | code, tested |
 | [JAI-10](#jai-10-release-v20-alpha) | W8 | Release v2.0-alpha | [JAI-09](#jai-09-release-workflow-and-v20-alpha-rc1), [KAR-05](karthik.md#kar-05-release-candidate-test-with-an-outside-tester) | process |
 | [JAI-11](#jai-11-signed-offline-intel-bundles) | S8 | Signed offline intel bundles | [JAI-08](#jai-08-ed25519-signing-library), [JAK-09](jakub.md#jak-09-ja4-watchlist-rule) | code, tested |
 | [JAI-12](#jai-12-release-v20-rc1-and-v20) | S13 | Release v2.0-rc1 and v2.0 | [JAI-11](#jai-11-signed-offline-intel-bundles), [JAK-07](jakub.md#jak-07-live-sensor-capture-rotation-and-shipping-to-the-console), [AHM-08](ahmad.md#ahm-08-response-approvals-audit-revert-and-the-opnsense-connector) | process |
@@ -1769,7 +1769,7 @@ Expected output:
 
 ```text
 ................................................                                             [100%]
-48 passed in 0.17s
+48 passed in 0.19s
 ```
 
 **Step 6.** Commit, push, and open the pull request:
@@ -2303,7 +2303,7 @@ Expected output:
 
 ```text
 ......                                                                                       [100%]
-6 passed in 0.18s
+6 passed in 0.14s
 ```
 
 **Step 5.** Try it yourself on a fixture folder (Zeek-log input needs no Zeek):
@@ -3218,7 +3218,7 @@ Expected output:
 
 ```text
 ..............................                                                               [100%]
-30 passed in 1.17s
+30 passed in 1.05s
 ```
 
 **Step 7.** Look inside the event store with DuckDB's own Python API (handy for debugging):
@@ -3319,15 +3319,22 @@ this app. docs/ARCHITECTURE.md section 10 lists the endpoints.
   so two at once on a Raspberry Pi only makes both slower.
 - POST /api/ingest is how sensors and host agents on the LAN send data. It is
   OFF unless MAXGUARD_INGEST_TOKEN is set, and every request must carry that
-  token. The console is published on 127.0.0.1 only; publishing its port on the
-  LAN so sensors can reach it is an explicit, optional choice of the user
-  (CLAUDE.md rule 1: nothing leaves or enters the machine by default).
+  token. The dashboard and the rest of the API are published on 127.0.0.1 only.
+  Sensors reach a second app, create_ingest_app(), which serves nothing but
+  POST /api/ingest on its own port; publishing that port on the LAN is an
+  explicit, optional choice of the user (CLAUDE.md rule 1: nothing leaves or
+  enters the machine by default).
 - Browsers refuse to let other websites read this API, but they do let another
   website *send* a form to it. Requests that change something are therefore
   refused when the browser says they come from another site (cross-site
   request forgery, OWASP CSRF Prevention Cheat Sheet).
+- A website can also make its own name point to 127.0.0.1 after the page has
+  loaded (DNS rebinding); the browser then treats this API as part of that
+  website. The API therefore answers only requests whose Host header names this
+  machine, or an address listed in MAXGUARD_ALLOWED_HOSTS.
 
 Start it with:  uvicorn maxguard.api.app:create_app --factory --port 8000
+Ingest only:    uvicorn maxguard.api.app:create_ingest_app --factory --port 8001
 """
 
 from __future__ import annotations
@@ -3356,6 +3363,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.datastructures import FormData, UploadFile
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from maxguard import __version__, offline
 from maxguard.adapters.pcap import PCAP_MAGIC
@@ -3373,6 +3381,7 @@ MIB = 1024 * 1024
 CHUNK_BYTES = MIB              # copy uploads in 1 MiB blocks: never the whole file in memory
 FORM_OVERHEAD_BYTES = 64 * 1024  # room for the multipart headers around the file
 MIN_TOKEN_LENGTH = 32          # secrets.token_urlsafe(32) gives 43 characters
+DEFAULT_ALLOWED_HOSTS = "localhost,127.0.0.1,[::1]"  # this machine only
 
 DEFAULT_SENSOR_ID = "sensor"
 MAX_FORM_FIELDS = 5             # one file plus a few text fields; Starlette allows 1000
@@ -3398,6 +3407,7 @@ INGEST_FORM = {"requestBody": {"required": True, "content": {"multipart/form-dat
     }}}}}}
 
 router = APIRouter()
+ingest_router = APIRouter()  # also served alone by create_ingest_app()
 
 
 # ---------- the app ----------
@@ -3407,13 +3417,44 @@ def create_app(data_dir: str | Path | None = None, *, explain: bool = True) -> F
 
     data_dir defaults to $MAXGUARD_DATA_DIR, then "data". explain=False skips the AI
     (tests, and machines without Ollama)."""
+    app = new_app(data_dir, explain)
+    app.include_router(router)
+    app.include_router(ingest_router)
+    for module_name in OPTIONAL_ROUTERS:
+        module = optional_module(module_name)
+        if module is not None:
+            app.include_router(module.router)
+    if STATIC_DIR.is_dir():
+        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    return app
+
+
+def create_ingest_app(data_dir: str | Path | None = None, *, explain: bool = True) -> FastAPI:
+    """Only POST /api/ingest: the app for the port that sensors and agents reach over
+    the LAN (docker/compose.lan.yaml). The dashboard and the rest of the API stay on
+    127.0.0.1, so nobody on the LAN can read alerts or approve a block.
+
+    Both apps share the data folder. The dashboard shows ingested data at its next
+    refresh: GET /api/stream only hears about changes made in its own process."""
+    app = new_app(data_dir, explain, docs=False)  # no /docs page on the LAN
+    if app.state.ingest_token is None:
+        raise ValueError("the ingest app needs MAXGUARD_INGEST_TOKEN (at least 32 characters)")
+    app.include_router(ingest_router)
+    return app
+
+
+def new_app(data_dir: str | Path | None, explain: bool, *, docs: bool = True) -> FastAPI:
+    """What both apps share: settings and stores on app.state, and the two checks
+    that run before any route (unknown host names, cross-site changes)."""
     offline.enable_from_env()  # MAXGUARD_OFFLINE=1 (set in docker/compose.yaml)
 
     folder = Path(data_dir or os.environ.get("MAXGUARD_DATA_DIR", "data"))
     folder.mkdir(parents=True, exist_ok=True)
 
+    no_docs = {} if docs else {"docs_url": None, "redoc_url": None, "openapi_url": None}
     app = FastAPI(title="MaxGuard", version=__version__,
-                  description="Offline network security checks. See docs/ARCHITECTURE.md.")
+                  description="Offline network security checks. See docs/ARCHITECTURE.md.",
+                  **no_docs)
     app.state.data_dir = folder
     app.state.state_store = StateStore(folder / "state.db")
     app.state.event_store = EventStore(folder / "events")
@@ -3426,14 +3467,26 @@ def create_app(data_dir: str | Path | None = None, *, explain: bool = True) -> F
     app.state.keepalive_seconds = KEEPALIVE_SECONDS
 
     app.middleware("http")(refuse_cross_site_changes)
-    app.include_router(router)
-    for module_name in OPTIONAL_ROUTERS:
-        module = optional_module(module_name)
-        if module is not None:
-            app.include_router(module.router)
-    if STATIC_DIR.is_dir():
-        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    # Added last, so it runs first: a request for an unknown host name stops here.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts(),
+                       www_redirect=False)
     return app
+
+
+def allowed_hosts() -> list[str]:
+    """MAXGUARD_ALLOWED_HOSTS: the names and addresses this console may be reached by,
+    comma-separated, without http:// or a port. Default: this machine only. Add the
+    console's LAN address (for example 192.168.50.20) when sensors or agents send to it."""
+    text = os.environ.get("MAXGUARD_ALLOWED_HOSTS", DEFAULT_ALLOWED_HOSTS)
+    hosts = [host.strip().lower() for host in text.split(",") if host.strip()]
+    if not hosts:
+        raise ValueError("MAXGUARD_ALLOWED_HOSTS is empty: the console would answer no one")
+    for host in hosts:
+        # "*" would switch the check off; "/" or a port can never match a Host header.
+        if "*" in host or "/" in host or (":" in host and not host.startswith("[")):
+            raise ValueError("MAXGUARD_ALLOWED_HOSTS: write names or addresses only, "
+                             f"without http:// or a port, got {host!r}")
+    return hosts
 
 
 def max_upload_bytes() -> int:
@@ -3508,7 +3561,7 @@ async def upload_analysis(request: Request) -> dict:
         return await run_in_threadpool(receive, request.app, upload, sensor_id=None)
 
 
-@router.post("/api/ingest", openapi_extra=INGEST_FORM)
+@ingest_router.post("/api/ingest", openapi_extra=INGEST_FORM)
 async def ingest(request: Request) -> dict:
     """The same as an upload, for sensors and host agents on the LAN."""
     # Both checks come before the body is read, so a stranger without the token
@@ -3755,10 +3808,22 @@ What to notice, top to bottom:
 - An upload is saved under a random name, and its suffix comes from the file's first bytes, never from the client's file name. The client's name is cleaned and only shown, never used as a path.
 - The size limit is checked twice: from the `Content-Length` header before the body is read, and while copying (a client can leave the header out).
 - `POST /api/ingest` checks the token **before** it reads the body, so a stranger cannot make the console store anything; `hmac.compare_digest` takes the same time however many characters match. A token shorter than 32 characters stops the app at start-up.
+- `create_ingest_app()` builds a second, tiny app with nothing but `POST /api/ingest` (no dashboard, no `/docs` page). JAK-07 publishes it on the console's LAN address, port 8001, for sensors and host agents; the full app stays on `127.0.0.1`, so nobody on the network can read alerts or approve a block. Both apps share the data folder; the dashboard shows ingested data at its next refresh.
 - Browsers let any website *send* a form to `127.0.0.1`. `refuse_cross_site_changes` refuses changing requests that a browser marks as coming from another site (cross-site request forgery). curl, sensors and tests send no `Origin` header and are not affected.
+- A website can also point its own name at `127.0.0.1` after its page has loaded (DNS rebinding). The browser then treats the API as part of that website, and the cross-site check cannot tell. `TrustedHostMiddleware` (from Starlette, which FastAPI is built on) answers `400 Invalid host header` unless the `Host` header names this machine or an address in `MAXGUARD_ALLOWED_HOSTS`. When sensors or agents send to the console over the LAN, add the console's LAN address there.
 - `GET /api/stream` sends one `alerts-changed` at once (a dashboard that reconnects may have missed a change), then one per change, with a `: keep-alive` comment every 15 seconds.
 
-**Step 4.** Create the unit tests `tests/unit/test_api.py`:
+**Step 4.** FastAPI's `TestClient` calls the app `testserver`, a name the host check refuses. Add this fixture at the end of `tests/conftest.py` (`autouse=True` gives it to every test without asking):
+
+```python
+@pytest.fixture(autouse=True)
+def allow_test_client_host(monkeypatch):
+    """The API answers only host names in MAXGUARD_ALLOWED_HOSTS (JAI-07), and FastAPI's
+    TestClient calls the app "testserver". autouse: every test gets it without asking."""
+    monkeypatch.setenv("MAXGUARD_ALLOWED_HOSTS", "testserver,localhost,127.0.0.1,[::1]")
+```
+
+**Step 5.** Create the unit tests `tests/unit/test_api.py`:
 
 ```python
 """Tests for the API (Jaiden, JAI-07).
@@ -3783,6 +3848,7 @@ from fastapi.testclient import TestClient
 from maxguard.api import app as api_app
 from maxguard.api.app import (
     create_app,
+    create_ingest_app,
     display_name,
     notify_change,
     optional_module,
@@ -4023,6 +4089,28 @@ def test_short_ingest_token_is_refused_at_start(monkeypatch, data_dir):
         create_app(data_dir, explain=False)
 
 
+def test_the_ingest_app_serves_only_ingest(monkeypatch, data_dir):
+    # The port published on the LAN (docker/compose.lan.yaml): nothing to read there.
+    monkeypatch.setenv("MAXGUARD_INGEST_TOKEN", TOKEN)
+    lan = TestClient(create_ingest_app(data_dir, explain=False))
+    for path in ("/api/alerts", "/api/events", "/api/audit", "/", "/docs", "/openapi.json"):
+        assert lan.get(path).status_code == 404, path
+    assert list(lan.app.openapi()["paths"]) == ["/api/ingest"]  # its only route
+
+    sent = lan.post("/api/ingest", files={"file": ("2026-10-06-1400.tar.gz", zipped_fixture())},
+                    data={"sensor_id": "lab-sensor"},
+                    headers={"Authorization": f"Bearer {TOKEN}"})
+    assert sent.status_code == 200
+    # The dashboard's app reads the same data folder.
+    console = TestClient(create_app(data_dir, explain=False))
+    assert [a["rule_id"] for a in console.get("/api/alerts").json()] == ["cleartext.telnet"]
+
+
+def test_the_ingest_app_needs_a_token(data_dir):
+    with pytest.raises(ValueError, match="MAXGUARD_INGEST_TOKEN"):
+        create_ingest_app(data_dir, explain=False)
+
+
 # ---------- cross-site requests ----------
 
 def test_another_website_cannot_upload(client):
@@ -4037,6 +4125,40 @@ def test_another_website_cannot_upload(client):
     assert sandboxed.status_code == 403
     same_site = upload(client, data, headers={"Origin": "http://testserver"})
     assert same_site.status_code == 200
+
+
+# ---------- DNS rebinding: only this machine's names ----------
+
+def test_a_request_for_an_unknown_host_name_is_refused(data_dir):
+    # What a DNS-rebinding page sends: its own name, now pointing at 127.0.0.1.
+    client = TestClient(create_app(data_dir, explain=False),
+                        base_url="http://rebind.example:8000")
+    response = client.get("/api/alerts")
+    assert response.status_code == 400
+    assert response.text == "Invalid host header"
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1:8000", "localhost:8000", "[::1]:8000", "localhost"])
+def test_this_machine_is_allowed_by_default(data_dir, monkeypatch, host):
+    monkeypatch.delenv("MAXGUARD_ALLOWED_HOSTS")
+    client = TestClient(create_app(data_dir, explain=False), base_url=f"http://{host}")
+    assert client.get("/api/alerts").status_code == 200
+
+
+def test_the_consoles_lan_address_can_be_added(data_dir, monkeypatch):
+    monkeypatch.setenv("MAXGUARD_ALLOWED_HOSTS", "localhost, 192.168.50.20")
+    app = create_app(data_dir, explain=False)
+    assert TestClient(app, base_url="http://192.168.50.20:8000").get(
+        "/api/alerts").status_code == 200
+    assert TestClient(app, base_url="http://192.168.50.21:8000").get(
+        "/api/alerts").status_code == 400
+
+
+@pytest.mark.parametrize("value", ["http://192.168.50.20", "192.168.50.20:8000", "*", " , "])
+def test_a_wrong_allowed_hosts_setting_stops_the_app(data_dir, monkeypatch, value):
+    monkeypatch.setenv("MAXGUARD_ALLOWED_HOSTS", value)
+    with pytest.raises(ValueError, match="MAXGUARD_ALLOWED_HOSTS"):
+        create_app(data_dir, explain=False)
 
 
 # ---------- live updates ----------
@@ -4104,7 +4226,7 @@ def test_data_dir_defaults_to_the_environment(monkeypatch, tmp_path):
     assert (tmp_path / "from-env" / "state.db").exists()
 ```
 
-**Step 5.** Run them:
+**Step 6.** Run them:
 
 ```bash
 pytest tests/unit/test_api.py -q
@@ -4113,11 +4235,11 @@ pytest tests/unit/test_api.py -q
 Expected output:
 
 ```text
-...........................                                                                  [100%]
-27 passed in 3.65s
+.......................................                                                      [100%]
+39 passed in 3.57s
 ```
 
-**Step 6.** Create the integration test `tests/integration/test_api_upload.py`, which uploads a real capture, so Zeek runs:
+**Step 7.** Create the integration test `tests/integration/test_api_upload.py`, which uploads a real capture, so Zeek runs:
 
 ```python
 """Integration test for the API (Jaiden, JAI-07): a real capture through Zeek.
@@ -4170,12 +4292,12 @@ Expected output:
 
 ```text
 .                                                                        [100%]
-1 passed in 1.57s
+1 passed in 1.54s
 ```
 
 *Run in planning inside `zeek/zeek:9.0.0` with MaxGuard's Python packages added, because the engine image build needs Debian's package servers (see JAI-04). The test output is the same.*
 
-**Step 7.** Start the API and try it with curl. Start the server in one terminal, then run the rest in a second terminal from the repository root (on Windows use Git Bash):
+**Step 8.** Start the API and try it with curl. Start the server in one terminal, then run the rest in a second terminal from the repository root (on Windows use Git Bash):
 
 ```bash
 # terminal 1:
@@ -4190,7 +4312,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -F file=@data/telnet.zip http://127.0.0
 Expected output:
 
 ```text
-{"analysis_id":"4abce1d74c62179f","findings":1}
+{"analysis_id":"b3e059d7d4844f2f","findings":1}
 cleartext.telnet high 172.18.0.3 -> 172.18.0.2 23 new
 404
 ```
@@ -4199,7 +4321,7 @@ cleartext.telnet high 172.18.0.3 -> 172.18.0.2 23 new
 
 Open http://127.0.0.1:8000/docs: FastAPI's OpenAPI page lists every endpoint, and it is the API contract for the dashboard. Stop the server with Ctrl+C.
 
-**Step 8.** Commit, push, and open the pull request:
+**Step 9.** Commit, push, and open the pull request:
 
 ```bash
 git add -A
@@ -4499,7 +4621,7 @@ Expected output:
 
 ```text
 ..............                                                                               [100%]
-14 passed in 0.16s
+14 passed in 0.07s
 ```
 
 **Step 5.** Commit, push, and open the pull request:
@@ -4533,15 +4655,15 @@ A hash proves a file did not change *if* you trust where the hash came from. A s
 
 ### JAI-09: Release workflow and v2.0-alpha-rc1
 
-**Due:** Week 6 (due Fri Nov 20) · **Milestone:** `W6 Release candidate` · **Needs first:** [JAI-04](#jai-04-the-engine-image-and-the-compose-files), [KAR-04](karthik.md#kar-04-ci-runs-the-integration-tests-plus-a-determinism-test), [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) · **Kind:** design
+**Due:** Week 6 (due Fri Nov 20) · **Milestone:** `W6 Release candidate` · **Needs first:** [JAI-04](#jai-04-the-engine-image-and-the-compose-files), [KAR-04](karthik.md#kar-04-ci-runs-the-integration-tests-plus-a-determinism-test), [JON-05](jonattan.md#jon-05-offline-bundle-install-maxguard-on-a-machine-with-no-internet) · **Kind:** code, tested
 
-**Issue labels:** `type:task` `phase:alpha` `owner:jaiden` `area:release` `critical-path`
+**Issue labels:** `type:task` `phase:alpha` `owner:jaiden` `area:release` `critical-path` `needs-hardware`
 
-> **Design task.** The code for this task was not written during planning. The steps give the files, the interfaces and the tests to write; the code is yours. Ask in GitHub Discussions when something is unclear, and update this section in your pull request with what you built.
+> **Needs hardware.** Steps that use the Raspberry Pi, the switch or other devices were not run during planning; they are marked *not run — verify on hardware*.
 
 #### Goal
 
-Add `.github/workflows/release.yml`: when a tag `v*` is pushed, build the image for `linux/amd64` and `linux/arm64`, push it to the GitHub Container Registry, and create a GitHub Release with a `SHA256SUMS` file. Then tag `v2.0-alpha-rc1` and attach the offline bundle.
+Add `.github/workflows/release.yml`: when a tag `v*` is pushed, build the image for `linux/amd64` and `linux/arm64`, push it to the GitHub Container Registry, and create a GitHub Release with the small bundle files and a `SHA256SUMS` file. Then tag `v2.0-alpha-rc1` and attach the offline bundle.
 
 #### Prerequisites
 
@@ -4560,11 +4682,277 @@ git checkout -b jaiden/release-workflow
 
 If `source .venv/bin/activate` fails, you have not made the virtual environment yet: do Week 0 section 0.11 first.
 
-**Step 2.** Write `release.yml` with `on: push: tags: ["v*"]`, `permissions: contents: write, packages: write`, and the official Docker actions (`docker/setup-qemu-action`, `docker/setup-buildx-action`, `docker/login-action` with `GITHUB_TOKEN`, `docker/build-push-action` with `platforms: linux/amd64,linux/arm64`). On October 6, 2026 the newest major versions were `actions/checkout@v7`, `docker/setup-qemu-action@v4`, `docker/setup-buildx-action@v4`, `docker/login-action@v4` and `docker/build-push-action@v7` (read with `git ls-remote --tags https://github.com/<owner>/<action>`); check again and pin the newest.
+**Step 2.** Create `.github/workflows/release.yml`:
 
-**Step 3.** Validate the file with `actionlint` before merging (`pip install actionlint-py==1.7.12.25` in a throwaway virtual environment).
+```yaml
+# Release workflow (Jaiden, JAI-09).
+#
+# Runs when a tag starting with "v" is pushed, for example:
+#   git tag -a v2.0-alpha-rc1 -m "MaxGuard v2.0-alpha release candidate 1"
+#   git push origin v2.0-alpha-rc1
+#
+# "image": builds the engine image for linux/amd64 and linux/arm64 and pushes
+#          it to the GitHub Container Registry as ghcr.io/<owner>/maxguard:<tag without v>.
+# "release": creates the GitHub Release with the notes from
+#          docs/releases/<tag>.md, the small offline-bundle files (compose.yaml,
+#          install.sh, uninstall.sh, OFFLINE-INSTALL.md) and SHA256SUMS for them.
+#
+# The large bundle parts (images and AI model, several GB) are built by hand
+# with scripts/build-offline-bundle.sh and added afterwards with
+#   gh release upload <tag> dist/* --clobber
+# --clobber replaces the small files with identical copies and replaces
+# SHA256SUMS with the bundle's, which lists every file of the release.
+name: Release
 
-**Step 4.** After merging: write the release notes in `docs/releases/v2.0-alpha-rc1.md` (what works, known limits, how to install offline), then:
+on:
+  push:
+    tags: ["v*"]
+
+# Least privilege: by default a job may only read the code. Each job below
+# asks for the one extra right it needs (packages: write to push to ghcr.io,
+# contents: write to create the release), so neither job holds both.
+permissions:
+  contents: read
+
+# Two pushes of the same tag must not build at the same time.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    # The arm64 image is built under QEMU emulation, which is slow.
+    timeout-minutes: 120
+    outputs:
+      image: ${{ steps.names.outputs.image }}
+      version: ${{ steps.names.outputs.version }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      # Actions are pinned to a full commit SHA (the version is in the comment):
+      # a tag such as v7 can be moved to other code, a commit SHA cannot.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # nothing here runs git push; do not keep the token in .git
+
+      # Fail in seconds, not after an hour of building, if a file the
+      # "release" job needs is missing.
+      - name: Check the release notes and install guide exist
+        run: |
+          for file in "docs/releases/${GITHUB_REF_NAME}.md" docs/OFFLINE-INSTALL.md; do
+            test -f "$file" || { echo "::error::$file is missing"; exit 1; }
+          done
+
+      # Registry names must be lowercase; the tag v2.0-alpha-rc1 becomes 2.0-alpha-rc1.
+      - name: Work out the image name and version
+        id: names
+        run: |
+          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/maxguard" >> "$GITHUB_OUTPUT"
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # QEMU lets the x86-64 runner build the arm64 image (Raspberry Pi 5, Apple Silicon).
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # GITHUB_TOKEN is created for this run only; no stored password is needed.
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.names.outputs.image }}:${{ steps.names.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.names.outputs.version }}
+
+      # Prove both architectures are in the pushed image before releasing it.
+      - name: Check the image has amd64 and arm64
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: |
+          docker buildx imagetools inspect "$IMAGE" | tee manifest.txt
+          grep -q "linux/amd64" manifest.txt
+          grep -q "linux/arm64" manifest.txt
+
+  release:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Collect the release files and write SHA256SUMS
+        run: |
+          mkdir release
+          cp docker/compose.yaml scripts/install.sh scripts/uninstall.sh release/
+          cp docs/OFFLINE-INSTALL.md release/
+          cd release
+          sha256sum -- * > ../SHA256SUMS
+          mv ../SHA256SUMS .
+          cat SHA256SUMS
+
+      # The notes from the repository, plus the exact image digest so anyone
+      # can pull exactly what this run built.
+      - name: Write the release notes
+        env:
+          IMAGE: ${{ needs.image.outputs.image }}
+          VERSION: ${{ needs.image.outputs.version }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          cp "docs/releases/${GITHUB_REF_NAME}.md" notes.md
+          {
+            echo
+            echo "## Container image"
+            echo
+            echo "\`${IMAGE}:${VERSION}\` for linux/amd64 and linux/arm64, digest \`${DIGEST}\`:"
+            echo
+            echo "    docker pull ${IMAGE}@${DIGEST}"
+          } >> notes.md
+
+      # A tag with a "-" (v2.0-alpha-rc1) is marked as a pre-release.
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          prerelease=false
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then prerelease=true; fi
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --verify-tag \
+            --title "MaxGuard ${GITHUB_REF_NAME}" \
+            --notes-file notes.md \
+            --prerelease="$prerelease"
+```
+
+Four security choices, all from GitHub's *Secure use reference* for Actions. The top level grants only `contents: read`; the `image` job adds `packages: write` and the `release` job adds `contents: write`, so neither job holds both. Every action is pinned to a full commit SHA with its version in a comment, because a tag such as `v7` can be moved to other code and a commit cannot (GitHub: pinning to a full-length commit SHA is "the only way to use an action as an immutable release"). `persist-credentials: false` keeps the token out of `.git/config`. And the tag name reaches shell commands only through environment variables, never pasted in with `${{ }}`.
+
+**Step 3.** Find the newest release of each action and the commit it points to. On October 8, 2026 they were the ones in the file; check again before you merge:
+
+```bash
+for repo in actions/checkout docker/setup-qemu-action docker/setup-buildx-action docker/login-action docker/build-push-action; do
+  tag=$(git ls-remote --tags --refs "https://github.com/$repo" | sed 's#.*refs/tags/##' \
+        | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+  sha=$(git ls-remote "https://github.com/$repo" "refs/tags/$tag^{}" "refs/tags/$tag" | head -n 1 | cut -f 1)
+  echo "$repo@$sha # $tag"
+done
+```
+
+Expected output:
+
+```text
+actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+```
+
+*`^{}` asks for the commit an annotated tag points to; for a plain tag only the second name exists. Newer releases after October 8, 2026 change this output.*
+
+When a newer version exists, put its SHA and version comment in the file. (A Dependabot `github-actions` update would keep them current; ask Ahmad first.)
+
+**Step 4.** Validate the workflow with `actionlint` in a throwaway virtual environment (it is a development tool, never shipped; `docs/DEPENDENCIES.md`):
+
+```bash
+python -m venv /tmp/actionlint-venv
+/tmp/actionlint-venv/bin/pip install -q actionlint-py==1.7.12.25
+/tmp/actionlint-venv/bin/actionlint .github/workflows/release.yml .github/workflows/ci.yml && echo "actionlint: clean"
+```
+
+Expected output:
+
+```text
+actionlint: clean
+```
+
+*Installing actionlint-py downloads the actionlint program from GitHub.*
+
+**Step 5.** Create the release notes `docs/releases/v2.0-alpha-rc1.md`. The workflow refuses to run without `docs/releases/<tag>.md`, and fails in seconds (before the hour of building) when it or `docs/OFFLINE-INSTALL.md` is missing. Replace every TODO with what the acceptance test showed:
+
+````markdown
+# MaxGuard v2.0-alpha-rc1
+
+<!-- Draft for docs/releases/v2.0-alpha-rc1.md (Jaiden, JAI-09 step 4).
+     The release workflow refuses to run without docs/releases/<tag>.md and
+     copies this file into the GitHub Release page. Replace every TODO with
+     what the acceptance test (docs/roadmap/README.md) actually showed. -->
+
+Release candidate 1 of the MaxGuard v2.0 alpha. It is for testing by the team
+and one outside tester (KAR-05) before `v2.0-alpha` on December 4, 2026.
+Do not use it to protect a real network yet.
+
+## What works
+
+- Upload a capture (`.pcap`, `.pcapng`) or Zeek logs (`.zip` or `.tar.gz`) on the
+  dashboard at http://127.0.0.1:8000. Zeek 9.0.0 and Suricata analyze it on
+  your own computer.
+- 13 deterministic detection rules: cleartext FTP, Telnet, HTTP, HTTP on port
+  8080, POP3 and IMAP; RDP standard security; weak TLS versions and ciphers;
+  expired, self-signed, weak-key and SHA-1 certificates. The same capture
+  always gives the same alerts with the same IDs.
+- Alerts are mapped to MITRE ATT&CK techniques and to the controls of PCI DSS
+  4.0.1, NIST SP 800-53 Rev. 5 (Release 5.2.0), CISA CPG 2.0 and CJIS 6.1 that
+  the mapping files list for that rule.
+- A local AI model (Ollama) explains each alert. Every sentence cites the log
+  records it is based on; sentences without valid citations are removed.
+- Alert queue with statuses, assignee and audit log; Analyst and Home modes;
+  JSON, CSV and HTML reports.
+- TODO: confirm each line above against the acceptance test results.
+
+## Install without the internet
+
+Download every file of this release into one empty folder, then:
+
+```bash
+sha256sum -c SHA256SUMS        # macOS: shasum -a 256 -c SHA256SUMS
+bash install.sh
+```
+
+Every line must say `OK`. `install.sh` checks the checksums again before it
+loads anything, loads the images and the AI model, and starts MaxGuard. Open
+http://127.0.0.1:8000. `OFFLINE-INSTALL.md` has the details and
+troubleshooting; `bash uninstall.sh` removes MaxGuard and asks before
+deleting your data.
+
+With internet, the engine image is also on the GitHub Container Registry
+(digest below).
+
+## Known limits
+
+- The offline bundle is for **linux/amd64** (Intel and AMD computers). It was
+  not tested on an Apple Silicon Mac or a Raspberry Pi (Docker would have to
+  emulate amd64 there, which is slow if it works at all). TODO: attach an
+  arm64 bundle or keep this line.
+- The AI model is `qwen3:4b`, a stand-in until Ali's evaluation (ALI-04)
+  picks the default model for each hardware tier.
+- `SHA256SUMS` proves the files were not damaged, but it is not signed yet:
+  compare it with the copy on this release page.
+- Not in this release (planned for spring 2027): the live network sensor,
+  NetFlow, the host agent, decoys, device baselines, JA4 watchlist alerts,
+  blocking through the response module, and signed intel updates.
+- TODO: add any problem found in the acceptance test.
+````
+
+**Step 6.** After merging, tag the release from `main`:
 
 ```bash
 git checkout main && git pull
@@ -4572,15 +4960,27 @@ git tag -a v2.0-alpha-rc1 -m "MaxGuard v2.0-alpha release candidate 1"
 git push origin v2.0-alpha-rc1
 ```
 
-**Step 5.** When the workflow is green, build the offline bundle (JON-05) and attach its parts and `SHA256SUMS` to the release with `gh release upload v2.0-alpha-rc1 dist/*`. Hand it to Karthik for KAR-05.
+*Not run — verify on GitHub*: GitHub Actions cannot run in planning. The first tag push is the test: the run must be green and the release page must show the image digest. A package on a personal account is **private** the first time it is published: in the package's settings, make `maxguard` public once (GitHub warns that this cannot be undone).
+
+**Step 7.** When the workflow is green, build the offline bundle (JON-05) from the tagged commit, with the image CI built, and attach it:
+
+```bash
+git checkout v2.0-alpha-rc1
+docker pull --platform linux/amd64 ghcr.io/<owner>/maxguard:2.0-alpha-rc1@<digest from the release page>
+docker tag ghcr.io/<owner>/maxguard:2.0-alpha-rc1@<digest> maxguard:2.0.0a0
+rm -rf dist && scripts/build-offline-bundle.sh
+gh release upload v2.0-alpha-rc1 dist/* --clobber
+```
+
+`--clobber` is needed because the release already has `SHA256SUMS` and the small files: they are replaced by identical copies, and `SHA256SUMS` by the bundle's, which lists every file. Hand the release to Karthik for KAR-05.
 
 #### How to test
 
-The release page shows both architectures in the image's manifest and the bundle parts with their checksums.
+`actionlint` is clean; on the first tag push the release page shows both architectures in the image's manifest and the bundle parts with their checksums.
 
 #### What you just did and why
 
-Releases built by CI from a tag are reproducible: anyone can see exactly which commit and which steps made them. The ARM64 image is what the Raspberry Pi sensor and Apple Silicon laptops run.
+Releases built by CI from a tag are reproducible: anyone can see exactly which commit and which steps made them. The ARM64 image is what the Raspberry Pi sensor and Apple Silicon laptops run. A release workflow holds a token that can publish code, so it gets the fewest rights and only actions that cannot change under it.
 
 #### Pull request checklist
 
@@ -4591,6 +4991,7 @@ Releases built by CI from a tag are reproducible: anyone can see exactly which c
 - [ ] Any new dependency has a row in `docs/DEPENDENCIES.md` with its license
 - [ ] CI is green and your reviewer approved
 - [ ] `actionlint` is clean
+- [ ] Every action is pinned to a commit SHA
 - [ ] The release has `SHA256SUMS`
 
 ### JAI-10: Release v2.0-alpha
@@ -5261,7 +5662,7 @@ Expected output:
 
 ```text
 ......................                                                                       [100%]
-22 passed in 0.24s
+22 passed in 0.19s
 ```
 
 **Step 5.** Try it end to end with a throwaway key pair (JAI-08's helper names the files `custody_ed25519_*.pem`; the real bundle key stays on the maintainer's machine, and only its public key ships with MaxGuard):

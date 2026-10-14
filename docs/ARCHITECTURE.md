@@ -130,7 +130,7 @@ built yet.
 | Event normalizer and record lookup | `maxguard/events/` | Jaiden | alpha | tested |
 | Storage (SQLite state, Parquet events) | `maxguard/storage/` | Jaiden | alpha | tested |
 | API | `maxguard/api/app.py` | Jaiden | alpha | tested (unit tests; a real capture through Zeek; curl against uvicorn) |
-| Dashboard pages | `maxguard/web/` | Ahmad | alpha | design (htmx 2.0.11 vendored) |
+| Dashboard pages | `maxguard/web/` | Ahmad | alpha | tested (unit tests; checked in Chromium at 375 px and with the keyboard; screenshots in planning) |
 | AI client and citation validator | `maxguard/ai/` | Jonattan | alpha | tested against a fake Ollama server; no real model run |
 | Home-mode plain-language text | `maxguard/ai/home_text.yaml` | Jonattan | alpha | tested |
 | Prompt-injection tests and injection set | `tests/unit/test_prompt_injection.py`, `scripts/make_injection_set.py`, `scripts/injection_report.py` | Jonattan | spring | tested (with a fake model that obeys) |
@@ -140,19 +140,20 @@ built yet.
 | CLI | `cli/main.py` | Fiona | alpha | tested |
 | Docker image and Compose files | `docker/` | Jaiden | alpha | written (the image build needs Debian's package servers, which planning could not reach) |
 | CI | `.github/workflows/ci.yml` | Jaiden (integration job: Karthik) | alpha | written (first run on the first pull request) |
+| Release workflow | `.github/workflows/release.yml`, `docs/releases/` | Jaiden | alpha | written (actionlint clean; every action pinned to a verified commit SHA); first run on the first tag push |
 | Traffic lab and test captures | `lab/`, `tests/pcaps/` | Karthik | alpha | tested |
 | Test fixtures (Zeek and Suricata output) | `tests/fixtures/` | Karthik | alpha | tested |
 | Expected results and integration tests | `tests/expected/`, `tests/integration/` | Karthik | alpha | tested with Zeek 9.0.0 on all 14 captures, plus a determinism test; the check that Suricata ran (JAK-05) runs in the engine image |
 | Model evaluation | `scripts/benchmark_models.py`, `scripts/make_eval_set.py` | Ali | alpha | tested with a fake model; the real runs need the models (ALI-04) |
-| Offline bundle | `scripts/build-offline-bundle.sh`, `scripts/install.sh` | Jonattan | alpha | design |
+| Offline bundle | `scripts/build-offline-bundle.sh`, `scripts/install.sh`, `scripts/uninstall.sh`, `docs/OFFLINE-INSTALL.md` | Jonattan | alpha | tested (unit tests with a fake `docker`; a real build, install and tamper check with small stand-in images; ShellCheck clean); the real images and model, macOS, WSL 2 and an offline laptop not run |
 | Ed25519 signing | `maxguard/custody/signing.py` | Jaiden | alpha | tested |
 | Chain-of-custody log | `maxguard/custody/log.py` | Amory | spring | tested |
-| Response module | `maxguard/response/` | Ahmad | spring | design |
-| Live sensor adapter, shipper, sensor Compose file | `maxguard/adapters/live.py`, `maxguard/sensor/shipper.py`, `docker/sensor-compose.yaml` | Jakub | spring | design |
+| Response module | `maxguard/response/` | Ahmad | spring | tested (nftables and iptables commands loaded in a container; fake OPNsense server over TLS; API session); not run on a real firewall |
+| Live sensor: rotation script, Suricata live settings, Compose file, adapter, shipper | `maxguard/zeek/scripts/live/rotate.zeek`, `maxguard/suricata/maxguard-suricata-live.yaml`, `docker/sensor-compose.yaml`, `maxguard/adapters/live.py`, `maxguard/sensor/shipper.py` | Jakub | spring | tested (unit tests; the three containers shipped 1-minute folders to a console in planning); not run on a Raspberry Pi |
 | JA4 watchlist rule | `maxguard/rules/ja4.py` | Jakub | spring | tested |
 | Device attribution | `maxguard/sensor/attribution.py` | Jakub | spring | tested |
-| NetFlow adapter and host agent | `maxguard/adapters/netflow.py`, `maxguard/sensor/agent.py` | Jakub | spring | design |
-| Decoys and device baselines | `maxguard/decoy/`, `maxguard/rules/decoy.py`, `baseline.py` | Fiona | spring | design |
+| NetFlow adapter, collector and host agent | `maxguard/adapters/netflow.py`, `docker/netflow-compose.yaml`, `maxguard/sensor/agent.py` | Jakub | spring | tested (goflow2 v2.2.7 in Docker received NetFlow v5, v9 and IPFIX from a generator and the flows were analyzed; tcpdump's flags run in a container; the agent uploaded to the ingest-only app); not run with a real router, on a Raspberry Pi, or on macOS or Windows |
+| Decoys and device baselines | `maxguard/decoy/`, `maxguard/rules/decoy.py`, `baseline.py`, `docker/decoy-compose.yaml` | Fiona | spring | tested (unit tests; the decoy in Docker on a bridge network, non-root and read-only, with an intruder container); macvlan on a real LAN not run; rule IDs not registered yet |
 | Signed intel bundles | `maxguard/intel/bundle.py` | Jaiden | spring | tested |
 
 ## 3. Data flow: analyzing an uploaded capture
@@ -226,7 +227,8 @@ inside the stored report.
 
 ## 4. Data flow: the live sensor
 
-**Design (not yet built; spring S1–S4).** The hardware is in `docs/HARDWARE.md`.
+**Tested in planning with containers; not run on a Raspberry Pi** (spring
+S1–S4, task JAK-07). The hardware is in `docs/HARDWARE.md`.
 
 ```mermaid
 flowchart LR
@@ -239,7 +241,7 @@ flowchart LR
     SH["Shipper"]
   end
   subgraph console["Console"]
-    IN["POST /api/ingest<br/>bearer token"]
+    IN["maxguard-ingest :8001<br/>POST /api/ingest only<br/>bearer token"]
     PL["pipeline.analyze()<br/>ZeekLogAdapter"]
   end
   CAP --> ZL --> D
@@ -252,29 +254,84 @@ flowchart LR
   sensor cannot send on it (CLAUDE.md rule 5). The **management port** (a USB
   Ethernet adapter on the normal network) is how you log in and how logs reach
   the console.
-- Zeek and Suricata run in containers with host networking and the `NET_RAW`
-  and `NET_ADMIN` capabilities they need to capture. Live Zeek does **not** use
-  `-D`: random seeds protect Zeek's tables against deliberate slow-down attacks,
-  and determinism only matters for re-reading capture files.
-- Both tools rotate their logs on a fixed interval (default 15 minutes) into
-  one folder per interval on the SSD. The shipper sends each **completed**
-  folder (Zeek logs plus that interval's `eve.json`) to the console as a
-  `.tar.gz`; `ZeekLogAdapter` already accepts that format, so the console runs
-  the normal pipeline on it with `sensor_id` set to the sensor's name. Alerts
-  therefore arrive within one interval plus the analysis time.
-- `POST /api/ingest` is switched off unless the console sets
-  `MAXGUARD_INGEST_TOKEN`; every request must carry that token. Publishing the
-  ingest port on the LAN is an explicit, optional choice (CLAUDE.md rule 1).
-- Retention is 7 days on both machines: the sensor deletes shipped folders
-  older than that, and the console's event store prunes whole hour folders
-  (section 9).
+- `docker/sensor-compose.yaml` runs three containers with host networking.
+  Every one drops all capabilities and adds back only what it needs: Zeek
+  `NET_RAW` and `NET_ADMIN`; Suricata also `SYS_NICE`, plus five that only its
+  start-up script uses (after start-up it runs as the `suricata` user with
+  exactly `NET_ADMIN`, `NET_RAW` and `SYS_NICE`, checked in planning); the
+  shipper only `DAC_OVERRIDE`, to delete Suricata's merged files. Live Zeek does
+  **not** use `-D`: random seeds protect Zeek's tables against deliberate
+  slow-down attacks, and determinism only matters for re-reading capture files.
+- **Layout on the SSD.** Zeek writes the interval in progress into
+  `/data/spool/zeek/`; `maxguard/zeek/scripts/live/rotate.zeek` moves each
+  finished interval into `/data/zeek/<YYYY-MM-DD-HHMM>/` (the interval's start,
+  UTC). Suricata writes one `eve-<YYYY-MM-DD-HHMM>.json` per minute into
+  `/data/spool/suricata/`. The default interval is 15 minutes
+  (`MAXGUARD_INTERVAL_MINUTES`, a whole number of minutes that divides an hour).
+- **When is a folder complete?** Two minutes after its interval ends: by then
+  Zeek has moved every log into it and Suricata has closed the last minute file
+  that belongs to it. The shipper then merges that interval's minute files into
+  the folder's `eve.json`, packs the folder as a `.tar.gz` (the same bytes every
+  time), and sends it to `POST /api/ingest`. It marks the folder shipped only
+  after a `2xx` answer and stops at the first failure, so a console that is down
+  only delays folders. The console runs the normal pipeline on the archive with
+  `sensor_id` set to the sensor's name; alerts therefore arrive within one
+  interval plus about three minutes plus the analysis time.
+- `LiveSensorAdapter` (`maxguard/adapters/live.py`, in `ADAPTERS`) analyzes the
+  newest complete folder of a sensor's data folder directly, for example
+  `maxguard analyze /data` on the sensor's SSD. It accepts only a folder that
+  has `zeek/<YYYY-MM-DD-HHMM>/` folders and no `conn.log` of its own, so it never
+  takes a plain Zeek log folder from `ZeekLogAdapter`.
+- **Where the sensor sends.** The dashboard and the rest of the API listen
+  only on the console's `127.0.0.1`. Sensors reach a second container,
+  `maxguard-ingest` (`docker/compose.lan.yaml`), which runs
+  `create_ingest_app()`: nothing but `POST /api/ingest`, on port 8001 of the
+  console's LAN address. Nobody on the network can read alerts or approve a
+  block. Ingest is off unless the console sets `MAXGUARD_INGEST_TOKEN`, and
+  every request must carry that token. The shipper reads the console's address
+  (`http://<console>:8001`) and the token from `/data/shipper.toml` on the
+  sensor (never from the repository) and never uses a proxy. Starting the
+  console with `compose.lan.yaml` is an explicit, optional choice (CLAUDE.md
+  rule 1).
+- **Which traffic the sensor sees.** Only what crosses switch port 1, the cable
+  to the router (`docs/HARDWARE.md` section 1): every device's traffic to the
+  internet and to the router. Traffic between two devices behind the switch
+  never crosses it. Tests that need lab traffic put the lab service on a LAN
+  port of the router.
+- Retention is 7 days on both machines: the shipper deletes shipped folders
+  older than that (a folder that was never shipped is kept). On the console,
+  `EventStore.prune()` deletes whole hour folders (section 9), but **nothing
+  calls it yet**: an open item for review (section 9).
 
-Three questions must be answered on real hardware before this design is final
-(JAK-06 builds the lab, JAK-07 the live sensor): the exact Zeek 9 rotation
-settings without `zeekctl`, Suricata 8.0's `eve` rotation option, and why
-Suricata captured zero packets in the planning container test while Zeek in the
-same setup captured 449 (`docs/HARDWARE.md` section 11.3 has the commands;
-**not run — verify on hardware**).
+The three questions this section left open are answered:
+
+1. **Zeek 9 rotation without `zeekctl`:** set `Log::default_rotation_interval`
+   and a `Log::rotation_format_func` that returns the interval folder; Zeek
+   rotates at multiples of the interval, and after a crash
+   `LogAscii::enable_leftover_log_rotation` moves the unfinished logs at the
+   next start. Tested with Zeek 9.0.0 and 1-minute intervals.
+2. **Suricata 8.0's `eve` rotation:** `filename: eve-%Y-%m-%d-%H%M.json` with
+   `rotate-interval: minute`. A relative value such as `15m` counts from the
+   moment Suricata starts (Suricata 8.0.7, `src/util-logopenfile.c`), so it
+   would not line up with Zeek's folders; minute files are merged instead.
+   Suricata opens the next file with the first event after the minute ends, so
+   events from the first seconds of an interval can travel with the previous
+   folder. Nothing is lost or counted twice.
+3. **Why Suricata captured 0 packets in the first planning test:** the
+   `jasonish/suricata:7.0.17` image ships the ET Open rule set (53,021 rules);
+   loading it took about 50 seconds, and Suricata captures nothing until its
+   rules are loaded. `jasonish/suricata:8.0.7` ships no rules, and the sensor
+   loads only MaxGuard's own rules file, so it starts in about a second
+   (`docs/HARDWARE.md` section 11.3).
+
+**What was run in planning.** The three containers ran on an x86-64 machine with
+1-minute folders, listening inside a lab server container instead of on a mirror
+port. Zeek and Suricata filled one folder per minute; the shipper sent each
+complete folder to a console on the same machine (`HTTP 200`); the console
+showed `cleartext.telnet` and `cleartext.http_alt` alerts and events with the
+sensor's `sensor_id`. A Telnet session at 21:03:09 became an alert at 21:06:36.
+The commands and output are in JAK-07. Running it on a Raspberry Pi with a real
+mirror port is **not run — verify on hardware**.
 
 ## 5. The three contracts and their v2.0 extensions
 
@@ -424,14 +481,33 @@ object per line, so rules read it with the same helper:
 | `PcapAdapter` | Runs Zeek (and Suricata when installed) on the file | alpha |
 | `ZeekLogAdapter` | Unpacks a folder, `.zip` or `.tar.gz` of Zeek logs; converts TSV logs to JSON | alpha |
 | `LiveSensorAdapter` | Returns the newest *completed* interval folder written by the sensor (Zeek logs plus that interval's `eve.json`) | spring |
-| `NetflowAdapter` | Converts collector records into `conn.log`-shaped JSON records, so the normal rules and normalizer can read them (payload-based rules simply find nothing) | spring |
+| `NetflowAdapter` | Converts goflow2's JSON flow records into `conn.log`-shaped records, so the normal rules and normalizer can read them (payload-based rules simply find nothing). Accepts a folder of goflow2 files, or one goflow2 file (uploads arrive as one file under a generated name); never a folder with `conn.log` or `zeek/` | spring |
 | Host agent | Uploads rotated capture files to the console, which uses `PcapAdapter` | spring |
 
 Rules that need history (device baselines) cannot be a plain
 `Callable[[Path], list[Finding]]`, because the same log folder must always give
 the same answer. They get their history passed in explicitly through a second
-registry (`STATEFUL_RULES`, spring), so `run_all()` and Contract 3 stay exactly
-as they are.
+registry (`STATEFUL_RULES` and `@stateful_rule` in `maxguard/rules/baseline.py`),
+so `run_all()` and Contract 3 stay exactly as they are. A stateful rule takes
+`(log_dir, context)`; for `baseline.new_service` the context is
+`{"baseline": <build_baseline(events) output>, "learning_ends": <Unix seconds>}`,
+and events before `learning_ends` never give a finding. `run_stateful(log_dir,
+context)` runs them in rule-ID order and merges like `run_all()`.
+
+**Open items for review (spring):**
+
+- Nothing calls `run_stateful()` yet. Where the baseline is stored (for example
+  a table in `state.db`), when the learning period ends, and the hook in
+  `pipeline.py` are a decision for Jaiden and Fiona. The registry could also
+  move to `rules/base.py`, so that `@rule` and `@stateful_rule` both refuse an
+  ID the other already has.
+- `decoy.log` has no route to the console yet: the decoy writes it into its
+  own volume, and the normalizer does not read it. Options: the decoy gets a
+  small shipper that sends to `POST /api/ingest` like the sensor, or the sensor
+  shipper collects it.
+- `decoy.contact` and `baseline.new_service` are built but not registered in
+  `maxguard/rules/__init__.py`; they wait for the Security Lead's approval, Home
+  text and mapping rows.
 
 ### Rule IDs
 
@@ -455,8 +531,8 @@ Security Lead's approval. Severities and titles are the ones in the code.
 | `cert.weak_key` | high | Weak RSA key (under 2048 bits) | `rules/certs.py` | FIO-02 |
 | `cert.sha1_signature` | medium | Certificate signed with SHA-1 | `rules/certs.py` | FIO-02 |
 | `tls.ja4_watchlist` | high | Proposed (spring): TLS client on the JA4 watchlist | `rules/ja4.py` | JAK-09 |
-| `decoy.contact` | critical | Proposed (spring): someone contacted a decoy | `rules/decoy.py` | FIO-06 |
-| `baseline.new_service` | medium | Proposed (spring): a device used a service new to it | `rules/baseline.py` | FIO-07 |
+| `decoy.contact` | critical | Someone contacted a decoy (built, waiting for approval) | `rules/decoy.py` | FIO-06 |
+| `baseline.new_service` | medium | Device used a service new to it (built, waiting for approval) | `rules/baseline.py` | FIO-07 |
 
 ## 6. The common event schema
 
@@ -470,8 +546,8 @@ with exactly these keys:
 |---|---|---|
 | `event_id` | str | `record_id(log, record)`, so an event and the AI's citations use the same ID |
 | `ts` | float | epoch seconds (Suricata's ISO time is converted) |
-| `sensor_id` | str | `pcap` for uploaded captures, `import` for uploaded Zeek logs, the sensor's name for live data |
-| `source` | str | `zeek` or `suricata` (later `netflow`, `agent`, `decoy`) |
+| `sensor_id` | str | `pcap` for uploaded captures, `import` for uploaded Zeek logs and NetFlow files, the sensor's or agent's name for data sent to `POST /api/ingest` |
+| `source` | str | `zeek`, `suricata`, or `netflow` (a `conn.log` record that carries `mg_source: netflow`); later `decoy`. A host agent's captures go through Zeek, so they are `zeek` |
 | `log` | str | `conn.log`, `dns.log`, `http.log`, `ssl.log`, `dhcp.log`, or `eve.json` |
 | `kind` | str | `conn`, `dns`, `http`, `tls`, `dhcp`, or `alert` |
 | `uid` | str | Zeek connection uid, or `""` |
@@ -519,6 +595,7 @@ includes the IDs the AI cites, so MaxGuard controls every source of randomness:
 | Tab-separated (TSV) Zeek logs turned sets into one long string, so the certificate rules silently found nothing on imported logs. | `ZeekLogAdapter` converts every value with the log's own `#types` header; a test proves a TSV import and a JSON import give the same finding ID. |
 | The original AI cache reused one finding's explanation for every finding of the same rule, so a printer finding was "explained" with the payroll server's host name. | Explanations are generated per finding and never shared between findings. |
 | Storage code that reads the clock cannot be tested exactly. | The engine and the stores never read the clock. The API passes the time in (`received_at`, `at`). |
+| Because of `-D`, Zeek uids repeat **across** captures: the first connection of every lab capture is `CJKFoj4bpHEhTeaRoj`. Linking a timeline event to an alert by uid alone linked the Telnet connection to "Expired certificate". | A uid only identifies a connection *within one analysis*. Code that joins records from different analyses (the timeline, the events store, the response preview) also checks the hosts and the port, or uses the Community ID. |
 
 The IDs (`maxguard/ids.py`):
 
@@ -549,6 +626,7 @@ JSON, CSV, or HTML (`maxguard/report.py`); the API stores it. Schema
   "frameworks": [{"framework": ..., "version": ..., "source": ...}, ...],  # compliance files used
   "findings": [Finding.to_dict(), ...],               # sorted by severity, rule_id, src, dst, port
   "assets": [{"ip", "first_seen", "services", "software", "finding_count"}, ...],
+  "devices": [{"ip", "mac", "host_name", "dns_names", "first_seen"}, ...],  # DHCP and DNS (JAK-08)
   "events": [event, ...],                             # section 6
   "ai": {"status": "ok" | "unavailable" | "disabled", "model": str | None,
          "explained": int, "dropped_sentences": int, "reason": str | None},
@@ -642,6 +720,13 @@ data/events/date=2026-10-06/hour=01/part-<sha>.parquet
 
 - One folder per UTC hour. Retention is "delete hour folders older than 7 days"
   (`prune(older_than=...)`), which is fast and never rewrites a database.
+  **Open item for review:** nothing calls `prune()` yet, so events are kept
+  until the user deletes them, although the privacy table (section 14) and the
+  timeline page promise 7 days. Calling it after every upload is the simple
+  fix, with one catch: events carry the capture's own time, so an uploaded
+  capture older than 7 days would be pruned right after it is analyzed. Jaiden
+  decides between pruning by capture time (and saying so on the upload page)
+  and pruning by upload time (a new column).
 - `<sha>` is a hash of the batch's event IDs, so writing the same events again
   (the same capture uploaded twice) replaces the file instead of adding a copy.
 - `query(ip=..., since=..., until=..., limit=...)` uses DuckDB to scan the
@@ -714,9 +799,26 @@ and "Using Standard Headers to Verify Origin" defenses of the OWASP CSRF
 Prevention Cheat Sheet. A request with neither header is allowed, because curl,
 the sensor, the host agent and the tests send neither; every major browser has
 sent `Sec-Fetch-Site` since March 2023. Behind a reverse proxy, the proxy must
-pass the original `Host` header. This does not stop DNS rebinding (a hostile
-page that makes its own domain name point at `127.0.0.1`); checking the `Host`
-header against an allow-list would, and is an open item for review.
+pass the original `Host` header.
+
+**DNS rebinding.** A hostile page can make its own domain name point at
+`127.0.0.1` after it has loaded; the browser then treats the API as part of
+that website, so it may read the API, and the cross-site check cannot tell.
+Every request whose `Host` header is not in `MAXGUARD_ALLOWED_HOSTS` (default
+`localhost,127.0.0.1,[::1]`) is therefore answered `400 Invalid host header`
+before any route runs (Starlette's `TrustedHostMiddleware`). A setting with
+`*`, `http://` or a port stops the app at start-up. FastAPI's `TestClient`
+calls the app `testserver`, so an autouse fixture in `tests/conftest.py` adds
+that name for the tests.
+
+**The ingest-only app.** `create_ingest_app()` builds a second app with the
+same settings, stores and checks but one route, `POST /api/ingest`, and no
+`/docs` page; it refuses to start without `MAXGUARD_INGEST_TOKEN`.
+`docker/compose.lan.yaml` runs it in its own container on the console's LAN
+address, port 8001, with `MAXGUARD_ALLOWED_HOSTS` set to that address. Both
+apps write to the same data folder. The dashboard learns about ingested data
+at its next refresh (within 30 seconds): `GET /api/stream` only hears about
+changes made in its own process.
 
 When the modules exist, the app includes `maxguard.web.routes.router` (the HTML
 pages: alert queue `/`, alert detail `/alerts/{finding_id}`, `/upload`,
@@ -725,13 +827,38 @@ pages: alert queue `/`, alert detail `/alerts/{finding_id}`, `/upload`,
 import stops the app, so a bug in it is never hidden. The pages are rendered on
 the server with Jinja2 (autoescaping on) and updated with htmx; the only
 JavaScript is the vendored htmx file and a few lines that turn `alerts-changed`
-into a refresh.
+into a refresh. Every page also sends a Content-Security-Policy (`default-src
+'self'; script-src 'self'; style-src 'self'; ...; frame-ancestors 'none'`),
+`X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin`. Not
+`no-referrer`: with it, Chrome sends `Origin: null` on form posts, which the
+cross-site check refuses. htmx is configured through a `<meta
+name="htmx-config">` tag to stay inside the CSP (no inline styles, no `eval`,
+no scripts from responses, requests only to this site). Two small extra routes:
+`POST /mode` (the Analyst/Home switch, a cookie that is only a display
+preference) and `GET /favicon.ico` (204).
 
 The alpha is a single-user app on `127.0.0.1` with no login. The dashboard asks
 for a display name once and records it as the `actor` in the audit trail; that
 is for accountability inside a team, not security. **Proposed — confirm in
 review:** user accounts stay out of scope for v2.0, and a rack deployment that
 needs logins puts the console behind the company's existing reverse proxy.
+The name must be 1 to 100 printable characters and is checked before anything
+is saved; the `mg_actor` cookie stores it percent-encoded, because a cookie
+holds only Latin-1 text and a name such as *Łukasz* used to fail after the
+change was already saved (found by the security review). The timeline's `end`
+parameter is limited to real times (0 to the year 9999), so `nan` or `1e20`
+answers 422 instead of crashing the page.
+
+**Open items for review (dashboard):**
+
+- The queue shows at most 200 alerts and the timeline's "Alerts involving this
+  address" reads at most 1000, without saying so on the page. A busy rack
+  sensor can hit both: show "only the first 200: use the filters", and give
+  `StateStore` a query by address.
+- Home mode says "Device involved:" with the finding's source address. For an
+  inbound finding (a decoy contact, for example) that is the outsider, not the
+  user's device. Pick the address on the user's network, together with
+  Jonattan's Home text.
 
 ## 11. The evidence-citing AI
 
@@ -814,40 +941,121 @@ updates arrive on USB as signed bundles, not over the network.
 
 ## 13. The response module
 
-**Design (not yet built; spring S5–S8, Ahmad).** CLAUDE.md rule 4: blocking
-applies only to networks the user owns or administers, always needs explicit
-human approval, is reversible, and is logged.
+**Tested in planning** (spring S5–S8, Ahmad: AHM-07 and AHM-08) with real
+`nft` and `iptables` in a container and a fake OPNsense server; **not run** on
+a real firewall or an OPNsense VM. CLAUDE.md rule 4: blocking applies only to
+networks the user owns or administers, always needs explicit human approval, is
+reversible, and is logged. MaxGuard never sends anything toward the blocked
+address: it only writes commands, or asks the user's own firewall to block.
 
 ```mermaid
 stateDiagram-v2
   [*] --> proposed: analyst proposes a block
   proposed --> previewed: preview (last 7 days of events)
+  previewed --> previewed: preview again
   previewed --> approved: person types the IP to confirm
-  approved --> applied: manual rule, or enforcer
-  applied --> reverted: undo
+  approved --> applied: by hand, or by the enforcer
+  applied --> reverted: undo, the same way
   proposed --> rejected
   previewed --> rejected
   reverted --> [*]
   rejected --> [*]
 ```
 
-- **Propose.** One IP address and a direction (inbound, outbound, both). The
-  address is parsed with Python's `ipaddress` module, so nothing else can reach a
-  generated command. Loopback, multicast, unspecified, and link-local addresses
-  are refused.
-- **Preview before you block.** From the event store, the connections in the
-  last 7 days that the rule would have stopped: how many, which internal devices,
-  which services and ports, first and last seen, and up to ten sample events.
-  The end of the window is passed in, never read from the clock.
-- **Approve.** A person enters their name and types the IP address again.
-- **Apply.** Always available: generated commands with their exact undo
-  commands (nftables with a named set, so undo is one command; iptables; the
-  OPNsense alias steps; plain steps for a home router). Optional: an `Enforcer`
-  connector does it for the user, starting with OPNsense (add the address to a
-  firewall alias and apply), using an API key kept in the data folder, never in
-  the repository, with TLS verification on.
-- **Revert** undoes the block the same way it was applied.
-- Every step is written to the audit table with who and when.
+| File | What it does |
+|---|---|
+| `maxguard/response/generate.py` | `parse_ip()` and `rules_for(ip, direction)`: nftables, iptables, OPNsense and home-router steps, each with its undo. Writes text only. |
+| `maxguard/response/preview.py` | `preview(ip, direction, event_store, *, window_end)` |
+| `maxguard/response/approvals.py` | `ProposalStore`: the `response_proposals` table in `state.db` and the steps |
+| `maxguard/response/routes.py` | the API under `/api/response` (part of `create_app()` only, never the ingest-only app) |
+| `maxguard/response/enforcers/base.py`, `opnsense.py` | the `Enforcer` protocol (`add(ip)`, `remove(ip)`, `apply()`) and the OPNsense client |
+
+- **Propose.** One IP address and a direction. `parse_ip()` is the only way an
+  address reaches a command. Python's `ipaddress.ip_address()` alone is not
+  enough: it accepts an IPv6 scope that can hold shell syntax
+  (`2001:db8::1%$(id)`) and plain integers. So `parse_ip()` also refuses
+  non-text input, any `%scope`, IPv4-mapped IPv6, and loopback, multicast,
+  unspecified, link-local and `255.255.255.255`. Private addresses are allowed:
+  blocking a compromised device on your own network is legitimate.
+- **Direction** means who starts the connection: `inbound` blocks connections
+  the address starts (it is the Zeek originator), `outbound` blocks connections
+  our devices start toward it, `both` blocks either. The firewall rules match
+  conntrack's *original* direction, so an inbound-only block still lets our own
+  connections to that address work, and the preview counts with the same
+  definition.
+- **Preview before you block.** From the event store, the connections in the 7
+  days before `window_end` that the rule would have stopped: how many, which
+  internal devices, which services and ports, first and last seen, and up to ten
+  sample events. One connection seen in several logs counts once (by
+  `community_id`). `window_end` is passed in; only the API reads the clock.
+- **Approve** is allowed only after a preview and needs the person's name and
+  the IP address typed again. A missing or different address is refused (400)
+  and the refusal is audited.
+- **Apply.** Always available: the generated commands with their exact undo.
+  nftables uses four named sets in table `inet maxguard`
+  (`maxguard_block_{in,out}_v{4,6}`: a set holds one address family), created
+  once by a setup file that is safe to load again; blocking and undoing are one
+  command each. iptables rules carry the comment `maxguard`. OPNsense uses two
+  aliases, `maxguard_block_in` and `maxguard_block_out`. Optional: with
+  `MAXGUARD_OPNSENSE_URL` set, `apply` asks the OPNsense enforcer to do it.
+- **The OPNsense enforcer** calls `POST /api/firewall/alias_util/add/<alias>`
+  or `.../delete/<alias>` with `{"address": ip}`, then
+  `POST /api/firewall/alias/reconfigure` (from OPNsense's source, `opnsense/core`
+  commit `1177021c22d6`). The API key file (`key=` and `secret=` lines) lives in
+  `<data>/opnsense/apikey.txt`; a least-privilege API user needs only
+  *Diagnostics: PF Table IP addresses* and *Firewall: Alias: Edit*. The client
+  accepts only `https://`, always verifies the certificate
+  (`MAXGUARD_OPNSENSE_CA` or the system's), uses 5 s / 20 s timeouts, follows no
+  redirects and ignores proxy settings. With `MAXGUARD_OFFLINE=1`, the firewall
+  must be in `MAXGUARD_OFFLINE_ALLOW`, or `apply` answers 502 with that hint.
+- **Revert** undoes the block the same way it was applied: a block applied by
+  hand is undone by hand (the undo commands are always shown), an enforcer block
+  is removed from the firewall.
+- **Concurrency and errors.** Each check and state change is one SQL
+  `UPDATE ... WHERE state IN (...)`, so two people clicking at once cannot both
+  approve. An address can have only **one** open proposal (proposed, previewed,
+  approved or applied), checked and inserted in one statement: with two, reverting
+  one would take the address off the firewall while the other still said
+  *applied*. Firewall changes run one at a time (`FIREWALL_LOCK`; the API is one
+  process), so a double click on Apply reaches the firewall once. If a `both`
+  block fails half-way, the address is taken off every list again
+  (`remove_everywhere()`), so the firewall is never left half-blocked. A firewall
+  error keeps the state, is audited (`response.apply_failed`, with whether the
+  rollback worked, and `response.revert_failed`) and answers 502. Other errors:
+  400 bad input, 404 no such proposal, 409 a step that is not allowed now or an
+  address that already has an open proposal.
+- **Audit.** Every step writes a row to the audit table (`response.<step>`,
+  target = the proposal ID, who and when), in the same transaction as the state
+  change, so a crash can never leave a block without its record. Refused and
+  failed steps are audited too. *Who* is the name the person types: there are no
+  logins yet, which is acceptable only because this API listens on `127.0.0.1`.
+- **On the firewall.** The OPNsense Block rules must sit above every Pass rule
+  (OPNsense uses the first rule that matches; the AHM-08 setup steps say so).
+  `pf` is stateful, so a connection that was already open keeps working until
+  its state ends; the nftables rules match every packet of a tracked connection
+  instead. An iptables block line run twice adds two rules and one undo removes
+  only one (nftables sets do not have this problem).
+- **Dashboard.** The workflow is reachable through the API (AHM-08 shows a full
+  session). A dashboard page for proposals is an open item for review: no task
+  builds one yet.
+
+**Open items for review (found by the security review):**
+
+- **Suricata alerts and direction.** The normalizer copies an `eve.json`
+  alert's top-level `src_ip` and `dest_ip`, which belong to the packet that
+  matched, not to whoever started the connection (Suricata's EVE format
+  documentation shows a `to_client` alert whose `src_ip` is the server). So an
+  inbound preview can count a connection one of our own devices started.
+  Fix in the normalizer (Jaiden): use the alert's `flow.src_ip` and
+  `flow.dest_ip` when present.
+- **Blocking yourself.** Nothing stops a proposal for the firewall's own
+  address, the console's address or the default gateway, which could cut off
+  the whole network. The preview shows the traffic, but there is no warning.
+  Whether to refuse or warn is a decision for the Security Lead.
+- **Error mapping.** A broken firewall setting (for example an `http://`
+  address in `MAXGUARD_OPNSENSE_URL`) answers 400 instead of 502, and a missing
+  key file answers 500 without an `apply_failed` audit row. Turning setting
+  errors into `EnforcerError` fixes both.
 
 ## 14. Security design
 
@@ -858,18 +1066,21 @@ controlled. The main threats and the defenses:
 |---|---|---|
 | A malicious archive fills the disk (zip bomb) or writes outside its folder | Sizes are checked before extracting (4 GiB limit); zip members lose absolute paths and `..` parts; tar files are extracted with Python's `data` filter, which refuses absolute paths, `..`, links, and device files | `adapters/zeeklogs.py` |
 | A huge or fake upload, or a stranger on the LAN | Upload size limit, checked before and while reading; the file type is decided by its magic number; stored under a generated name; ingest is off by default and checks its token before reading the body | API |
-| Text in traffic attacks the dashboard (XSS) | Jinja2 autoescaping everywhere; AI text and anything from traffic is never marked `\|safe`; the HTML export escapes every value and carries a Content-Security-Policy that allows no scripts | web, `report.py` |
+| Text in traffic attacks the dashboard (XSS) | Jinja2 autoescaping everywhere; AI text and anything from traffic is never marked `\|safe` (tested with `<script>` in a title, a detail, an AI sentence and an assignee); every dashboard page sends a Content-Security-Policy that allows only this site's own scripts and styles; the HTML export escapes every value and carries a Content-Security-Policy that allows no scripts | web, `report.py` |
 | Text in traffic attacks a spreadsheet (CSV formula injection) | A CSV cell that starts with `=`, `+`, `-`, `@`, a tab, or a line break gets a leading `'`, as OWASP recommends | `report.py` |
 | Text in traffic attacks the AI (prompt injection) | Evidence is passed as JSON data and the prompt says never to follow it; the model can only fill two text fields; every sentence must cite this finding's records; the rule's severity is always shown; tested with four hostile fields and a model that obeys (section 11) | `ai/`, `tests/unit/test_prompt_injection.py` |
-| The dashboard is reached from the network | Published on `127.0.0.1` only; ingest is off by default and token-protected | `docker/compose.yaml`, API |
+| The dashboard is reached from the network | Published on `127.0.0.1` only. Sensors and agents get a separate ingest-only app (one route, token required, off by default) on the LAN address the user names | `docker/compose.yaml`, `docker/compose.lan.yaml`, API |
+| Someone on the LAN reads or replays what sensors send | Port 8001 is plain HTTP in v2.0, so the token and the logs or captures cross the LAN unencrypted: the docs say to use a wired or trusted network. The shipper already accepts an `https://` console with its own CA file (`ca_file`); TLS on the ingest port is an open item for review. The token is compared in constant time and the agent refuses a config file other users can read | `docker/compose.lan.yaml`, `sensor/shipper.py`, `sensor/agent.py` |
 | A sensor leaks or injects traffic | The capture interface has no IP address; Zeek and Suricata only listen; decoys run on their own IP, never on the capture interface | `docs/HARDWARE.md`, CLAUDE.md rule 5 |
-| A block is abused or goes wrong | Typed confirmation, preview, audit log, undo, address validation, only the user's own firewall | response module |
+| A block is abused or goes wrong | Approve only after a preview, with the IP typed again; one-step state changes; audit row for every step and every refusal; undo always shown; strict address parsing (no scope IDs, integers or special addresses); only the user's own firewall, over verified HTTPS; the response API is never on the LAN port | response module |
 | A tampered rule or intel update | The archive's member list is read from its headers (regular files only, no duplicates, size limits); the Ed25519 signature over the manifest is checked before the manifest is trusted; only allowed paths (`rules/*.rules`, `intel/ja4_watchlist.yaml`, `mappings/*.yaml`) and only files in the manifest; every hash checked in memory, then again on disk after extracting with the `data` filter; the `current` link is switched in one step; a version that is not newer is refused, so an old signed bundle cannot be replayed (rollback attack) | `intel/bundle.py` |
 | Evidence is altered after the fact | Chain-of-custody log: a JSON Lines file where each entry holds the previous entry's hash and an Ed25519 signature over its own hash; `python -m maxguard.custody.log verify` names the first bad entry. A cut-off end still forms a valid chain, so `verify` prints the head hash, to be recorded elsewhere | `custody/log.py` |
-| Another website makes the user's browser send requests to the console (CSRF) | Changing requests are refused when `Sec-Fetch-Site` is `cross-site` or `same-site`, or `Origin` does not match `Host` (OWASP CSRF Prevention Cheat Sheet); DNS rebinding remains an open item | API |
+| Another website makes the user's browser send requests to the console (CSRF) | Changing requests are refused when `Sec-Fetch-Site` is `cross-site` or `same-site`, or `Origin` does not match `Host` (OWASP CSRF Prevention Cheat Sheet). DNS rebinding: requests for host names outside `MAXGUARD_ALLOWED_HOSTS` are refused | API |
 | Secrets end up in the repository | Keys and API keys live in the data folder; `.gitignore` and `.dockerignore` exclude key files; CLAUDE.md rule 6 is part of every review | repository |
+| A damaged or swapped offline bundle | `install.sh` verifies every file with `sha256sum -c --strict` and refuses unlisted files before loading anything (without `--strict`, a badly formatted line is skipped and an extra part slipped through in the review). `SHA256SUMS` is **not signed** yet, so it catches damage, not someone who replaces the whole bundle: signing it with the JAI-08 key is an open item for review | `scripts/install.sh` |
+| A release workflow is abused | Least privilege per job (`contents: read` at the top; only the image job may push packages, only the release job may write the release); every action pinned to a full commit SHA; `persist-credentials: false`; the tag name reaches shell commands only through environment variables | `.github/workflows/release.yml` |
 | A dependency is compromised or changes license | Pinned minimum versions, one vendored front-end file checked by SHA-256, every license in `docs/DEPENDENCIES.md` | repository |
-| Privacy of the people on the network | Uploads deleted after analysis; events kept 7 days; nothing leaves the machine | storage, section 12 |
+| Privacy of the people on the network | Uploads deleted after analysis; events meant to be kept 7 days (the call to `prune()` is still open, section 9); nothing leaves the machine | storage, section 12 |
 
 The MaxGuard engine container runs as a non-root user (uid 10001). The Ollama
 container keeps its image's default user but sits only on the internal network.
@@ -905,19 +1116,78 @@ Settings (environment variables):
 | `MAXGUARD_OFFLINE` | `1` in Compose | turn the offline guard on |
 | `MAXGUARD_OFFLINE_ALLOW` | empty | extra user-owned hosts, comma-separated |
 | `MAXGUARD_INGEST_TOKEN` | unset (ingest off) | token for sensors and agents; at least 32 characters, or the app refuses to start |
+| `MAXGUARD_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` | the host names and addresses the console answers to (DNS rebinding, section 10); names or addresses only, no `http://`, port or `*` |
 | `MAXGUARD_MAX_UPLOAD_MB` | `1024` | upload limit in MiB (a whole number) |
+| `MAXGUARD_OPNSENSE_URL` | unset (blocks are applied by hand) | `https://` address of the user's own OPNsense firewall for the enforcer (section 13); its API key goes in `<data>/opnsense/apikey.txt` |
+| `MAXGUARD_OPNSENSE_CA` | unset (the system's CAs) | the firewall's CA file, when it uses its own certificate authority |
 | `MAXGUARD_KEEP_UPLOADS` | unset | `1` keeps uploaded files (under their generated names) after analysis, for debugging |
 
-The offline bundle (JON-05) contains the saved images, the model volume, the
-Compose file, `install.sh`, and a SHA-256 checksum file, split into parts under
-2 GiB so they fit on FAT32 USB sticks and GitHub Release assets.
+`docker/compose.lan.yaml` (optional, JAK-07) adds a third container,
+`maxguard-ingest`, for live sensors and host agents: the same image running
+`create_ingest_app()` on port 8001 of the console's LAN address (section 10).
+Start it with `docker compose -f docker/compose.yaml -f docker/compose.lan.yaml
+up -d`, after putting `MAXGUARD_LAN_ADDRESS` and `MAXGUARD_INGEST_TOKEN` in
+`docker/.env` (ignored by git); Compose refuses to start it without both.
+
+The offline bundle (JON-05) contains the saved images (`images.tar`), the model
+volume (`models.tar.gz`), the Compose file, `install.sh`, `uninstall.sh`,
+`OFFLINE-INSTALL.md`, three synthetic samples for the acceptance test
+(`sample-telnet.pcap`, `sample-clean-tls13.pcap`,
+`sample-telnet-zeek-logs.tar.gz`), and `SHA256SUMS`. Files over 1900 MiB are
+split into parts, so they fit on FAT32 USB sticks and under GitHub's 2 GiB
+limit for release files. A bundle holds one platform (`docker save
+--platform`); v2.0-alpha ships `linux/amd64`. `install.sh` checks every
+checksum with `--strict` and refuses any file `SHA256SUMS` does not list
+**before** loading anything, then streams the parts into `docker load` (no
+joined copy on disk), restores the model volume in a container with
+`--network none`, and starts Compose with `--pull never`.
+
+The release workflow (JAI-09) runs on a pushed `v*` tag: it builds the image
+for `linux/amd64` and `linux/arm64`, pushes it to
+`ghcr.io/<owner>/maxguard:<version>`, checks both platforms are in the
+manifest, and creates the GitHub Release with the notes from
+`docs/releases/<tag>.md`, the small bundle files and their `SHA256SUMS`. The
+large bundle is built by hand from the tagged commit and the CI-built image,
+then attached with `gh release upload ... --clobber`.
 
 ### The sensor (spring)
 
-`docker/sensor-compose.yaml` (design) runs live Zeek 9.0.0 and Suricata 8.0.7
-with host networking on the Raspberry Pi 5 (ARM64) or an x86-64 mini PC, plus
-the shipper. Every image MaxGuard uses is published for both `linux/amd64` and
-`linux/arm64` (checked for the pinned tags during planning).
+`docker/sensor-compose.yaml` runs three containers with host networking on the
+Raspberry Pi 5 (ARM64) or an x86-64 mini PC: live Zeek 9.0.0, Suricata 8.0.7,
+and the shipper (the `zeek/zeek:9.0.0` image again, used only for its Python
+3.13: the shipper needs nothing outside the standard library). Every image
+MaxGuard uses is published for both `linux/amd64` and `linux/arm64` (checked
+for the pinned tags during planning). Section 4 has the layout on the SSD.
+
+| Variable (sensor) | Default | Meaning |
+|---|---|---|
+| `MAXGUARD_CAPTURE_IFACE` | `eth0` | the capture port |
+| `MAXGUARD_INTERVAL_MINUTES` | `15` | minutes per log folder; a whole number that divides 60 (`1` for a quick test) |
+| `MAXGUARD_SENSOR_DATA` | `/data` | the data folder on the SSD |
+
+`/data/shipper.toml` on the sensor holds `console_url`, `token` (the console's
+`MAXGUARD_INGEST_TOKEN`), `sensor_id` (1–64 letters, digits, `.`, `_` or `-`) and,
+for an `https://` console with its own certificate, `ca_file`. Make it readable
+only by root.
+
+**NetFlow collector (JAK-10).** `docker/netflow-compose.yaml` runs goflow2
+v2.2.7 (pinned by digest; on Docker Hub `latest` is still the old v1.3.8) on
+the console or any machine the router can reach. It listens on UDP 2055 of
+`MAXGUARD_NETFLOW_ADDRESS` (required), writes JSON lines to
+`MAXGUARD_NETFLOW_DATA` (default `/data/netflow`) as `MAXGUARD_UID:MAXGUARD_GID`
+(default `1000:1000`), read-only, with no capabilities and its HTTP metrics
+server off. A new file starts when the old one is moved away and goflow2 gets
+`SIGHUP`. Flow-only data gives no findings (the rules need Zeek's protocol
+logs) but fills the timeline.
+
+**Host agent (JAK-11).** `python -m maxguard.sensor.agent` on one computer
+(root or Administrator, for the capture). Its config file
+(`~/.config/maxguard/agent.toml`, or `%APPDATA%\MaxGuard\agent.toml` on
+Windows; refused if other users can read it) holds `console_url` (the console's
+port 8001), `token`, `spool_dir`, `sensor_id`, `capture_user` (Linux and macOS:
+tcpdump drops root to this user with `-Z`), and optionally `interface` and
+`rotate_seconds` (default 900, at least 60). Uploaded files move to
+`<spool>/uploaded/` (the newest 4 are kept), refused ones to `rejected/`.
 
 ## 16. Decisions and the options we rejected
 
@@ -975,7 +1245,7 @@ Zeek and Suricata.
 
 ## 17. Pinned tool versions
 
-Verified on October 6, 2026. Change a version only in a pull request that also
+Verified on October 6, 2026 (the GitHub Actions and goflow2 rows on October 8). Change a version only in a pull request that also
 re-generates the fixtures (when Zeek or Suricata change) and updates
 `docs/DEPENDENCIES.md`.
 
@@ -983,12 +1253,15 @@ re-generates the fixtures (when Zeek or Suricata change) and updates
 |---|---|---|---|
 | Zeek | 9.0.0 | `docker/Dockerfile` (`FROM zeek/zeek:9.0.0`), `scripts/make_fixtures.sh` | LTS release; image for amd64 and arm64 |
 | Suricata (engine image) | 7.0.10 | Debian 13 package installed in `docker/Dockerfile` | Fixtures come from `jasonish/suricata:7.0.10`, the same upstream version. OISF ended the 7.0 branch in July 2026 (7.0.17 is the last 7.0 release; the announcement was seen only through search excerpts). Whether Debian 13's package carries the later 7.0 security fixes was not checked (Debian's servers were unreachable in planning). Moving the engine to 8.0 before the v2.0 release is an open decision. |
-| Suricata (live sensor) | 8.0.7 | `docker/sensor-compose.yaml` (spring) | Supported branch for a sensor that parses untrusted traffic all day. JA4 with MaxGuard's settings was checked on 8.0.7, and the normalizer reads Suricata 8's DNS format (tested with a Suricata 8 fixture). |
+| Suricata (live sensor) | 8.0.7 | `docker/sensor-compose.yaml` | Supported branch for a sensor that parses untrusted traffic all day. JA4 with MaxGuard's settings was checked on 8.0.7, and the normalizer reads Suricata 8's DNS format (tested with a Suricata 8 fixture). |
 | Ollama | 0.35.1 | `docker/compose.yaml`, offline bundle | amd64 and arm64 |
 | Python | 3.11 or newer | `pyproject.toml` | Laptops and CI use 3.11; the image has Debian 13's 3.13 |
 | htmx | 2.0.11 | `maxguard/web/static/htmx-2.0.11.min.js` | 0BSD; SHA-256 `d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717` |
-| Python packages | pyyaml 6.0.3, requests 2.34.2, fastapi 0.142.2, uvicorn 0.54.0, jinja2 3.1.6, python-multipart 0.0.32, duckdb 1.5.6, cryptography 50.0.2; dev: pytest 9.1.1, ruff 0.16.10, httpx 0.28.1 | lower bounds in `pyproject.toml` | Tested versions |
+| Python packages | pyyaml 6.0.3, requests 2.34.2, fastapi 0.142.2, uvicorn 0.54.0, jinja2 3.1.6, python-multipart 0.0.32, duckdb 1.5.6, cryptography 50.0.2; dev: pytest 9.1.1, ruff 0.16.10, httpx2 2.13.1 | lower bounds in `pyproject.toml` | Tested versions |
+| goflow2 (NetFlow collector) | v2.2.7 | `docker/netflow-compose.yaml` (tag and digest) | BSD-3-Clause; amd64 and arm64; on Docker Hub `latest` is the old v1.3.8 |
 | Lab images | `python:3.11-slim-bookworm`, `nicolaka/netshoot:v0.15` | `lab/` | Only for making test captures |
+| Development tools | ShellCheck 0.11.0 (`koalaman/shellcheck:v0.11.0`), actionlint 1.7.12 (`actionlint-py==1.7.12.25`) | the guides that use them (KAR-06, JON-05, JAI-09) | Never shipped; licenses in `docs/DEPENDENCIES.md` |
+| GitHub Actions (release workflow) | `actions/checkout` v7.0.1, `docker/setup-qemu-action` v4.4.0, `docker/setup-buildx-action` v4.4.1, `docker/login-action` v4.6.0, `docker/build-push-action` v7.4.0 | `.github/workflows/release.yml`, by commit SHA | Newest releases on October 8, 2026 (`git ls-remote`); the SHA is the source of truth, the version is a comment |
 
 Framework versions (PCI DSS 4.0.1, NIST SP 800-53 Rev. 5 Release 5.2.0, CISA CPG
 2.0, CJIS 6.1, MITRE ATT&CK v19) are locked in `docs/PROJECT_DECISIONS.md`
@@ -1024,8 +1297,11 @@ each with `verified`.
 
 Write a class that follows Contract 3 (`name`, `accepts()`, `to_zeek_logs()`),
 add it to `ADAPTERS` in `maxguard/pipeline.py`, and make it produce Zeek-shaped
-JSON logs so the existing rules and the normalizer work unchanged. If it needs a
-new event `kind` or key, that is a contract change (section 6).
+JSON logs so the existing rules and the normalizer work unchanged. Its
+`accepts()` must not take an input that another adapter already accepts:
+`LiveSensorAdapter` (`maxguard/adapters/live.py`) is a short example, with tests
+that check both directions. If it needs a new event `kind` or key, that is a
+contract change (section 6).
 
 ### Add a dashboard page
 
@@ -1037,6 +1313,9 @@ never mark traffic or AI text as safe HTML; add a test with FastAPI's
 ### Add a firewall connector
 
 Implement the `Enforcer` interface in `maxguard/response/enforcers/` (add and
-remove one address, apply), keep its credentials in the data folder, add its host
-to `MAXGUARD_OFFLINE_ALLOW` in the documentation, and test it against a fake
-server, never a real firewall.
+remove one address, apply; raise `EnforcerError` with a clear message), with a
+`from_env()` like `opnsense.py`'s, and return it from `enforcers_for()` in
+`maxguard/response/routes.py`. Keep its credentials in the data folder, verify
+TLS, add its host to `MAXGUARD_OFFLINE_ALLOW` in the documentation, and test it
+against a fake server (`tests/unit/test_opnsense.py` has one with TLS), never a
+real firewall.

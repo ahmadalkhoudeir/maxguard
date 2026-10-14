@@ -680,7 +680,8 @@ every 15 minutes) is task **JAK-07** in `docs/roadmap/jakub.md` and uses
 
 Run these after sections 4–11. Keep the results: test 4's table goes into this
 file in your pull request. Example addresses: phone `192.168.50.23`, laptop
-`192.168.50.30`, router `192.168.50.1`, sensor management `192.168.50.10`.
+`192.168.50.30`, router `192.168.50.1`, sensor management `192.168.50.10`, and
+the MaxGuard console (JAK-07) `192.168.50.20`.
 
 > **Avoid a feedback loop:** SSH into the Pi from a device on the **mesh Wi-Fi**.
 > Traffic from the mesh (port 2) to the Pi (port 3) is not mirrored. An SSH
