@@ -62,8 +62,9 @@ def templates() -> dict[str, str]:
     queue = sub(queue, '{% if mode == "home" and home %}{{ home.headline }}{% else %}'
                        '{{ alert.title }}{% endif %}', "{{ alert.title }}")
     alert = (t / "alert.html").read_text()
+    alert = sub(alert, "  {% set end = alert.last_seen | timeline_end %}\n", "")
     alert = re.sub(r'<a href="/timeline\?ip=\{\{ alert\.(src|dst)_ip \| urlencode \}\}'
-                   r'&amp;end=\{\{ \(alert\.last_seen \+ 1\) \| int \}\}">'
+                   r'\{% if end is not none %\}&amp;end=\{\{ end \}\}\{% endif %\}">'
                    r'\{\{ alert\.(src|dst)_ip \}\}</a>', r"{{ alert.\1_ip }}", alert)
     assert "/timeline" not in alert
     return {"web_base_v1.html": base, "web_queue_v1.html": queue, "web_alert_v1.html": alert}
@@ -71,6 +72,8 @@ def templates() -> dict[str, str]:
 
 def tests() -> tuple[str, str]:
     final = (REF / "tests/unit/test_web.py").read_text()
+    a = final.index("# ---------- AHM-06: timeline and assets ----------")
+    final = final[:a].rstrip("\n") + "\n"  # the AHM-06 tests are cut first: they never stay
     v2 = sub(final, '"""Tests for the dashboard pages (Ahmad, AHM-02, AHM-03, AHM-06).',
              '"""Tests for the dashboard pages (Ahmad, AHM-02, AHM-03).')
     v2 = sub(v2, "from maxguard.sensor.attribution import build_device_table\n", "")
@@ -82,8 +85,6 @@ def tests() -> tuple[str, str]:
     v2 = sub(v2, '    pages = ["/", "/upload", "/assets", "/timeline?ip=172.18.0.3",\n'
                  '             f"/alerts/{telnet_id(telnet_report)}"]',
              '    pages = ["/", "/upload", f"/alerts/{telnet_id(telnet_report)}"]')
-    a = v2.index("# ---------- AHM-06: timeline and assets ----------")
-    v2 = v2[:a].rstrip("\n") + "\n"
     v1 = sub(v2, '"""Tests for the dashboard pages (Ahmad, AHM-02, AHM-03).',
              '"""Tests for the dashboard pages (Ahmad, AHM-02).')
     v1 = sub(v1, "from maxguard.web import routes\n", "")

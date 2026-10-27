@@ -79,7 +79,8 @@ def test_htmx_file_is_the_reviewed_one():
 def test_pages_return_200_with_the_layout(client, path):
     page = client.get(path)
     assert page.status_code == 200
-    assert "Your data never leaves this computer." in page.text
+    assert ('<aside aria-label="Privacy"><p class="privacy">'
+            'Your data never leaves this computer.</p></aside>') in page.text
     assert '<script src="/static/htmx-2.0.11.min.js"' in page.text
     assert 'href="/static/app.css"' in page.text
     csp = page.headers["content-security-policy"]
@@ -87,6 +88,8 @@ def test_pages_return_200_with_the_layout(client, path):
     assert "unsafe" not in csp  # no inline scripts, no eval: a second wall behind escaping
     # not "no-referrer": Chrome then sends "Origin: null" on form posts, which the API refuses
     assert page.headers["referrer-policy"] == "same-origin"
+    # htmx keeps no copies of pages in the browser: Back loads the page again
+    assert '"historyCacheSize": 0, "refreshOnHistoryMiss": true' in page.text
 
 
 def test_static_files_are_served(client):
@@ -98,7 +101,9 @@ def test_queue_lists_the_telnet_alert(app, client, telnet_report):
     save(app, telnet_report)
     page = client.get("/")
     assert "Telnet session in cleartext" in page.text
-    assert f'href="/alerts/{telnet_id(telnet_report)}"' in page.text
+    # the stable id lets htmx keep keyboard focus on the link when the table refreshes
+    finding_id = telnet_id(telnet_report)
+    assert f'<a id="alert-{finding_id}" href="/alerts/{finding_id}">' in page.text
     assert "172.18.0.3 → 172.18.0.2:23" in page.text
     # severity as text and color: the word is in the badge with the color class
     assert '<span class="sev sev-high">High</span>' in page.text
@@ -107,11 +112,29 @@ def test_queue_lists_the_telnet_alert(app, client, telnet_report):
 def test_queue_has_the_htmx_wiring(client):
     page = client.get("/")
     assert 'hx-trigger="refresh, every 30s"' in page.text
+    assert 'hx-sync="this:replace"' in page.text  # a newer refresh replaces a running one
     assert page.text.count('hx-get="/" hx-target="#alerts" hx-select="#alerts"') == 2
-    assert 'new EventSource("/api/stream")' in client.get("/static/app.js").text
+    script = client.get("/static/app.js").text
+    assert 'new EventSource("/api/stream")' in script
+    # one stream for all queue tabs: six open streams would block the browser
+    assert 'navigator.locks.request("maxguard-stream"' in script
+    assert 'new BroadcastChannel("maxguard-alerts")' in script
+    assert 'channel.postMessage("alerts-changed")' in script  # the holder passes changes on
+    assert "return new Promise(function () {});" in script  # and keeps the lock while open
+    assert "ifAvailable: true" in script  # a tab without the lock refreshes once to catch up
+    assert "event.persisted" in script  # a page in the back/forward cache leaves the line
+    css = client.get("/static/app.css").text
+    assert "grid-template-columns: minmax(0, 1fr)" in css  # the file input fits a phone
+    assert ".banner, .status-form { overflow-wrap: anywhere; }" in css
+    # a table column must not be squeezed until "Medium" breaks in the middle
+    assert ".stack td { overflow-wrap: break-word; }" in css
+    assert '.stack td.mono, .stack td[data-label="Assignee"] { overflow-wrap: anywhere; }' in css
+    assert "event.detail.shouldSwap = false;" in script  # an error page never replaces the table
+    assert "location.pathname + location.search" in script  # the mode switch keeps filters
+    assert "No answer from the MaxGuard server: the change may not be saved." in script
 
 
-def test_queue_filters(app, client, telnet_report, ftp_report):
+def test_queue_filters(app, client, telnet_report, ftp_report, monkeypatch):
     save(app, telnet_report)
     save(app, ftp_report, received_at=RECEIVED_AT + 1)
     app.state.state_store.update_alert(telnet_id(telnet_report), actor="test",
@@ -123,6 +146,14 @@ def test_queue_filters(app, client, telnet_report, ftp_report):
     assert "Telnet session in cleartext" not in new
     low = client.get("/", params={"severity": "low"}).text
     assert "No alerts match these filters" in low
+    # more alerts than the queue shows: it says so instead of hiding the rest
+    monkeypatch.setattr("maxguard.web.routes.QUEUE_LIMIT", 1)
+    first = client.get("/").text
+    assert "The 1 most severe alerts, most severe first. More alerts match" in first
+    assert first.count('<a id="alert-') == 1
+    monkeypatch.setattr("maxguard.web.routes.QUEUE_LIMIT", 2)  # exactly as many as match
+    both = client.get("/").text
+    assert "2 alerts, most severe first" in both and "More alerts match" not in both
 
 
 def test_unknown_filter_value_is_a_400_page(client):
@@ -136,12 +167,15 @@ def test_hostile_values_are_escaped(app, client, telnet_report):
     finding = report["findings"][0]
     finding["title"] = HOSTILE
     finding["details"] = {"user": HOSTILE}
+    finding["last_seen"] = 1e12  # the year 33658: a date cannot hold it
     finding["explanation_sentences"][0]["text"] = HOSTILE
     save(app, report)
     app.state.state_store.update_alert(finding["finding_id"], actor="test",
                                        at=RECEIVED_AT, assignee=HOSTILE)
     for path in ("/",):  # the alert page comes in AHM-03
-        page = client.get(path).text
+        answer = client.get(path)
+        assert answer.status_code == 200
+        page = answer.text
         assert HOSTILE not in page
         assert "&lt;script&gt;" in page
 

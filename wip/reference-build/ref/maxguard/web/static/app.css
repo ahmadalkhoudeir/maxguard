@@ -93,7 +93,14 @@ select, input[type="text"], input[type="file"] {
 }
 
 .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 16px; }
-.status-form, #upload-form { display: grid; gap: 8px; max-width: 420px; }
+.status-form, #upload-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-width: 420px; }
+/* Long text with no spaces (a URL in an AI error, a name) wraps instead of widening the page.
+   Not "anywhere" on every table cell: the table layout then squeezes a column down to one
+   character and breaks short words ("Mediu/m"). A cell breaks between words; only the mono
+   addresses and the free-text Assignee may break inside one. Phones: see the media rule. */
+.banner, .status-form { overflow-wrap: anywhere; }
+.stack td { overflow-wrap: break-word; }
+.stack td.mono, .stack td[data-label="Assignee"] { overflow-wrap: anywhere; }
 
 /* Severity badges: the word is always there; the color only helps. */
 .sev {
@@ -103,7 +110,6 @@ select, input[type="text"], input[type="file"] {
   color: #ffffff;
   font-weight: 700;
   font-size: 0.85rem;
-  white-space: nowrap;
 }
 .sev-critical { background: var(--critical); }
 .sev-high { background: var(--high); }
@@ -157,6 +163,7 @@ tr:target { background: #fff3c4; }  /* the evidence row a citation link points t
   .stack thead { position: absolute; left: -9999px; }
   .stack tr { display: block; border-bottom: 2px solid var(--line); padding: 4px 0; }
   .stack td { display: grid; grid-template-columns: 9rem 1fr; gap: 8px; border: 0; padding: 4px 8px; }
+  .stack td { overflow-wrap: anywhere; }  /* a block now, not a column: nothing to squeeze */
   .stack td::before {
     content: attr(data-label);
     font: 600 0.9rem system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;

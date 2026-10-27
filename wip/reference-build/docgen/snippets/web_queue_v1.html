@@ -30,10 +30,11 @@
 </form>
 
 <div id="alerts" hx-get="/?status={{ status | urlencode }}&amp;severity={{ severity | urlencode }}"
-     hx-trigger="refresh, every 30s" hx-select="#alerts" hx-swap="outerHTML" aria-live="polite">
+     hx-trigger="refresh, every 30s" hx-select="#alerts" hx-swap="outerHTML" hx-sync="this:replace"
+     aria-live="polite">
   {% if alerts %}
   <table class="stack">
-    <caption>{{ alerts | length }} alert{{ "" if alerts | length == 1 else "s" }}, most severe first</caption>
+    <caption>{% if more %}The {{ alerts | length }} most severe alerts, most severe first. More alerts match and are not shown{% if not (status and severity) %}: choose a status and a severity to see them{% endif %}.{% else %}{{ alerts | length }} alert{{ "" if alerts | length == 1 else "s" }}, most severe first{% endif %}</caption>
     <thead>
       <tr>
         <th scope="col">Severity</th>
@@ -49,7 +50,7 @@
       {% for alert in alerts %}
       <tr>
         <td data-label="Severity">{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %}</td>
-        <td data-label="Alert"><a href="/alerts/{{ alert.finding_id }}">{{ alert.title }}</a></td>
+        <td data-label="Alert"><a id="alert-{{ alert.finding_id }}" href="/alerts/{{ alert.finding_id }}">{{ alert.title }}</a></td>
         <td data-label="Source → destination" class="mono">{{ alert.src_ip }} → {{ alert.dst_ip }}:{{ alert.dst_port }}</td>
         <td data-label="Count">{{ alert.count }}</td>
         <td data-label="Status">{{ status_labels.get(alert.status, alert.status) }}</td>

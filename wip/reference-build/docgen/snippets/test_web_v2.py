@@ -80,7 +80,8 @@ def test_htmx_file_is_the_reviewed_one():
 def test_pages_return_200_with_the_layout(client, path):
     page = client.get(path)
     assert page.status_code == 200
-    assert "Your data never leaves this computer." in page.text
+    assert ('<aside aria-label="Privacy"><p class="privacy">'
+            'Your data never leaves this computer.</p></aside>') in page.text
     assert '<script src="/static/htmx-2.0.11.min.js"' in page.text
     assert 'href="/static/app.css"' in page.text
     csp = page.headers["content-security-policy"]
@@ -88,6 +89,8 @@ def test_pages_return_200_with_the_layout(client, path):
     assert "unsafe" not in csp  # no inline scripts, no eval: a second wall behind escaping
     # not "no-referrer": Chrome then sends "Origin: null" on form posts, which the API refuses
     assert page.headers["referrer-policy"] == "same-origin"
+    # htmx keeps no copies of pages in the browser: Back loads the page again
+    assert '"historyCacheSize": 0, "refreshOnHistoryMiss": true' in page.text
 
 
 def test_static_files_are_served(client):
@@ -99,7 +102,9 @@ def test_queue_lists_the_telnet_alert(app, client, telnet_report):
     save(app, telnet_report)
     page = client.get("/")
     assert "Telnet session in cleartext" in page.text
-    assert f'href="/alerts/{telnet_id(telnet_report)}"' in page.text
+    # the stable id lets htmx keep keyboard focus on the link when the table refreshes
+    finding_id = telnet_id(telnet_report)
+    assert f'<a id="alert-{finding_id}" href="/alerts/{finding_id}">' in page.text
     assert "172.18.0.3 → 172.18.0.2:23" in page.text
     # severity as text and color: the word is in the badge with the color class
     assert '<span class="sev sev-high">High</span>' in page.text
@@ -108,11 +113,29 @@ def test_queue_lists_the_telnet_alert(app, client, telnet_report):
 def test_queue_has_the_htmx_wiring(client):
     page = client.get("/")
     assert 'hx-trigger="refresh, every 30s"' in page.text
+    assert 'hx-sync="this:replace"' in page.text  # a newer refresh replaces a running one
     assert page.text.count('hx-get="/" hx-target="#alerts" hx-select="#alerts"') == 2
-    assert 'new EventSource("/api/stream")' in client.get("/static/app.js").text
+    script = client.get("/static/app.js").text
+    assert 'new EventSource("/api/stream")' in script
+    # one stream for all queue tabs: six open streams would block the browser
+    assert 'navigator.locks.request("maxguard-stream"' in script
+    assert 'new BroadcastChannel("maxguard-alerts")' in script
+    assert 'channel.postMessage("alerts-changed")' in script  # the holder passes changes on
+    assert "return new Promise(function () {});" in script  # and keeps the lock while open
+    assert "ifAvailable: true" in script  # a tab without the lock refreshes once to catch up
+    assert "event.persisted" in script  # a page in the back/forward cache leaves the line
+    css = client.get("/static/app.css").text
+    assert "grid-template-columns: minmax(0, 1fr)" in css  # the file input fits a phone
+    assert ".banner, .status-form { overflow-wrap: anywhere; }" in css
+    # a table column must not be squeezed until "Medium" breaks in the middle
+    assert ".stack td { overflow-wrap: break-word; }" in css
+    assert '.stack td.mono, .stack td[data-label="Assignee"] { overflow-wrap: anywhere; }' in css
+    assert "event.detail.shouldSwap = false;" in script  # an error page never replaces the table
+    assert "location.pathname + location.search" in script  # the mode switch keeps filters
+    assert "No answer from the MaxGuard server: the change may not be saved." in script
 
 
-def test_queue_filters(app, client, telnet_report, ftp_report):
+def test_queue_filters(app, client, telnet_report, ftp_report, monkeypatch):
     save(app, telnet_report)
     save(app, ftp_report, received_at=RECEIVED_AT + 1)
     app.state.state_store.update_alert(telnet_id(telnet_report), actor="test",
@@ -124,6 +147,14 @@ def test_queue_filters(app, client, telnet_report, ftp_report):
     assert "Telnet session in cleartext" not in new
     low = client.get("/", params={"severity": "low"}).text
     assert "No alerts match these filters" in low
+    # more alerts than the queue shows: it says so instead of hiding the rest
+    monkeypatch.setattr("maxguard.web.routes.QUEUE_LIMIT", 1)
+    first = client.get("/").text
+    assert "The 1 most severe alerts, most severe first. More alerts match" in first
+    assert first.count('<a id="alert-') == 1
+    monkeypatch.setattr("maxguard.web.routes.QUEUE_LIMIT", 2)  # exactly as many as match
+    both = client.get("/").text
+    assert "2 alerts, most severe first" in both and "More alerts match" not in both
 
 
 def test_unknown_filter_value_is_a_400_page(client):
@@ -137,12 +168,15 @@ def test_hostile_values_are_escaped(app, client, telnet_report):
     finding = report["findings"][0]
     finding["title"] = HOSTILE
     finding["details"] = {"user": HOSTILE}
+    finding["last_seen"] = 1e12  # the year 33658: a date cannot hold it
     finding["explanation_sentences"][0]["text"] = HOSTILE
     save(app, report)
     app.state.state_store.update_alert(finding["finding_id"], actor="test",
                                        at=RECEIVED_AT, assignee=HOSTILE)
     for path in ("/", f"/alerts/{finding['finding_id']}"):
-        page = client.get(path).text
+        answer = client.get(path)
+        assert answer.status_code == 200
+        page = answer.text
         assert HOSTILE not in page
         assert "&lt;script&gt;" in page
 
@@ -201,6 +235,7 @@ def test_alert_detail_analyst_mode(app, client, telnet_report):
     assert "T1040" in page and "credential-access" in page
     assert "A device logged in with Telnet" in page
     assert 'id="status-form"' in page
+    assert "<title>Telnet session in cleartext · MaxGuard</title>" in page
 
 
 def test_controls_are_grouped_by_framework():
@@ -232,6 +267,7 @@ def test_alert_detail_home_mode(app, client, telnet_report):
     page = client.get(f"/alerts/{finding['finding_id']}").text
     home = routes.load_home_text()["cleartext.telnet"]
     assert home["headline"] in page
+    assert f"<title>{home['headline']} · MaxGuard</title>" in page  # no jargon in the tab
     assert home["action"] in page
     assert "High: fix this week" in page
     main = page.split('<main id="main"', 1)[1]  # the page body, not the URLs in the nav
@@ -270,6 +306,9 @@ def test_status_change_is_saved_and_audited(app, client, telnet_report):
                                 "assignee": "Fiona"})
     assert answer.status_code == 200
     assert "Saved." in answer.text
+    assert '<button id="status-save" type="submit">Save</button>' in answer.text
+    assert '<input type="hidden" name="shown_status" value="investigating">' in answer.text
+    assert 'autocomplete="off"' in answer.text  # Back must not restore stale choices
     assert "mg_actor=Ahmad" in answer.headers["set-cookie"]
     alert = app.state.state_store.get_alert(finding_id)
     assert (alert["status"], alert["assignee"]) == ("investigating", "Fiona")
@@ -277,6 +316,32 @@ def test_status_change_is_saved_and_audited(app, client, telnet_report):
     assert audit[0]["actor"] == "Ahmad"
     assert audit[0]["target"] == finding_id
     assert audit[0]["details"]["status"] == {"from": "new", "to": "investigating"}
+    # a form opened before that change (it still shows "new") changes only the assignee
+    stale = client.patch(f"/alerts/{finding_id}/status",
+                         data={"status": "new", "shown_status": "new",
+                               "assignee": "Ali", "shown_assignee": ""})
+    assert stale.status_code == 200
+    alert = app.state.state_store.get_alert(finding_id)
+    assert (alert["status"], alert["assignee"]) == ("investigating", "Ali")
+    assert app.state.state_store.list_audit()[0]["details"] == {
+        "assignee": {"from": "Fiona", "to": "Ali"}}
+    assert '<input type="hidden" name="shown_assignee" value="Ali">' in stale.text
+    # and the other way round: a form that still shows "Fiona" changes only the status
+    client.patch(f"/alerts/{finding_id}/status",
+                 data={"status": "resolved", "shown_status": "investigating",
+                       "assignee": "Fiona", "shown_assignee": "Fiona"})
+    alert = app.state.state_store.get_alert(finding_id)
+    assert (alert["status"], alert["assignee"]) == ("resolved", "Ali")
+    # a browser drops line breaks from the text box but not from the hidden field
+    app.state.state_store.update_alert(finding_id, actor="api", at=RECEIVED_AT, assignee="Ali\nB")
+    client.patch(f"/alerts/{finding_id}/status",
+                 data={"status": "new", "shown_status": "resolved",
+                       "assignee": "AliB", "shown_assignee": "Ali\nB"})
+    assert app.state.state_store.get_alert(finding_id)["assignee"] == "Ali\nB"
+    # a file sent under the field's name is not a name: it counts as empty
+    client.patch(f"/alerts/{finding_id}/status", data={"status": "new", "shown_status": "new"},
+                 files={"assignee": ("x.txt", b"Mallory", "text/plain")})
+    assert app.state.state_store.get_alert(finding_id)["assignee"] == ""
 
 
 def test_status_change_uses_the_name_cookie(app, client, telnet_report):
@@ -294,6 +359,7 @@ def test_status_change_needs_a_name(app, client, telnet_report):
                           data={"status": "resolved"})
     assert answer.status_code == 400
     assert "Type your name" in answer.text
+    assert 'pattern=".*\\S.*"' in answer.text  # the browser refuses a name of only spaces
     assert app.state.state_store.list_audit() == []
 
 

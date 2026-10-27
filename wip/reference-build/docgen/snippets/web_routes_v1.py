@@ -28,6 +28,7 @@ TEMPLATES = Jinja2Templates(directory=Path(__file__).resolve().parent / "templat
 
 MODES = ("analyst", "home")
 YEAR_SECONDS = 365 * 24 * 3600
+QUEUE_LIMIT = 200          # rows on the queue page; the caption says when more match
 
 # Home mode: the severity in plain words (no jargon), and color is never the only signal.
 SEVERITY_WORDS = {
@@ -57,10 +58,15 @@ SECURITY_HEADERS = {
 # ---------- small helpers ----------
 
 def utc_time(ts: float | None) -> str:
-    """Unix seconds -> "2026-10-06 14:03:22 UTC" (the same on every machine)."""
+    """Unix seconds -> "2026-10-06 14:03:22 UTC" (the same on every machine).
+    Times come from logs, which an attacker can write: one a date cannot hold
+    (after the year 9999, inf, NaN) is shown as it is instead of breaking the page."""
     if ts is None:
         return ""
-    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    try:
+        return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    except (TypeError, ValueError, OverflowError, OSError):
+        return f"{ts!r} (not a valid time)"
 
 
 TEMPLATES.env.filters["utc_time"] = utc_time
@@ -89,6 +95,15 @@ def empty_to_none(value: str | None) -> str | None:
     return value or None
 
 
+def text_field(value) -> str:
+    """A form value as a text box holds it: browsers drop line breaks from text inputs
+    (but not from hidden ones), so an assignee stored with one compares equal.
+    A part that is not text (a file sent under the field's name) counts as empty."""
+    if not isinstance(value, str):
+        return ""
+    return value.replace("\r", "").replace("\n", "").strip()
+
+
 def safe_next(path: str) -> str:
     """Only a path on this site: "//evil.example" or "https://..." would be an open redirect."""
     if path.startswith("/") and not path.startswith("//") and "\\" not in path:
@@ -102,11 +117,13 @@ def safe_next(path: str) -> str:
 def queue(request: Request, status: str | None = None, severity: str | None = None):
     status, severity = empty_to_none(status), empty_to_none(severity)
     try:
-        alerts = request.app.state.state_store.list_alerts(status=status, severity=severity)
+        alerts = request.app.state.state_store.list_alerts(
+            status=status, severity=severity, limit=QUEUE_LIMIT + 1)
     except ValueError as err:  # unknown status or severity in the URL
         return error_page(request, 400, str(err))
     return render(request, "queue.html", {
-        "alerts": alerts, "status": status or "", "severity": severity or "",
+        "alerts": alerts[:QUEUE_LIMIT], "more": len(alerts) > QUEUE_LIMIT,
+        "status": status or "", "severity": severity or "",
         "statuses": ALERT_STATUSES,
     })
 

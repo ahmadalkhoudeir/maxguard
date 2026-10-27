@@ -16,8 +16,8 @@
             "Vendor htmx (one file, 0BSD license) from the npm registry and check it is the exact "
             "file the team reviewed:\n\n@@RUN htmx@@\n\nOn macOS use `shasum -a 256` instead of "
             "`sha256sum`. htmx already has a row in `docs/DEPENDENCIES.md`.",
-            "Create `maxguard/web/__init__.py` (one line):\n\n@@FILE maxguard/web/__init__.py@@\n\n"
-            "and `maxguard/web/routes.py`:\n\n@@FILE maxguard/web/routes.py@@\n\n"
+            "Create an **empty** file `maxguard/web/__init__.py` (it makes the folder part of the "
+            "Python package), then `maxguard/web/routes.py`:\n\n@@FILE maxguard/web/routes.py@@\n\n"
             "`create_app()` includes this router as soon as the module exists. What to notice: "
             "`render()` adds three headers to every page. The **Content-Security-Policy** tells "
             "the browser to load and run nothing that does not come from this computer, a second "

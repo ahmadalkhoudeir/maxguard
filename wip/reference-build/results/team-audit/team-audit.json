@@ -1,0 +1,918 @@
+[
+ {
+  "people": [
+   {
+    "person": "Jaiden (JWinborne1)",
+    "summary": "None of Jaiden's work is merged except a broken docs/TEAM.md row, which he committed straight to main without a PR. His 5 code commits sit on 4 stacked branches: maxguard/__init__.py, then jaiden/event-schema, then jaiden/docker-image, then jaiden/storage. All of them start from main as of Oct 12, which is 12 commits behind today's main. The guide's branch jaiden/restructure is just that old main commit and holds no work. Only JAI-01 has real content, and even there the CI workflow and the only test are 0-byte files (actionlint: 'workflow is empty'; pytest: 'no tests ran', exit 5). JAI-03's normalize.py is the guide's file in a doubled folder (maxguard/maxguard/events/) with a changed import, so ruff fails with I001. Every other JAI-03, JAI-04, JAI-05 and JAI-06 file is 0 bytes, even though the commit messages name the features. JAI-02 (the three contracts) and JAI-07 do not exist on any branch. Shortest safe order: JAI-00 steps 1-3 (email privacy, git user.email, VS Code final newline), then JAI-01 (rebuild jaiden/restructure as main plus his commit 2e33504 and repair 6 files; tested here: fast-forward push, all 7 files byte-identical to the guide, ruff passes, 1 passed) and merge it. Then JAI-02 from the guide on jaiden/contracts-v2 (13 and 14 passed) and merge it; target for both is Wed Oct 28. Then the TEAM.md PR, which can be opened while JAI-01 is in review. Then JAI-03, JAI-06, JAI-04, JAI-05 and JAI-07, each started only when its 'Needs first' tasks are merged. JAI-03 to JAI-07 cannot merge by Fri Oct 30 because KAR-02, FIO-01, FIO-02, JAK-03, JAK-04, AMO-01 and JON-03 are not on main. While he waits, JAI-08 is his next unblocked task (it needs only JAI-01).",
+    "tasks": [
+     {
+      "id": "JAI-00",
+      "status": "branch-partial",
+      "branch": "none: two direct web commits on main (afd51df, 5e24f3f); guide branch jaiden/week0-team-row was never made",
+      "due": "W0 (Fri Oct 9, 2026)",
+      "blocked_by": [],
+      "problems": [
+       "No branch and no PR. His row reached main through two GitHub web-editor commits (afd51df 'Update TEAM.md Add Jaiden', 5e24f3f 'Update TEAM.md'; committer GitHub, on main's first-parent line), so nobody reviewed it.",
+       "Row on main (docs/TEAM.md line 3) reads '| Jaiden Winborne | JWinborne12 | Co-lead; Architecture and Release Lead; API backend and storage|'. It has 3 columns instead of 4, the GitHub name sits in the Role column, the Module column is missing, and there is no space before the last '|'. The header order (fiona.md, FIO-00) is '| Name | Role | GitHub | Module |'.",
+       "GitHub name typo: JWinborne12 instead of JWinborne1. AHM-01 Step 1 (ahmad.md:353) invites teammates 'by the GitHub name in docs/TEAM.md with the Write role', so the typo could give Write access to the wrong account.",
+       "Expected row (jaiden.md:215): '| Jaiden Winborne | Co-lead; Architecture and Release Lead | JWinborne1 | Architecture, API, storage, releases |'.",
+       "Email privacy is not set up (guide 0.2; CLAUDE.md rule 6). His web commits on main (012ce36, afd51df, 5e24f3f) carry his school address (...@my.ccsu.edu). All 5 of his branch commits use git's automatic user@hostname identity (...@Mac.home / ...@Mac.lan), which means user.email was never set to the GitHub noreply address.",
+       "The 'Week 0 check-in' reply in Discussions and the Zeek http.log check cannot be verified from the repository."
+      ],
+      "fix_steps": [
+       "1. Now, before making any new commit: on github.com open Settings -> Emails, tick 'Keep my email addresses private' and 'Block command line pushes that expose my email', and copy the noreply address GitHub shows (guide 0.2).",
+       "2. Run `git config --global user.email \"<the copied ID+JWinborne1@users.noreply.github.com address>\"`. Then `git config --global user.email` must print that address.",
+       "3. In VS Code open Settings, search for 'Insert Final Newline' and tick it. Every file he committed is missing its last newline.",
+       "4. While JAI-01 waits for review: `cd ~/projects/maxguard && git switch main && git pull && git switch -c jaiden/week0-team-row`",
+       "5. Fix the row: perl -pi -e 's/^\\| Jaiden Winborne \\|.*$/| Jaiden Winborne | Co-lead; Architecture and Release Lead | JWinborne1 | Architecture, API, storage, releases |/' docs/TEAM.md && grep -n 'Jaiden' docs/TEAM.md   -> prints '3:| Jaiden Winborne | Co-lead; Architecture and Release Lead | JWinborne1 | Architecture, API, storage, releases |'",
+       "6. `git add docs/TEAM.md && git commit -m \"docs: add Jaiden to TEAM.md\" && git push -u origin jaiden/week0-team-row`",
+       "7. `gh pr create --base main --title \"docs: add Jaiden to TEAM.md\" --body \"Week 0 onboarding. Fixes my row: Name | Role | GitHub | Module order and GitHub name JWinborne1 (was JWinborne12).\" --reviewer ahmadalkhoudeir`. After approval use Squash and merge, then do guide 0.9 step 6.",
+       "8. Reply to the pinned 'Week 0 check-in' discussion (0.10) if he has not yet. After JAI-01 is merged, do 0.11."
+      ]
+     },
+     {
+      "id": "JAI-01",
+      "status": "branch-broken",
+      "branch": "origin/maxguard/__init__.py (commit 2e33504); guide branch origin/jaiden/restructure = old main 5e24f3f with no work on it",
+      "due": "W0 (Fri Oct 9, 2026)",
+      "blocked_by": [],
+      "problems": [
+       "The work is on a branch literally named 'maxguard/__init__.py' (commit 2e33504; 1 commit ahead of main, 12 behind). The guide's branch origin/jaiden/restructure exists but points at 5e24f3f, an old main commit (0 ahead), so it holds none of the JAI-01 work.",
+       ".github/workflows/ci.yml is 0 bytes (guide file: 839 B). actionlint: '.github/workflows/ci.yml:1:1: workflow is empty [syntax-check]', so CI can never run.",
+       "tests/unit/test_package.py is 0 bytes (guide file: 287 B). `pytest -m \"not integration\" -q` prints 'no tests ran in 0.00s' and exits 5; `ruff check .` prints 'All checks passed!'.",
+       "tests/conftest.py differs from the guide: '-import pytest' became '+from importlib import import_module' plus '+pytest = import_module(\"pytest\")', and the final newline is missing.",
+       "cli/__init__.py differs: the docstring backticks became single quotes ('maxguard' / 'python -m cli.main'), and the final newline is missing.",
+       "maxguard/__init__.py and pyproject.toml match the guide except for the missing final newline. .gitignore matches (it is already on main). The legacy/ move is correct: all 13 paths from Step 2 moved (16 files renamed, R100).",
+       "He later filled in ci.yml and test_package.py inside the JAI-03 commit cee8da0 (wrong task and branch), and those copies still lack the final newline.",
+       "Step 10 (the main-protection ruleset) waits for the merge. Until then main accepts direct pushes, which is how his TEAM.md commits got in."
+      ],
+      "fix_steps": [
+       "1. Safety check: `cd ~/projects/maxguard && git status` must print 'nothing to commit, working tree clean', and `git log --branches --not --remotes --oneline` must print nothing. If it prints commits, push them or ask Ahmad before going on.",
+       "2. Keep a local copy of all 5 of his commits so nothing is lost: `git fetch origin --prune && git branch --no-track backup/jaiden-storage origin/jaiden/storage`",
+       "3. Rebuild the guide's branch as today's main plus his commit: `git switch -C jaiden/restructure origin/main && git cherry-pick 2e33504` (tested: it applies cleanly and keeps the legacy/ moves).",
+       "4. Bring back the CI file and test he wrote later: `git checkout cee8da0 -- .github/workflows/ci.yml tests/unit/test_package.py`",
+       "5. Undo his two content changes. First: printf '%s\\n' '\"\"\"MaxGuard command line interface (`maxguard` / `python -m cli.main`).\"\"\"' > cli/__init__.py   Then: perl -0pi -e 's/from importlib import import_module\\n//; s/^pytest = import_module\\(\"pytest\"\\)$/import pytest/m' tests/conftest.py",
+       "6. Add the missing final newlines: for f in maxguard/__init__.py pyproject.toml tests/conftest.py tests/unit/test_package.py .github/workflows/ci.yml; do printf '\\n' >> \"$f\"; done",
+       "7. Guide Steps 7-8. If .venv does not exist yet: `python3.11 -m venv .venv && source .venv/bin/activate && pip install --upgrade pip && pip install -e \".[dev]\"`. Then `ruff check .` must print 'All checks passed!' and `pytest -m \"not integration\" -q` must print '1 passed'.",
+       "8. Commit under the noreply address: `git add -A && git commit --amend --reset-author -m \"chore: restructure repo, add pyproject and CI (JAI-01)\"`. Then `git diff origin/main...HEAD | grep -c 'No newline at end of file'` must print 0. Push with `git push -u origin jaiden/restructure` (a fast-forward, so no force is needed).",
+       "9. Guide Step 9: open the PR from jaiden/restructure titled 'chore: restructure repo, add pyproject and CI (JAI-01)'. Paste the real ruff and pytest output, write 'Closes #<JAI-01 issue>', and pick reviewer @ahmadalkhoudeir. The 'test' check must be green. This is on the critical path; the roadmap README says such PRs are reviewed within one day.",
+       "10. After the merge: do guide Step 10 (main-protection ruleset) and announce the merge in Discussions -> Announcements so teammates run Week 0 section 0.11. Then delete the odd branch with `git push origin --delete maxguard/__init__.py`, plus `git branch -D maxguard/__init__.py` if `git branch --list 'maxguard/*'` shows it locally."
+      ]
+     },
+     {
+      "id": "JAI-02",
+      "status": "not-started",
+      "branch": "none (guide: jaiden/contracts-v2)",
+      "due": "W0 (Fri Oct 9, 2026)",
+      "blocked_by": [
+       "JAI-01"
+      ],
+      "problems": [
+       "Not started. None of these exists on any of his branches: maxguard/models.py, maxguard/ids.py, maxguard/adapters/__init__.py, maxguard/adapters/base.py, maxguard/rules/__init__.py, maxguard/rules/base.py, maxguard/mapping/__init__.py, maxguard/mapping/loader.py, tests/unit/test_contracts.py. There is no jaiden/contracts-v2 branch. I searched all 12 remote branches; the only copies are in a planning save point under wip/reference-build on origin/claude/happy-newton-h26wx7, which is not his work.",
+       "It directly blocks FIO-01, JAI-03, JON-01 and AMO-01 (taskplan dependencies).",
+       "His later branches already import these modules. Importing his JAI-03 normalize.py fails with 'ModuleNotFoundError: No module named 'maxguard.adapters''."
+      ],
+      "fix_steps": [
+       "1. Right after JAI-01 is merged: `git switch main && git pull && git switch -c jaiden/contracts-v2`",
+       "2. `mkdir -p maxguard/adapters maxguard/rules maxguard/mapping && touch maxguard/adapters/__init__.py maxguard/mapping/__init__.py` (these two files stay empty).",
+       "3. Paste guide JAI-02 Steps 2-7 exactly into maxguard/models.py, maxguard/ids.py, maxguard/adapters/base.py, maxguard/rules/__init__.py, maxguard/rules/base.py, maxguard/mapping/loader.py and tests/unit/test_contracts.py.",
+       "4. `pytest tests/unit/test_contracts.py -q` must print '13 passed'; `pytest -m \"not integration\" -q` must print '14 passed'; `ruff check .` must print 'All checks passed!'.",
+       "5. `git add -A && git status` must show exactly these 9 new files. Then `git commit -m \"feat: contracts v2.0 - Finding, IDs, adapter protocol, registry, loader (JAI-02)\" && git push -u origin HEAD`",
+       "6. Open a PR titled 'feat: contracts v2.0 - Finding, IDs, adapter protocol, registry, loader (JAI-02)' with the label 'contract-change', 'Closes #<JAI-02 issue>', and reviewer @ahmadalkhoudeir (Ahmad must approve). After the merge, post 'Contracts v2.0 merged' in Discussions -> Announcements (Step 10)."
+      ]
+     },
+     {
+      "id": "JAI-03",
+      "status": "branch-broken",
+      "branch": "origin/jaiden/event-schema (commit cee8da0, stacked on 2e33504)",
+      "due": "W1 (Fri Oct 16, 2026)",
+      "blocked_by": [
+       "JAI-02",
+       "KAR-02",
+       "FIO-01",
+       "FIO-02",
+       "JAK-03"
+      ],
+      "problems": [
+       "normalize.py was committed in a doubled folder: maxguard/maxguard/events/normalize.py. The expected maxguard/events/normalize.py is missing.",
+       "Apart from that, normalize.py equals the guide except for two things: line 17 reads 'from ..ids import iso_to_epoch, record_id' (guide: 'from maxguard.ids import iso_to_epoch, record_id'), and the final newline is missing. ruff reports 'I001 [*] Import block is un-sorted or un-formatted --> maxguard/maxguard/events/normalize.py:11:1' and exits 1.",
+       "maxguard/events/lookup.py (guide: 1459 B), tests/unit/test_normalize.py (7863 B) and tests/unit/test_lookup.py (1977 B) are 0 bytes. maxguard/events/__init__.py equals the guide except for the missing final newline.",
+       "Commit cee8da0 also changes two JAI-01 files (.github/workflows/ci.yml and tests/unit/test_package.py).",
+       "The branch is stacked on the JAI-01 commit and is 12 commits behind main. pytest prints '1 passed' only because every JAI-03 test file is empty.",
+       "It cannot pass before its prerequisites. The guide's JAI-03 files placed on top of the JAI-02 stage fail with 'ModuleNotFoundError: No module named 'maxguard.adapters.zeeklogs'' (that module comes from FIO-01). With KAR-02, FIO-01, FIO-02 and JAK-03 present (the JAK-03 stage), his normalize.py moved to the right folder plus the guide's other files gives '48 passed'."
+      ],
+      "fix_steps": [
+       "1. Start only when KAR-02, FIO-01, FIO-02 and JAK-03 are merged: `git switch main && git pull && git switch -C jaiden/event-schema origin/main && mkdir -p maxguard/events`",
+       "2. Recover his normalize.py into the right folder with the guide's import: git show backup/jaiden-storage:maxguard/maxguard/events/normalize.py > maxguard/events/normalize.py && perl -pi -e 's/^from \\.\\.ids import /from maxguard.ids import /' maxguard/events/normalize.py",
+       "3. Recover his events/__init__.py and add both final newlines: git show backup/jaiden-storage:maxguard/events/__init__.py > maxguard/events/__init__.py && for f in maxguard/events/normalize.py maxguard/events/__init__.py; do printf '\\n' >> \"$f\"; done   (tested: both files then match the guide byte for byte)",
+       "4. Paste guide JAI-03 Step 3 (maxguard/events/lookup.py) and Step 4 (tests/unit/test_normalize.py and tests/unit/test_lookup.py). His versions of these files are empty.",
+       "5. `pytest tests/unit/test_normalize.py tests/unit/test_lookup.py -q` must print '48 passed'; `ruff check .` must print 'All checks passed!'.",
+       "6. `git add -A && git commit -m \"feat: common event schema normalizer and record lookup (JAI-03)\" && git push --force-with-lease -u origin jaiden/event-schema`. This replaces the stacked commits; the old ones stay in backup/jaiden-storage. Open a PR with the same title and reviewer @ahmadalkhoudeir."
+      ]
+     },
+     {
+      "id": "JAI-04",
+      "status": "branch-broken",
+      "branch": "origin/jaiden/docker-image (commit 514f419; the branch also holds the JAI-01, JAI-03 and JAI-05 commits)",
+      "due": "W1 (Fri Oct 16, 2026)",
+      "blocked_by": [
+       "JAI-01",
+       "AMO-01"
+      ],
+      "problems": [
+       "All four files are 0 bytes: docker/Dockerfile (guide: 2943 B), .dockerignore (457 B), docker/compose.yaml (1706 B) and docker/compose.dev.yaml (975 B). The commit stat reads '4 files changed, 0 insertions(+)'.",
+       "`docker compose -f docker/compose.yaml config --quiet` prints 'empty compose file' and exits 1. `docker build -f docker/Dockerfile .` prints 'ERROR: failed to build: failed to solve: the Dockerfile cannot be empty'. With the guide's files, the same checks print 'compose.yaml OK' and 'compose.dev.yaml OK'.",
+       "The branch is stacked: it also carries the JAI-01, JAI-03 and JAI-05 commits, and it is 12 commits behind main.",
+       "The image build needs mappings/ from AMO-01 (the Dockerfile runs 'COPY mappings ./mappings'), and AMO-01 is not merged. I did not run the image build here because it downloads Debian and PyPI packages."
+      ],
+      "fix_steps": [
+       "1. Start when AMO-01 is merged: `git switch main && git pull && git switch -C jaiden/docker-image origin/main && mkdir -p docker`",
+       "2. Paste guide JAI-04 Steps 2-4 into docker/Dockerfile, .dockerignore, docker/compose.yaml and docker/compose.dev.yaml.",
+       "3. Step 5: `docker compose -f docker/compose.yaml config --quiet && echo \"compose.yaml OK\"` and `docker compose -f docker/compose.yaml -f docker/compose.dev.yaml config --quiet && echo \"compose.dev.yaml OK\"`",
+       "4. Step 6 (this will be the first real run; the build needs internet): `docker build -f docker/Dockerfile -t maxguard:dev .`, then the three `docker run --rm --network none maxguard:dev ...` checks. `docker run --rm maxguard:dev id` must show uid 10001. If any output differs from the guide, fix the guide in the same PR.",
+       "5. `git add -A && git commit -m \"feat: engine image (Zeek, Suricata, MaxGuard) and Compose files (JAI-04)\" && git push --force-with-lease -u origin jaiden/docker-image`. Open a PR with the same title and paste the build output."
+      ]
+     },
+     {
+      "id": "JAI-05",
+      "status": "branch-broken",
+      "branch": "origin/jaiden/docker-image (commit c6c1b36); guide branch is jaiden/pipeline",
+      "due": "W2 (Fri Oct 23, 2026)",
+      "blocked_by": [
+       "JAI-03",
+       "FIO-01",
+       "FIO-02",
+       "JAK-03",
+       "JAK-04",
+       "AMO-01"
+      ],
+      "problems": [
+       "maxguard/pipeline.py (guide: 3598 B) and tests/unit/test_pipeline.py (guide: 2206 B) are 0 bytes. The commit stat reads '2 files changed, 0 insertions(+)'.",
+       "It was committed on jaiden/docker-image instead of the guide's branch jaiden/pipeline.",
+       "Its prerequisites are not merged: JAI-03, JAK-04 and AMO-01, and through them FIO-01, FIO-02 and JAK-03."
+      ],
+      "fix_steps": [
+       "1. Start when JAI-03, JAK-04 and AMO-01 are merged, on the guide's branch: `git switch main && git pull && git switch -c jaiden/pipeline`. His empty commit c6c1b36 is simply dropped.",
+       "2. Paste guide JAI-05 Step 2 (maxguard/pipeline.py) and Step 3 (tests/unit/test_pipeline.py).",
+       "3. `pytest tests/unit/test_pipeline.py -q` must print '6 passed'; also run `ruff check .`. The Step 5 one-liner must print [[\"cleartext.telnet\", 23, [\"SC-8\", \"SC-8(1)\", \"AC-17(2)\", \"IA-5(1)\"]]] (checked on the stage).",
+       "4. `git add -A && git commit -m \"feat: pipeline.analyze from input to report (JAI-05)\" && git push -u origin HEAD`, then open a PR with the same title."
+      ]
+     },
+     {
+      "id": "JAI-06",
+      "status": "branch-broken",
+      "branch": "origin/jaiden/storage (commit c190c12, stacked on the JAI-01, JAI-03, JAI-04 and JAI-05 commits)",
+      "due": "W3 (Fri Oct 30, 2026)",
+      "blocked_by": [
+       "JAI-03"
+      ],
+      "problems": [
+       "Every file is 0 bytes (the commit stat reads '6 files changed, 0 insertions(+)'): maxguard/storage/__init__.py (guide: 294 B), state.py (13329 B), events.py (6602 B), tests/unit/test_state_store.py (7782 B) and tests/unit/test_event_store.py (4355 B).",
+       "There is an extra, misspelled file tests/unit/test_state_store_reccurrence.py (0 B). The expected tests/unit/test_state_store_recurrence.py (2721 B) is missing.",
+       "The branch is 5 commits ahead of main and 12 behind. On it, `ruff check .` exits 1 (the JAI-03 I001 error), and pytest's '1 passed' is only test_package.py.",
+       "It needs only JAI-03 to be merged first. I checked: the guide's JAI-06 files on top of the JAI-03 stage give 'All checks passed!' and '215 passed', so JAI-04 and JAI-05 are not required first."
+      ],
+      "fix_steps": [
+       "1. Start as soon as JAI-03 is merged: `git switch main && git pull && git switch -C jaiden/storage origin/main && mkdir -p maxguard/storage`",
+       "2. Paste guide JAI-06 Steps 2-5 into maxguard/storage/__init__.py, maxguard/storage/state.py, maxguard/storage/events.py, tests/unit/test_state_store.py, tests/unit/test_state_store_recurrence.py (spelled 'recurrence', with one 'c' before 'urrence') and tests/unit/test_event_store.py.",
+       "3. `pytest tests/unit/test_state_store.py tests/unit/test_state_store_recurrence.py tests/unit/test_event_store.py -q` must print '30 passed'; `ruff check .` must print 'All checks passed!'.",
+       "4. `git add -A && git status` must show 6 new files and no *_reccurrence.py. Then `git commit -m \"feat: StateStore (SQLite) and EventStore (Parquet + DuckDB) (JAI-06)\" && git push --force-with-lease -u origin jaiden/storage`, and open a PR with the same title.",
+       "5. When JAI-03 through JAI-06 are all merged, delete the backup: `git branch -D backup/jaiden-storage`"
+      ]
+     },
+     {
+      "id": "JAI-07",
+      "status": "not-started",
+      "branch": "none (guide: jaiden/api)",
+      "due": "W3 (Fri Oct 30, 2026)",
+      "blocked_by": [
+       "JAI-05",
+       "JAI-06",
+       "JON-03"
+      ],
+      "problems": [
+       "Not started: there is no maxguard/api/ on any branch and no jaiden/api branch.",
+       "Blocked by JAI-05, JAI-06 and JON-03, none of which is merged. The W3 'upload in the browser' demo also needs AHM-02, which depends on JAI-07.",
+       "The guide's JAI-07 section changed on main after his Oct 12 base: app.py and test_api.py are different in 5e24f3f's guide and main's guide. He must start from an updated main."
+      ],
+      "fix_steps": [
+       "1. Start when JAI-05, JAI-06 and JON-03 are merged: `git switch main && git pull && git switch -c jaiden/api`, and follow the guide as it is on main.",
+       "2. Do guide JAI-07 Steps 2-8 exactly: the sensor_id argument in pipeline.py, an empty maxguard/api/__init__.py, maxguard/api/app.py, the conftest.py fixture, tests/unit/test_api.py, tests/integration/test_api_upload.py, and the curl check.",
+       "3. `pytest tests/unit/test_api.py -q` must print '39 passed'; then run `ruff check .` and `pytest -m \"not integration\" -q`.",
+       "4. `git add -A && git commit -m \"feat: FastAPI app with uploads, alerts, events, SSE and ingest (JAI-07)\" && git push -u origin HEAD`, then open a PR with the same title."
+      ]
+     }
+    ]
+   }
+  ],
+  "notes": "How I checked: I built the expected stages with docgen/build_stage.py into /tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/agentwork/audit-jaiden/stages/ and exported each branch with git archive into /tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/agentwork/audit-jaiden/br/. I byte-compared them with /tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/agentwork/audit-jaiden/cmp_task.py, then ran `ruff check .` and `pytest -m \"not integration\" -q` inside each export.\n\nOld guide ruled out: the guide on main contains every JAI-01..JAI-06 stage file word for word. Between his Oct 12 base (5e24f3f) and main, only the test timing lines changed in those sections. JAI-07's section did change.\n\nFix commands tested: I replayed them on a local mirror of today's remote branches (a bare repo in my folder; nothing was pushed to GitHub and /home/user/maxguard was not changed).\n- JAI-01: the push is a fast-forward ('5e24f3f..75a33b2 jaiden/restructure -> jaiden/restructure'), all 7 files come out byte-identical to the stage, ruff prints 'All checks passed!', and pytest prints '1 passed'.\n- JAI-02: '13 passed' and '14 passed', and the tree matches the JAI-02 stage.\n- The TEAM.md perl line and the JAI-03 recovery commands produce exactly the guide's bytes.\n\nNot run:\n- The JAI-04 image build, because it downloads Debian and PyPI packages.\n- Anything on GitHub itself: PRs, issues, Discussions, rulesets.\n\nNothing was installed or downloaded. I used only the pre-approved tools: the ref venv's ruff and pytest, actionlint, the gitleaks image and docker compose. gitleaks over his 5 commits reported 'no leaks found'.\n\nFor Ahmad:\n1. origin/ahmad/tests-scaffold also adds tests/conftest.py, and git merge-tree reports 'CONFLICT (add/add): Merge conflict in tests/conftest.py' against JAI-01. Do not merge it; JAI-01 replaces it.\n2. docs/TEAM.md on main has no header row at all. Fiona's FIO-00 step adds '| Name | Role | GitHub | Module |'.\n3. Main's history already contains school addresses (...@my.ccsu.edu) in Jaiden's web commits 012ce36, afd51df and 5e24f3f, and in the PR #6 merge commit 65eee05. Removing them would mean rewriting main with a force push, which is your decision. Turning on GitHub email privacy stops new ones.\n4. PR #7 was merged with a merge commit (012ce36), not with Squash and merge as the guide says.\n5. Realistic W3 for Jaiden: JAI-00, JAI-01 and JAI-02 can be done and merged this week. JAI-03 to JAI-07 cannot merge by Oct 30, because main has no maxguard/ code and origin has no FIO, JAK, AMO or JON task branches (amory/week0-team-row has no commits beyond main). KAR-01 exists only on karthik/traffic-lab. Review JAI-01 and JAI-02 the same day they are opened; FIO-01, JON-01 and AMO-01 wait on JAI-02."
+ },
+ {
+  "people": [
+   {
+    "person": "Karthik Nair (@Karthiknair91)",
+    "summary": "Only KAR-01 has been started. Its branch, origin/karthik/traffic-lab, is broken: 13 of its 14 captures are 24-byte header-only files with 0 packets. The cause is that 13 of the 14 scenario files were never added. I reproduced this in Docker: the client fails with \"python: can't open file '/scenarios/ftp.py'\" and exits with code 2, and `--abort-on-container-exit` then stops tcpdump before it records anything. The same loop with the guide's files records all 14 captures (1-4 KB, every client exit code 0). The fix is mechanical, but the captures must be the reference captures, not new recordings: a faithful re-recording made 9 later unit tests fail at the W3 stage, and his own valid telnet.pcap alone made 5 fail. KAR-00 is not done: there is no TEAM.md pull request, and Git's email is not set to the GitHub noreply address. KAR-02, KAR-03 and KAR-04 are not started and are blocked. KAR-02 needs JAK-01 and JAK-02 (Jakub has no branches) and JAI-01 (not merged). KAR-03 needs JAI-04 and JAI-05 (not merged). W3 (KAR-04 merged by Friday Oct 30) is out of reach unless that whole chain merges first. Realistic goal this week: KAR-00 and KAR-01 merged by Wednesday Oct 28, because KAR-01 is the root of the critical path: it blocks 23 tasks due W1-W3.",
+    "tasks": [
+     {
+      "id": "KAR-00",
+      "status": "not-started",
+      "due": "W0 (Fri Oct 9, 2026)",
+      "branch": "karthik/week0-team-row (does not exist on the remote)",
+      "blocked_by": [],
+      "problems": [
+       "There is no karthik/week0-team-row branch and no pull request. docs/TEAM.md on origin/main has only 3 rows (Fiona, Ahmad, Jaiden) and no Karthik row.",
+       "Step 0.2 (Git email) is not done. His only commit, de97008, has author and committer 'Karthik Nair <karthiknair@Karthiks-Macbook.local>'. That is Git's automatic user@hostname fallback, not the GitHub noreply address, and it publishes his laptop's host name in a public repository.",
+       "Not checkable from Git: his reply to the 'Week 0 check-in' Discussion (step 0.10). Step 0.11 (.venv) cannot be done yet because JAI-01 is not on main: it exists only as commit 2e33504 on branch origin/maxguard/__init__.py, and origin/jaiden/restructure has no commits beyond main."
+      ],
+      "fix_steps": [
+       "git config --global user.email \"<the 12345678+Karthiknair91@users.noreply.github.com address shown on github.com Settings -> Emails>\"   then check: git config --global user.email",
+       "cd ~/projects/maxguard && git checkout main && git pull && git checkout -b karthik/week0-team-row",
+       "echo '| Karthik Nair | Test and CI Engineer | Karthiknair91 | Testing |' >> docs/TEAM.md   (TEAM.md on main ends with a newline, so this adds a new last row)",
+       "git add docs/TEAM.md && git commit -m \"docs: add Karthik to TEAM.md\" && git push -u origin karthik/week0-team-row",
+       "gh pr create --base main --title \"docs: add Karthik to TEAM.md\" --body \"Week 0 onboarding.\" --reviewer JWinborne1   then after approval: Squash and merge, git checkout main && git pull && git branch -d karthik/week0-team-row",
+       "Reply to the pinned 'Week 0 check-in' Discussion (guide step 0.10). Do step 0.11 as soon as JAI-01 is merged."
+      ]
+     },
+     {
+      "id": "KAR-01",
+      "status": "branch-broken",
+      "due": "W0 (Fri Oct 9, 2026)",
+      "branch": "karthik/traffic-lab",
+      "blocked_by": [],
+      "problems": [
+       "The work is late and has no pull request. The branch has one commit, de97008 'test: traffic lab and the 14 synthetic test captures (KAR-01)', dated 2026-10-23, whose parent is the current origin/main (65eee05).",
+       "Of the stage's 35 KAR-01 files: 6 are byte-identical (lab/compose.yaml, lab/server/Dockerfile, lab/server/make_certs.py, lab/client/Dockerfile, lab/client/scenarios/_common.py, lab/client/scenarios/telnet.py), 14 are missing and 15 differ. There are no extra files, no wrong paths and no files from other tasks.",
+       "MISSING (14): 13 of the 14 scenarios (lab/client/scenarios/ cert_expired, cert_self_signed, cert_sha1, cert_weak_key, clean_tls13, dns_lookup, ftp, imap, plain_http, plain_http_alt, pop3, tls_weak_cipher, tls_weak_version .py) and tests/pcaps/SOURCES.md.",
+       "EMPTY CAPTURES: 13 of the 14 tests/pcaps/*.pcap files are 24 bytes, and all 13 share one SHA-256 (704e5e5b3234433c...). Each is just a pcap global header (magic a1b2c3d4, v2.4, snaplen 262144, Ethernet) with 0 packets. The stage's versions are 1108-3975 bytes (14-38 packets).",
+       "telnet.pcap is a real recording but not the reference one: 3777 B, 41 packets (Telnet 172.18.0.3:33424 -> 172.18.0.2:23 plus IGMP/ARP/ICMPv6 start-up noise), against the stage's 2137 B and 27 packets (SHA deb2874b1e5c2b87). The KAR-03 integration tests still pass with it (15 passed), but with it in the W3 (KAR-04) stage 5 other people's unit tests fail: JAI-07 test_api::test_events_and_assets, ALI-03 test_benchmark::test_committed_eval_set_is_up_to_date, and 3 JAI-06 test_event_store tests.",
+       "lab/server/services.py is 3981 B against the stage's 4138 B. The only difference is two missing comment lines in dns_reply() ('# flags 0x8180 = response + recursion desired + recursion available, NOERROR' and '# 0xc00c points back to the name in the question (offset 12); TTL 300 s'). The code is identical.",
+       "ROOT CAUSE, reproduced: his compose.yaml matches the guide's, but lab/client/scenarios holds only _common.py and telnet.py, so the client image has no other scenarios. Running the guide's Step 6 loop on his lab, every other scenario printed \"python: can't open file '/scenarios/ftp.py': [Errno 2] No such file or directory\", then 'client-1 exited with code 2'. --abort-on-container-exit then stopped the sniffer ('0 packets captured'), so tcpdump left only its 24-byte header. The loop ignores exit code 2 and Step 7's cp copied the empty files. My rerun gave 13 x 24 B plus a good telnet.pcap, the same as his branch. The same loop with the guide's files gave all 14 clients exit 0 and 13-40 packets per capture (1038-3905 B), and Zeek saw the right protocol and port in each one (for example TLSv10 on 4431, TLS_RSA_WITH_NULL_SHA256 on 4432, DNS on 53).",
+       "Lint and tests on the branch: there is no pyproject.toml (JAI-01 is not merged). `ruff check .` gives 'Found 48 errors': 43 are in pre-existing legacy files he did not touch, and 5 are in lab/_common.py and make_certs.py, which are identical to the guide's files and only trip ruff 0.16.10's default rules SIM117/DTZ001. `pytest -m \"not integration\" -q` gives 'no tests ran' (exit 5). With his files on the JAI-02 stage (which has JAI-01's pyproject), the results are 'All checks passed!' and '14 passed'.",
+       "gitleaks v8.30.1 on his branch's lab/ and tests/ folders: 'no leaks found'. No .key/.crt/.csr files are committed."
+      ],
+      "fix_steps": [
+       "Set the noreply email first (KAR-00 step 1).",
+       "cd ~/projects/maxguard && git fetch origin && git checkout karthik/traffic-lab && git pull",
+       "git archive origin/claude/happy-newton-h26wx7 wip/reference-build/ref/lab wip/reference-build/ref/tests/pcaps | tar -x -f - --strip-components=3   (this adds the 13 missing scenarios, puts the 2 comment lines back in services.py and replaces all 14 captures with the reference ones; the audit verified every file is byte-identical to the guide)",
+       "git show origin/claude/happy-newton-h26wx7:wip/reference-build/docgen/snippets/pcaps_SOURCES.md > tests/pcaps/SOURCES.md   (this is the guide's Step 7 text)",
+       "Check: shasum -a 256 tests/pcaps/*.pcap | cut -c1-16   Each value must appear in the SHA-256 column of tests/pcaps/SOURCES.md (telnet deb2874b1e5c2b87, ftp 01434b223a3cabc2, ...), and ls -l tests/pcaps must show 14 .pcap files of 1-4 KB.",
+       "Redo guide Steps 5-6 to prove the lab works: cd lab && docker compose build && cd ..   then the Step 6 loop. Every scenario must print 'client-1 exited with code 0'. Then find lab/captures -name '*.pcap' -size -100c must print nothing. Do NOT run Step 7's 'cp lab/captures/*.pcap tests/pcaps/': keep the reference captures (re-recorded ones broke 9 later unit tests in this audit).",
+       "Redo Step 8: docker run --rm -v \"$PWD/tests/pcaps:/p:ro\" --entrypoint tcpdump nicolaka/netshoot:v0.15 -nn -c 4 -r /p/telnet.pcap 'tcp port 23'   It must print exactly the guide's 4 lines (the first starts '01:31:24.287418 IP 172.18.0.3.55398 > 172.18.0.2.23: Flags [S]').",
+       "git add lab tests/pcaps && git status   (only lab/ and tests/pcaps/ files may appear, nothing under lab/captures/)",
+       "Replace the old commit, which has the hostname email, with one clean commit: git reset --soft $(git merge-base HEAD origin/main) && git commit -m \"test: traffic lab and the 14 synthetic test captures (KAR-01)\" && git log -1 --format='%an <%ae>'   (it must show the noreply address), then: git push --force-with-lease",
+       "Open the pull request (guide Step 9) with the title 'test: traffic lab and the 14 synthetic test captures (KAR-01)'. Fill in the template with the Step 6 and Step 8 output, write Closes #<n> (find n with: gh issue list --search \"KAR-01 in:title\"), and pick @JWinborne1 as reviewer. Say in the body that ruff check . and pytest cannot run on main until JAI-01 is merged. Target: merged by Wed Oct 28 so Jakub can start JAK-01/JAK-02."
+      ]
+     },
+     {
+      "id": "KAR-02",
+      "status": "blocked",
+      "due": "W1 (Fri Oct 16, 2026)",
+      "branch": "karthik/fixtures (not created)",
+      "blocked_by": [
+       "KAR-01",
+       "JAK-01",
+       "JAK-02",
+       "JAI-01"
+      ],
+      "problems": [
+       "Not started: there is no karthik/fixtures branch.",
+       "Prerequisites are not merged. KAR-01 is broken (above). JAK-01 and JAK-02 have no jakub/* branches on the remote. JAI-01 exists only on origin/maxguard/__init__.py.",
+       "make_fixtures.sh output matches the committed fixtures only when tests/pcaps holds the reference captures. At the KAR-02 stage, the audit's Step 5 printed 14 x 'identical' and Step 6 printed '14 passed'. With re-recorded captures the fixtures change and 9 W3-stage unit tests fail."
+      ],
+      "fix_steps": [
+       "Wait until KAR-01, JAI-01, JAK-01 and JAK-02 are on main. Check with: git fetch origin && git log --oneline origin/main | grep -E 'KAR-01|JAI-01|JAK-01|JAK-02'   (all four must show)",
+       "cd ~/projects/maxguard && source .venv/bin/activate && git checkout main && git pull && git checkout -b karthik/fixtures",
+       "Do guide KAR-02 Steps 2-4: create scripts/make_fixtures.sh, run bash scripts/make_fixtures.sh, add tests/fixtures/zeek/_handmade/ (README.md, make_dns_dhcp_pcap.py, rdp/make_rdp_pcap.py, rdp/README.md, fixture-only.rules) and run its Rebuild commands.",
+       "Step 5: FIXTURES_DIR=/tmp/fixture-check bash scripts/make_fixtures.sh > /dev/null, then the diff loop. It must print 14 lines ending in 'identical'. Step 6: pytest -m \"not integration\" -q must print '14 passed'.",
+       "git add -A && git status && git commit -m \"test: Zeek and Suricata fixtures for every capture (KAR-02)\" && git push -u origin HEAD   Then open the pull request with the same title, Closes #<n>, reviewer @JWinborne1."
+      ]
+     },
+     {
+      "id": "KAR-03",
+      "status": "blocked",
+      "due": "W2 (Fri Oct 23, 2026)",
+      "branch": "karthik/integration-tests (not created)",
+      "blocked_by": [
+       "KAR-02",
+       "JAI-04",
+       "JAI-05"
+      ],
+      "problems": [
+       "Not started: there is no karthik/integration-tests branch.",
+       "JAI-04 (514f419) and JAI-05 (c6c1b36) exist only on origin/jaiden/docker-image and are not merged. In roadmap order they themselves need KAR-02, FIO-01/02, JAK-03/04 and AMO-01 first.",
+       "The guide's numbers reproduce at the KAR-03 stage with the reference captures: test_suricata_eve.py gives '57 passed', and the integration run in zeek/zeek:9.0.0 gives '15 passed, 340 deselected'."
+      ],
+      "fix_steps": [
+       "After KAR-02, JAI-04 and JAI-05 are merged: cd ~/projects/maxguard && source .venv/bin/activate && git checkout main && git pull && git checkout -b karthik/integration-tests",
+       "Do guide KAR-03 Steps 2-4: the 14 files in tests/expected/, tests/integration/test_pcaps.py and tests/unit/test_suricata_eve.py.",
+       "Step 5: pytest tests/unit/test_suricata_eve.py -q must print '57 passed'. Step 6: docker build -f docker/Dockerfile --target test -t maxguard:test . && docker run --rm --network none maxguard:test pytest -m integration -q   must print '15 passed, 340 deselected'.",
+       "git add -A && git commit -m \"test: integration tests on every lab capture (KAR-03)\" && git push -u origin HEAD   Then open the pull request with the same title, Closes #<n>, reviewer @JWinborne1."
+      ]
+     },
+     {
+      "id": "KAR-04",
+      "status": "blocked",
+      "due": "W3 (Fri Oct 30, 2026)",
+      "branch": "karthik/ci-integration (not created)",
+      "blocked_by": [
+       "KAR-03"
+      ],
+      "problems": [
+       "Not started: there is no karthik/ci-integration branch.",
+       "It cannot be merged by Friday Oct 30 unless KAR-01, KAR-02, KAR-03 and their prerequisites (JAI-01, JAK-01, JAK-02, JAI-04, JAI-05 and the chain between them) all merge first.",
+       "The guide's files check out at the KAR-04 stage: the integration run in zeek/zeek:9.0.0 gives '30 passed, 455 deselected', and actionlint 1.7.12 on .github/workflows/ci.yml exits 0. I could not check the actions/checkout@v7 and actions/setup-python@v7 versions (no network)."
+      ],
+      "fix_steps": [
+       "After KAR-03 is merged: cd ~/projects/maxguard && source .venv/bin/activate && git checkout main && git pull && git checkout -b karthik/ci-integration",
+       "Do guide KAR-04 Steps 2-3: replace .github/workflows/ci.yml with the version that has the integration job, and add tests/integration/test_determinism.py. Check actions/checkout and actions/setup-python against their GitHub releases pages.",
+       "Step 4: docker build -f docker/Dockerfile --target test -t maxguard:test . && docker run --rm --network none maxguard:test pytest -m integration -q   must print '30 passed, 455 deselected'.",
+       "git add -A && git commit -m \"ci: integration job in the engine image, determinism test (KAR-04)\" && git push -u origin HEAD   Then open the pull request with the same title, Closes #<n>, reviewer @JWinborne1. Both CI jobs must be green. After merging, ask Jaiden to add 'integration' to the required checks of main-protection."
+      ]
+     }
+    ]
+   }
+  ],
+  "notes": "WHAT KAR-01 BLOCKS (computed from taskplan.TASKS). Direct dependents: JAK-01, JAK-02, KAR-02. Transitively it blocks 53 tasks, 23 of them due W1-W3: JAK-01, JAK-02, KAR-02, FIO-01, FIO-02, JAK-03, JAI-03, JAK-04, AMO-01, JAI-04, JAI-05, FIO-03, FIO-04, JON-02, ALI-02, KAR-03, JAI-06, JON-03, JAI-07, AMO-02, ALI-03, KAR-04, AHM-02. Only AHM-01, JAI-01, JAI-02, JON-01, ALI-01, JAI-08 and AMO-05 (plus the -00 onboarding tasks) do not depend on it. Jaiden's unmerged branches for JAI-03 to JAI-06 sit after KAR-02 in roadmap order.\n\nROADMAP PROBLEMS FOR AHMAD TO DECIDE\n1. KAR-01 Step 7 allows re-recording ('update the SHA-256 column... if you re-recorded'), but later 'copy exactly' unit tests hard-code values from the reference captures: client port 40288, first_seen timestamps, hour partitions 'date=2026-10-06/hour=01', and record IDs in the eval set. I put a faithful re-recording (guide lab, recorded today) into the KAR-04 stage and regenerated the fixtures. Result: '9 failed, 445 passed' against '454 passed, 1 skipped, 30 deselected' with the reference captures. The failures are JAI-03 test_normalize x3, JAK-04 test_inventory x2, JAI-06 test_event_store x3 and ALI-03 test_benchmark x1. The integration tests still passed (15/15), so the recordings themselves are valid. Suggestion: change Step 7 to 'commit the reference captures'. The only remote copy is the wip save-point branch origin/claude/happy-newton-h26wx7 (wip/reference-build/ref/tests/pcaps, byte-identical to the stage), so a stable published source would be better. Alternatively, make those tests read their values from the fixtures.\n2. The Step 6 loop ignores a failing client (compose exit code 2), which is how the empty captures got committed. Add a guard: find lab/captures -name '*.pcap' -size -100c must print nothing. -size -1k does not work: I tested it and it misses 24-byte files.\n3. The KAR-01 checklist's ruff and pytest items cannot pass on main before JAI-01, even though the guide says KAR-01 does not need JAI-01.\n4. The pyproject.toml on origin/maxguard/__init__.py differs from the stage's (it ends at byte 2789). That is for Jaiden's audit.\n\nHOW I TESTED. Stages built with build_stage.py:\n- /tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/agentwork/audit-karthik/stage-KAR-01\n- /tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/agentwork/audit-karthik/stage-JAI-02\n\nLab rerun logs:\n- /tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/agentwork/audit-karthik/repro/karthik-loop.log\n- /tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/agentwork/audit-karthik/repro/guide-loop.log\n\nThe fresh guide captures are in /tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/agentwork/audit-karthik/repro/guide/lab/captures. The fix sequence was simulated in /tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/agentwork/audit-karthik/sim-clone: one commit, all 35 files byte-identical to the stage, no extra files. /home/user/maxguard was only read.\n\nLab build: the server Dockerfile's `pip install pyftpdlib==2.2.0 cryptography==50.0.2` needs PyPI, so I swapped that one line for local copies of the same versions (plus cffi 2.1.1 and pycparser 3.0) and built with --network none. Everything else was used as committed: compose.yaml, services.py, make_certs.py, both client Dockerfiles, the scenarios, and the Step 6 loop (I only added a project name and --pull never --no-build). The lab network is internal: true.\n\nINSTALLS. Per your request, nothing was installed, pulled or downloaded; I used only the approved images and local files. The images I built were removed afterwards.\n\nNOT VERIFIED. Discussions replies, GitHub issue numbers, real CI runs, and the actions@v7 versions all need network access, which I did not use."
+ },
+ {
+  "people": [
+   {
+    "person": "Fiona Lau (@flau0306)",
+    "summary": "Fiona has nothing on GitHub for W0-W3. There is no fiona/* branch, and her only commits are b44c06b (her TEAM.md row, Sep 28) and ef48944 (docs/zeek-fields.md, Oct 1). Her row is correct and came in through a merged PR (26a88fb, CyberskyHQ PR #1, Oct 1). The table-header PR her guide asks for (fiona.md:193-237) is missing. FIO-01 and FIO-02 are on the zero-slack critical path to AHM-02 (rounds 4 and 5). Both are blocked by JAI-02 and KAR-02, and neither of those exists on any branch. I re-ran her guide code on stage builds today and it gave the planning output. Order: (1) header PR today. (2) Prepare FIO-01, FIO-02, FIO-03 and FIO-04 as draft PRs now. (3) Review Jakub's PRs within hours: she is the reviewer for JAK-00 to JAK-04, and JAK-01/02/03 have zero slack. (4) When each prerequisite merges, merge main, run the guide's test step and mark the PR ready. FIO-03 must merge before Ali's ALI-02/ALI-03.",
+    "tasks": [
+     {
+      "id": "FIO-00",
+      "status": "not-started",
+      "branch": "fiona/week0-team-header",
+      "due": "W0 - Fri Oct 9, 2026 (18 days overdue)",
+      "blocked_by": [],
+      "problems": [
+       "docs/TEAM.md on main has no header. Its first line is '| Fiona Lau | Detection Engine Lead | flau0306 | Engine |'. fiona.md:195-210 asks Fiona to add the two header lines.",
+       "There is no fiona/week0-team-header branch on GitHub.",
+       "Her row itself is correct (Name | Role | GitHub | Module, flau0306). It was merged through a PR: 26a88fb 'Merge pull request #1 from CyberskyHQ/fiona/add-team-entry', 2026-10-01.",
+       "Both of her commits (b44c06b, ef48944) have a personal gmail.com author address instead of the GitHub noreply address that fiona.md section 0.2 requires (CLAUDE.md rule 6)."
+      ],
+      "fix_steps": [
+       "Set the noreply address first (fiona.md 0.2): git config --global user.email \"<ID>+flau0306@users.noreply.github.com\" (copy the exact address from github.com > Settings > Emails)",
+       "cd ~/projects/maxguard && git checkout main && git pull && git checkout -b fiona/week0-team-header",
+       "Open docs/TEAM.md and add these two lines at the very top: | Name | Role | GitHub | Module |   and   |---|---|---|---|",
+       "git add docs/TEAM.md && git commit -m \"docs: add a table header to TEAM.md\" && git push -u origin fiona/week0-team-header",
+       "gh pr create --base main --title \"docs: add a table header to TEAM.md\" --body \"Week 0 onboarding.\" --reviewer JWinborne1",
+       "If not done yet, also finish 0.1-0.8 and reply to 'Week 0 check-in' in Discussions (0.10). Do 0.11 (.venv) as soon as JAI-01 is merged."
+      ]
+     },
+     {
+      "id": "FIO-01",
+      "status": "blocked",
+      "branch": "fiona/zeek-runner-adapters",
+      "due": "W1 - Fri Oct 16, 2026 (overdue)",
+      "blocked_by": [
+       "JAI-02",
+       "KAR-02"
+      ],
+      "problems": [
+       "No fiona/zeek-runner-adapters branch and no commits.",
+       "JAI-02 (contracts) exists on no branch. KAR-02 (fixtures) exists on no branch, and it needs KAR-01, JAK-01, JAK-02 and JAI-01, none of which is merged.",
+       "Zero-slack critical path: earliest merge round 4 of 11.",
+       "Verified today on a fresh FIO-01 stage build: the guide's Step 7 gives '16 passed'. Step 8 prints ['conn.log', 'http.log'] and the ts/port dict exactly as in the guide. ruff says 'All checks passed!' and the full unit suite gives '30 passed'."
+      ],
+      "fix_steps": [
+       "Prepare now (skip 'source .venv/bin/activate' until JAI-01 is merged): cd ~/projects/maxguard && git checkout main && git pull && git checkout -b fiona/zeek-runner-adapters",
+       "Do fiona.md FIO-01 Steps 2-6 (lines 362-787) exactly: maxguard/zeek/__init__.py (empty), maxguard/zeek/runner.py, tests/unit/test_zeek_site.py, maxguard/adapters/pcap.py, maxguard/adapters/zeeklogs.py, tests/unit/test_adapters.py",
+       "git add -A && git status && git commit -m \"feat: Zeek runner, PcapAdapter and ZeekLogAdapter (FIO-01)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: Zeek runner, PcapAdapter and ZeekLogAdapter (FIO-01)\" --body \"Blocked by JAI-02 and KAR-02. Closes #<issue number>\"",
+       "When JAI-02 and KAR-02 are merged: git checkout main && git pull && git checkout fiona/zeek-runner-adapters && git merge main && source .venv/bin/activate && ruff check . && pytest tests/unit/test_adapters.py tests/unit/test_zeek_site.py -q (expect 16 passed), then Step 8",
+       "git push && gh pr ready && gh pr edit --add-reviewer JWinborne1"
+      ]
+     },
+     {
+      "id": "FIO-02",
+      "status": "blocked",
+      "branch": "fiona/tls-cert-rules",
+      "due": "W1 - Fri Oct 16, 2026 (overdue)",
+      "blocked_by": [
+       "FIO-01",
+       "KAR-02"
+      ],
+      "problems": [
+       "No fiona/tls-cert-rules branch and no commits.",
+       "Zero-slack critical path: round 5.",
+       "Step 4 replaces maxguard/rules/__init__.py, a file that JAI-02 creates. On a branch made from today's main, merging main later gives 'CONFLICT (add/add)' on that file. I reproduced this in a scratch repo, and 'git checkout --ours' restored the Step 4 version.",
+       "Verified today on the FIO-02 stage: Step 7 gives '60 passed'. Step 8 prints 'cert.expired high 172.18.0.2 4433 Expired certificate c4e373ad73162b38' as in the guide. The full suite gives '90 passed'."
+      ],
+      "fix_steps": [
+       "git checkout main && git pull && git checkout -b fiona/tls-cert-rules",
+       "Do fiona.md FIO-02 Steps 2-6 (lines 870-1320): maxguard/rules/tls.py, maxguard/rules/certs.py, maxguard/rules/__init__.py (Step 4 text), tests/unit/test_rules_tls_certs.py, tests/unit/test_zeeklogs_import.py, tests/unit/test_merge_determinism.py",
+       "git add -A && git status && git commit -m \"feat: TLS and certificate rules with tests (FIO-02)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: TLS and certificate rules with tests (FIO-02)\" --body \"Blocked by FIO-01 and KAR-02. Closes #<issue number>\"",
+       "When FIO-01 is merged: git checkout main && git pull && git checkout fiona/tls-cert-rules && git merge main. If you see CONFLICT (add/add) in maxguard/rules/__init__.py: git checkout --ours maxguard/rules/__init__.py && git add maxguard/rules/__init__.py && git commit --no-edit",
+       "pytest tests/unit/test_rules_tls_certs.py tests/unit/test_zeeklogs_import.py tests/unit/test_merge_determinism.py -q (expect 60 passed) and Step 8, then git push && gh pr ready && gh pr edit --add-reviewer JWinborne1"
+      ]
+     },
+     {
+      "id": "FIO-03",
+      "status": "blocked",
+      "branch": "fiona/attack-mapping",
+      "due": "W2 - Fri Oct 23, 2026 (overdue)",
+      "blocked_by": [
+       "AMO-01",
+       "JAK-03"
+      ],
+      "problems": [
+       "No fiona/attack-mapping branch and no commits.",
+       "Earliest round 8 (slack 1).",
+       "Ali's committed eval set depends on this file, and the roadmap does not list that dependency. Without mappings/attack.yaml, ALI-03's test_committed_eval_set_is_up_to_date fails. With FIO-03 merged, the eval set Ali generates matches ALI-03's expected file byte for byte. So merge FIO-03 before ALI-02/ALI-03.",
+       "Verified today on the FIO-03 stage: Step 3 gives '36 passed, 1 skipped' and Step 4 prints 'T1040 Network Sniffing - credential-access' as in planning."
+      ],
+      "fix_steps": [
+       "git checkout main && git pull && git checkout -b fiona/attack-mapping",
+       "Do fiona.md FIO-03 Step 2 (lines 1403-1560): create mappings/attack.yaml exactly",
+       "git add mappings/attack.yaml && git commit -m \"feat: MITRE ATT&CK v19.2 mapping file (FIO-03)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: MITRE ATT&CK v19.2 mapping file (FIO-03)\" --body \"Blocked by AMO-01 and JAK-03. Closes #<issue number>\"",
+       "When AMO-01 and JAK-03 are merged: git checkout main && git pull && git checkout fiona/attack-mapping && git merge main && pytest tests/unit/test_mappings.py -q (expect 36 passed, 1 skipped) and Step 4; git push && gh pr ready && gh pr edit --add-reviewer ahmadalkhoudeir"
+      ]
+     },
+     {
+      "id": "FIO-04",
+      "status": "blocked",
+      "branch": "fiona/cli",
+      "due": "W2 - Fri Oct 23, 2026 (overdue)",
+      "blocked_by": [
+       "JAI-05",
+       "FIO-03"
+      ],
+      "problems": [
+       "No fiona/cli branch and no commits.",
+       "Earliest round 9 (slack 1). AHM-02 does not need it, but it is the W2 demo command, and AMO-02 Step 5 and JON-02 Step 5 run it.",
+       "JAI-05 is only on jaiden/docker-image and is not in a PR.",
+       "Verified today on the FIO-04 stage: Step 4 gives '9 passed', Step 5 matches planning, and the Step 6 demo (zeek/zeek:9.0.0, --network none) prints 'maxguard: 1 finding(s), report written to /tmp/r.json' and 'ok'."
+      ],
+      "fix_steps": [
+       "git checkout main && git pull && git checkout -b fiona/cli",
+       "Do fiona.md FIO-04 Steps 2-3 (lines 1643-1886): cli/main.py and tests/unit/test_cli.py",
+       "git add cli/main.py tests/unit/test_cli.py && git commit -m \"feat: maxguard analyze command with JSON output (FIO-04)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: maxguard analyze command with JSON output (FIO-04)\" --body \"Blocked by JAI-05 and FIO-03. Closes #<issue number>\"",
+       "When JAI-05 and FIO-03 are merged: git checkout main && git pull && git checkout fiona/cli && git merge main && pytest tests/unit/test_cli.py -q (expect 9 passed) and Steps 5-6; git push && gh pr ready && gh pr edit --add-reviewer JWinborne1"
+      ]
+     }
+    ]
+   },
+   {
+    "person": "Jakub Kania (@SXafir-byte)",
+    "summary": "Jakub has nothing on GitHub: no branch, no commit by him on any ref, and no TEAM.md row. JAK-01 and JAK-02 are round 2 of the zero-slack critical path, and KAR-02 needs both, so every later W1-W3 task waits on them. JAK-03 (round 6) also has zero slack. JAK-01/02 are blocked by JAI-01 and KAR-01. The KAR-01 captures on karthik/traffic-lab cannot be used for his checks yet: 13 of the 14 pcaps contain 0 packets. Order: (1) W0 row PR today. (2) Prepare JAK-01 and JAK-02 as drafts today; they only need Docker, not Python. (3) Prepare JAK-03 and JAK-04 drafts. (4) Right after JAI-01 and KAR-01 merge, run JAK-01 Steps 5-7 and JAK-02 Steps 4-5, mark both ready, and ask Fiona for a same-day review.",
+    "tasks": [
+     {
+      "id": "JAK-00",
+      "status": "not-started",
+      "branch": "jakub/week0-team-row",
+      "due": "W0 - Fri Oct 9, 2026 (18 days overdue)",
+      "blocked_by": [],
+      "problems": [
+       "docs/TEAM.md on main has no Jakub row. It has 3 rows: Fiona, Ahmad and Jaiden.",
+       "There is no jakub/week0-team-row branch, and no commit authored by Jakub exists on any ref."
+      ],
+      "fix_steps": [
+       "git config --global user.email must print your users.noreply.github.com address; set it first if not (jakub.md 0.2)",
+       "cd ~/projects/maxguard && git checkout main && git pull && git checkout -b jakub/week0-team-row",
+       "Add this as the last line of docs/TEAM.md: | Jakub Kania | Protocol Coverage Engineer | SXafir-byte | Sensor |",
+       "git add docs/TEAM.md && git commit -m \"docs: add Jakub to TEAM.md\" && git push -u origin jakub/week0-team-row",
+       "gh pr create --base main --title \"docs: add Jakub to TEAM.md\" --body \"Week 0 onboarding.\" --reviewer flau0306",
+       "If GitHub reports a conflict, follow the 0.9 conflict steps (git merge main). Keep every row that is on main plus yours, and if Jaiden's corrected row is there, delete the old 'JWinborne12' line."
+      ]
+     },
+     {
+      "id": "JAK-01",
+      "status": "blocked",
+      "branch": "jakub/zeek-scripts",
+      "due": "W1 - Fri Oct 16, 2026 (overdue)",
+      "blocked_by": [
+       "JAI-01",
+       "KAR-01"
+      ],
+      "problems": [
+       "No jakub/zeek-scripts branch and no commits.",
+       "Zero-slack critical path: round 2. KAR-02 needs it.",
+       "JAI-01 is not in a PR. Its commit 2e33504 is on a branch named 'maxguard/__init__.py', where .github/workflows/ci.yml and tests/unit/test_package.py are 0 bytes.",
+       "KAR-01 on karthik/traffic-lab: 13 of the 14 captures are 24-byte headers with 0 packets, and telnet.pcap is a new recording (41 packets). Running Jakub's scripts on those files: Step 5 printed ts 1792733050.305076, uid CpuDPN1X7c0rKhM3Ik, orig_p 33424 instead of the guide's 1791250285.789302, CJKFoj4bpHEhTeaRoj, 55398. Step 6 listed only loaded_scripts.log, packet_filter.log and stats.log.",
+       "Verified today on the JAK-01 stage, which has the planning captures: Steps 5, 6 and 7 print exactly the guide's output (Step 7: 0, then 3)."
+      ],
+      "fix_steps": [
+       "Prepare now (no .venv needed): cd ~/projects/maxguard && git checkout main && git pull && git checkout -b jakub/zeek-scripts",
+       "Do jakub.md JAK-01 Steps 2-4 (lines 366-485): maxguard/zeek/scripts/cleartext.zeek, maxguard/zeek/scripts/inventory.zeek, maxguard/zeek/site.zeek",
+       "git add maxguard/zeek && git commit -m \"feat: Zeek scripts for cleartext sessions and asset tracking (JAK-01)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: Zeek scripts for cleartext sessions and asset tracking (JAK-01)\" --body \"Blocked by JAI-01 and KAR-01. Closes #<issue number>\"",
+       "When JAI-01 and KAR-01 are merged: git checkout main && git pull && git checkout jakub/zeek-scripts && git merge main, then run Steps 5-7 (Docker) and paste the output into the PR",
+       "git push && gh pr ready && gh pr edit --add-reviewer flau0306"
+      ]
+     },
+     {
+      "id": "JAK-02",
+      "status": "blocked",
+      "branch": "jakub/suricata-config",
+      "due": "W1 - Fri Oct 16, 2026 (overdue)",
+      "blocked_by": [
+       "KAR-01"
+      ],
+      "problems": [
+       "No jakub/suricata-config branch and no commits.",
+       "Zero-slack critical path: round 2. KAR-02 needs it.",
+       "On karthik/traffic-lab's tls_weak_version.pcap (0 packets), Step 4 fails with 'E: pcap: failed to get first packet timestamp. pcap_next_ex(): -2' (exit 1).",
+       "Verified today on the JAK-02 stage: Step 4 prints \"community_id\":\"1:pRvdZyOxcG+AIDBGMFce8LVpI/I=\" and \"ja4\":\"t10d230600_44099cda8a52_242d16716555\", and Step 5 prints the same community_id."
+      ],
+      "fix_steps": [
+       "git checkout main && git pull && git checkout -b jakub/suricata-config",
+       "Do jakub.md JAK-02 Steps 2-3 (lines 586-663): maxguard/suricata/maxguard-suricata.yaml, an empty maxguard/suricata/__init__.py, maxguard/suricata/rules/maxguard.rules",
+       "git add maxguard/suricata && git commit -m \"feat: Suricata config with Community ID and JA4 (JAK-02)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: Suricata config with Community ID and JA4 (JAK-02)\" --body \"Blocked by KAR-01. Closes #<issue number>\"",
+       "When KAR-01 is merged: git checkout main && git pull && git checkout jakub/suricata-config && git merge main, then run Steps 4-5. Both must print the same community_id; you get the guide's exact values only if KAR-01 commits the planning captures.",
+       "git push && gh pr ready && gh pr edit --add-reviewer flau0306"
+      ]
+     },
+     {
+      "id": "JAK-03",
+      "status": "blocked",
+      "branch": "jakub/cleartext-rules",
+      "due": "W1 - Fri Oct 16, 2026 (overdue)",
+      "blocked_by": [
+       "FIO-02",
+       "JAK-01",
+       "KAR-02"
+      ],
+      "problems": [
+       "No jakub/cleartext-rules branch and no commits.",
+       "Zero-slack critical path: round 6.",
+       "Step 3 replaces maxguard/rules/__init__.py, which JAI-02 creates and FIO-02 changes. Expect an add/add conflict when merging main into a branch made today; keep the Step 3 version.",
+       "Verified today on the JAK-03 stage: Step 5 gives '47 passed', and Step 6 prints '13 rules' and one finding per lab fixture as in the guide. The full suite gives '137 passed'."
+      ],
+      "fix_steps": [
+       "git checkout main && git pull && git checkout -b jakub/cleartext-rules",
+       "Do jakub.md JAK-03 Steps 2-4 (lines 745-995): maxguard/rules/cleartext.py, maxguard/rules/__init__.py (Step 3 text), tests/unit/test_rules_cleartext.py, tests/unit/test_rule_registry.py",
+       "git add -A && git status && git commit -m \"feat: cleartext and RDP rules, all 13 rules registered (JAK-03)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: cleartext and RDP rules, all 13 rules registered (JAK-03)\" --body \"Blocked by FIO-02, JAK-01 and KAR-02. Closes #<issue number>\"",
+       "When FIO-02 is merged: git checkout main && git pull && git checkout jakub/cleartext-rules && git merge main. If you see CONFLICT in maxguard/rules/__init__.py: git checkout --ours maxguard/rules/__init__.py && git add maxguard/rules/__init__.py && git commit --no-edit",
+       "pytest tests/unit/test_rules_cleartext.py tests/unit/test_rule_registry.py -q (expect 47 passed) and Step 6; git push && gh pr ready && gh pr edit --add-reviewer flau0306"
+      ]
+     },
+     {
+      "id": "JAK-04",
+      "status": "blocked",
+      "branch": "jakub/inventory",
+      "due": "W1 - Fri Oct 16, 2026 (overdue)",
+      "blocked_by": [
+       "JAK-03",
+       "KAR-02"
+      ],
+      "problems": [
+       "No jakub/inventory branch and no commits.",
+       "Earliest round 7 (slack 1). JAI-05 needs it.",
+       "tests/unit/test_inventory.py hard-codes first_seen values from the planning captures (stage file lines 34 and 36: 1791250493.372808; line 45: 1791252458.740764). If KAR-01/KAR-02 merge re-recorded captures, these asserts fail and must be updated from the new fixtures.",
+       "Verified today on the JAK-04 stage: Step 4 gives '24 passed', and Step 5 prints the two plain_http assets as in the guide. The full suite gives '209 passed'."
+      ],
+      "fix_steps": [
+       "git checkout main && git pull && git checkout -b jakub/inventory",
+       "Do jakub.md JAK-04 Steps 2-3 (lines 1091-1340): maxguard/inventory.py, tests/unit/test_inventory.py",
+       "git add maxguard/inventory.py tests/unit/test_inventory.py && git commit -m \"feat: asset inventory from Zeek's known-hosts, services and software logs (JAK-04)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: asset inventory from Zeek's known-hosts, services and software logs (JAK-04)\" --body \"Blocked by JAK-03 and KAR-02. Closes #<issue number>\"",
+       "When JAK-03 is merged: git checkout main && git pull && git checkout jakub/inventory && git merge main && pytest tests/unit/test_inventory.py -q (expect 24 passed) and Step 5; git push && gh pr ready && gh pr edit --add-reviewer flau0306"
+      ]
+     }
+    ]
+   },
+   {
+    "person": "Jonattan Escalante (@MeliorExi)",
+    "summary": "Jonattan has nothing on GitHub: no branch, no commit by him on any ref, and no TEAM.md row. JON-01 is blocked by JAI-02, which exists on no branch. JON-02 and JON-03 are on the zero-slack critical path to AHM-02 (rounds 8 and 9), because JAI-07 needs JON-03. I confirmed that JON-03 really needs JON-02: offline.py imports maxguard.ai.ollama_client. JON-03's issue still lacks the critical-path label. He also reviews all of Ali's PRs, and ALI-01 can merge this week. Order: (1) W0 row PR. (2) Prepare JON-01, JON-02 and JON-03 as drafts. (3) Review Ali's W0 and ALI-01 PRs promptly. (4) When each prerequisite lands, merge main and run the tests. Do not hold JON-02 for its Step 5.",
+    "tasks": [
+     {
+      "id": "JON-00",
+      "status": "not-started",
+      "branch": "jonattan/week0-team-row",
+      "due": "W0 - Fri Oct 9, 2026 (18 days overdue)",
+      "blocked_by": [],
+      "problems": [
+       "docs/TEAM.md on main has no Jonattan row.",
+       "There is no jonattan/week0-team-row branch, and no commit authored by Jonattan exists on any ref."
+      ],
+      "fix_steps": [
+       "git config --global user.email must print your users.noreply.github.com address; set it first if not (jonattan.md 0.2)",
+       "cd ~/projects/maxguard && git checkout main && git pull && git checkout -b jonattan/week0-team-row",
+       "Add this as the last line of docs/TEAM.md: | Jonattan Escalante | Offline AI Engineer | MeliorExi | AI |",
+       "git add docs/TEAM.md && git commit -m \"docs: add Jonattan to TEAM.md\" && git push -u origin jonattan/week0-team-row",
+       "gh pr create --base main --title \"docs: add Jonattan to TEAM.md\" --body \"Week 0 onboarding.\" --reviewer JWinborne1",
+       "On a conflict, follow the 0.9 conflict steps and keep all rows from main plus yours."
+      ]
+     },
+     {
+      "id": "JON-01",
+      "status": "blocked",
+      "branch": "jonattan/citations",
+      "due": "W1 - Fri Oct 16, 2026 (overdue)",
+      "blocked_by": [
+       "JAI-02"
+      ],
+      "problems": [
+       "No jonattan/citations branch and no commits.",
+       "JAI-02 exists on no branch.",
+       "Earliest round 3 (slack 4).",
+       "Verified today: a build with only JAI-01, JAI-02 and JON-01 passes ruff and gives '22 passed'. On the JON-01 stage, Step 5 gives '8 passed' and Step 6 prints ([Sentence(text='Telnet was used.', evidence_ids=['aab5e36795eaa77e'])], 1)."
+      ],
+      "fix_steps": [
+       "git checkout main && git pull && git checkout -b jonattan/citations",
+       "Do jonattan.md JON-01 Steps 2-4 (lines 361-490): maxguard/ai/__init__.py, maxguard/ai/citations.py, tests/unit/test_citations.py",
+       "git add maxguard/ai tests/unit/test_citations.py && git commit -m \"feat: citation validator for AI sentences (JON-01)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: citation validator for AI sentences (JON-01)\" --body \"Blocked by JAI-02. Closes #<issue number>\"",
+       "When JAI-02 is merged: git checkout main && git pull && git checkout jonattan/citations && git merge main && pytest tests/unit/test_citations.py -q (expect 8 passed) and Step 6; git push && gh pr ready && gh pr edit --add-reviewer JWinborne1"
+      ]
+     },
+     {
+      "id": "JON-02",
+      "status": "blocked",
+      "branch": "jonattan/ollama-client",
+      "due": "W2 - Fri Oct 23, 2026 (overdue)",
+      "blocked_by": [
+       "JON-01",
+       "JAI-03",
+       "JAK-03"
+      ],
+      "problems": [
+       "No jonattan/ollama-client branch and no commits.",
+       "Zero-slack critical path: round 8.",
+       "JAI-03 is not usable yet. On jaiden/event-schema, maxguard/events/lookup.py, tests/unit/test_lookup.py and tests/unit/test_normalize.py are 0 bytes, and normalize.py is at the doubled path maxguard/maxguard/events/normalize.py.",
+       "Step 5 (real model) needs FIO-04's maxguard command (jonattan.md:1083), and FIO-04 merges one round later. Holding the PR for Step 5 would delay AHM-02.",
+       "Verified today on the JON-02 stage: Step 4 gives '14 passed' and the full suite gives '282 passed, 1 skipped'. Step 5 was not run (it needs a model download)."
+      ],
+      "fix_steps": [
+       "git checkout main && git pull && git checkout -b jonattan/ollama-client",
+       "Do jonattan.md JON-02 Steps 2-3 (lines 571-1061): maxguard/ai/ollama_client.py, tests/unit/test_ollama_client.py",
+       "git add maxguard/ai/ollama_client.py tests/unit/test_ollama_client.py && git commit -m \"feat: Ollama client with citation-checked explanations (JON-02)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: Ollama client with citation-checked explanations (JON-02)\" --body \"Blocked by JON-01, JAI-03 and JAK-03. Step 5 follows after FIO-04. Closes #<issue number>\"",
+       "When JON-01, JAI-03 and JAK-03 are merged: git checkout main && git pull && git checkout jonattan/ollama-client && git merge main && pytest tests/unit/test_ollama_client.py -q (expect 14 passed); git push && gh pr ready && gh pr edit --add-reviewer JWinborne1",
+       "After FIO-04 is merged, run Step 5 on your laptop (ollama pull qwen3:4b; maxguard analyze tests/fixtures/zeek/telnet -o telnet-ai.json; ...) and paste the output as a PR comment."
+      ]
+     },
+     {
+      "id": "JON-03",
+      "status": "blocked",
+      "branch": "jonattan/offline-guard",
+      "due": "W3 - Fri Oct 30, 2026",
+      "blocked_by": [
+       "JON-02"
+      ],
+      "problems": [
+       "No jonattan/offline-guard branch and no commits.",
+       "Zero-slack critical path: round 9, because JAI-07 needs it. Its issue labels (jonattan.md:1120) lack critical-path, and README.md:206 leaves JON03 out of the critical class.",
+       "The dependency on JON-02 is real. A build with only JAI-01 and JON-03 passes ruff, but pytest gives '1 failed, 13 passed': test_enable_from_env fails with No module named 'maxguard.ai'.",
+       "Verified today on the JON-03 stage: Step 4 gives '13 passed'. Step 5, run in a container with --network none, prints the guide's 'OfflineViolation: OFFLINE MODE: blocked address lookup of 'example.com'...' line."
+      ],
+      "fix_steps": [
+       "git checkout main && git pull && git checkout -b jonattan/offline-guard",
+       "Do jonattan.md JON-03 Steps 2-3 (lines 1143-1573): maxguard/offline.py, tests/unit/test_offline.py",
+       "git add maxguard/offline.py tests/unit/test_offline.py && git commit -m \"feat: offline guard for sockets and DNS lookups (JON-03)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: offline guard for sockets and DNS lookups (JON-03)\" --body \"Blocked by JON-02. Closes #<issue number>\"",
+       "When JON-02 is merged: git checkout main && git pull && git checkout jonattan/offline-guard && git merge main && pytest tests/unit/test_offline.py -q (expect 13 passed) and Step 5; git push && gh pr ready && gh pr edit --add-reviewer JWinborne1",
+       "Ask Ahmad to add the critical-path label to the JON-03 issue."
+      ]
+     }
+    ]
+   },
+   {
+    "person": "Ali Al-Kheder (@al-kheder)",
+    "summary": "Ali has nothing on GitHub: no branch, no commit by him on any ref, and no TEAM.md row. ALI-01 has no prerequisites (ali.md:335) and can be finished and merged this week; it changes only docs/model-eval/README.md. ALI-02 and ALI-03 are blocked by the rules, mapping and event-schema chain. ALI-03 also depends on FIO-03, which the roadmap does not list. Order: (1) W0 row PR. (2) ALI-01 today: check licenses at the primary sources, then open a PR to Jonattan. (3) Prepare ALI-02 and ALI-03 drafts. (4) After FIO-03 is merged, generate the eval set and finish both.",
+    "tasks": [
+     {
+      "id": "ALI-00",
+      "status": "not-started",
+      "branch": "ali/week0-team-row",
+      "due": "W0 - Fri Oct 9, 2026 (18 days overdue)",
+      "blocked_by": [],
+      "problems": [
+       "docs/TEAM.md on main has no Ali row.",
+       "There is no ali/week0-team-row branch, and no commit authored by Ali exists on any ref."
+      ],
+      "fix_steps": [
+       "git config --global user.email must print your users.noreply.github.com address; set it first if not (ali.md 0.2)",
+       "cd ~/projects/maxguard && git checkout main && git pull && git checkout -b ali/week0-team-row",
+       "Add this as the last line of docs/TEAM.md: | Ali Al-Kheder | AI Model Evaluation Engineer | al-kheder | AI evaluation |",
+       "git add docs/TEAM.md && git commit -m \"docs: add Ali to TEAM.md\" && git push -u origin ali/week0-team-row",
+       "gh pr create --base main --title \"docs: add Ali to TEAM.md\" --body \"Week 0 onboarding.\" --reviewer MeliorExi",
+       "On a conflict, follow the 0.9 conflict steps and keep all rows from main plus yours."
+      ]
+     },
+     {
+      "id": "ALI-01",
+      "status": "not-started",
+      "branch": "ali/model-shortlist",
+      "due": "W1 - Fri Oct 16, 2026 (overdue)",
+      "blocked_by": [],
+      "problems": [
+       "No ali/model-shortlist branch and no commits.",
+       "No prerequisites ('Needs first: none'), so he can start today.",
+       "The PR checklist item 'ruff check . prints All checks passed!' cannot pass on today's main. In an export of main, ruff 0.16.10 reports 'Found 43 errors.', all in old code (dashboard/app.py 14, reports/compliance_report.py 9, scanner/sniffer.py 8, analyzer/threat_engine.py 5, ...), and pytest reports 'no tests ran' (exit 5). JAI-01 moves that code to legacy/, and main has no CI workflow yet, so say this in the PR."
+      ],
+      "fix_steps": [
+       "cd ~/projects/maxguard && git checkout main && git pull && git checkout -b ali/model-shortlist (skip 'source .venv/bin/activate': this task changes only docs)",
+       "Do ali.md ALI-01 Step 2 (lines 360-690): create docs/model-eval/README.md with the given text",
+       "Steps 3-4 (ali.md:691-693): check every license row against its primary source and add the 'Checked on' column with the date and URL",
+       "Step 5: post the shortlist in Discussions (category Ideas) for Jonattan and Ahmad",
+       "git add docs/model-eval/README.md && git commit -m \"docs: model shortlist with verified licenses (ALI-01)\" && git push -u origin HEAD",
+       "gh pr create --base main --title \"docs: model shortlist with verified licenses (ALI-01)\" --body \"Closes #<issue number>. Docs only; ruff, pytest and CI work after JAI-01.\" --reviewer MeliorExi"
+      ]
+     },
+     {
+      "id": "ALI-02",
+      "status": "blocked",
+      "branch": "ali/eval-set",
+      "due": "W2 - Fri Oct 23, 2026 (overdue)",
+      "blocked_by": [
+       "FIO-02",
+       "JAK-03",
+       "AMO-01",
+       "JAI-03"
+      ],
+      "problems": [
+       "No ali/eval-set branch and no commits.",
+       "Earliest round 8 (slack 2).",
+       "The guide commits tests/fixtures/ai_eval/eval_set.json in ALI-02 (ali.md:868 and its checklist), but build_stage puts that file in ALI-03. Committing it here is correct per the guide.",
+       "Verified with cmp: the eval_set.json generated on the ALI-02 stage, which includes FIO-03, is byte-identical to ALI-03's expected file. Generated without FIO-03, it 'differ[s]: char 50, line 5' (the attack list). So merge FIO-03 first.",
+       "Verified today: Step 3 prints 'wrote 13 items (13 rules) to .../tests/fixtures/ai_eval/eval_set.json' and Step 4 prints 'identical'."
+      ],
+      "fix_steps": [
+       "git checkout main && git pull && git checkout -b ali/eval-set",
+       "Do ali.md ALI-02 Step 2 (lines 753-867): scripts/make_eval_set.py",
+       "git add scripts/make_eval_set.py && git commit -m \"feat: AI evaluation set built from the fixtures (ALI-02)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: AI evaluation set built from the fixtures (ALI-02)\" --body \"Blocked by FIO-02, JAK-03, AMO-01, JAI-03 (and FIO-03 for the eval set). Closes #<issue number>\"",
+       "When those and FIO-03 are merged: git checkout main && git pull && git checkout ali/eval-set && git merge main && python -m scripts.make_eval_set (expect 'wrote 13 items (13 rules)') and Step 4 (expect 'identical'); git add tests/fixtures/ai_eval/eval_set.json && git commit -m \"feat: add the generated evaluation set (ALI-02)\"",
+       "git push && gh pr ready && gh pr edit --add-reviewer MeliorExi"
+      ]
+     },
+     {
+      "id": "ALI-03",
+      "status": "blocked",
+      "branch": "ali/benchmark",
+      "due": "W3 - Fri Oct 30, 2026",
+      "blocked_by": [
+       "ALI-02",
+       "JON-02",
+       "FIO-03 (not in Needs first; the committed eval set needs it)"
+      ],
+      "problems": [
+       "No ali/benchmark branch and no commits.",
+       "FIO-03 is a hidden prerequisite. With only ALI-03's listed prerequisites, pytest gives '1 failed, 268 passed': test_committed_eval_set_is_up_to_date shows '- attack\": [' vs '+ attack\": [],'. With FIO-03 added, it gives '275 passed, 1 skipped'.",
+       "Earliest round 9 (slack 2).",
+       "Verified today on the ALI-03 stage: Step 4 gives '32 passed'. Step 5 prints 'no Ollama answering at http://127.0.0.1:1: start it first' with exit 1, which is what the guide expects."
+      ],
+      "fix_steps": [
+       "git checkout main && git pull && git checkout -b ali/benchmark",
+       "Do ali.md ALI-03 Steps 2-3 (lines 951-1679): scripts/benchmark_models.py, tests/unit/test_benchmark.py",
+       "git add scripts/benchmark_models.py tests/unit/test_benchmark.py && git commit -m \"feat: model benchmark on the evaluation set (ALI-03)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: model benchmark on the evaluation set (ALI-03)\" --body \"Blocked by ALI-02, JON-02 and FIO-03. Closes #<issue number>\"",
+       "When ALI-02, JON-02 and FIO-03 are merged: git checkout main && git pull && git checkout ali/benchmark && git merge main && python -m scripts.make_eval_set && pytest tests/unit/test_benchmark.py -q (expect 32 passed) and Step 5. Commit tests/fixtures/ai_eval/eval_set.json if it changed.",
+       "git push && gh pr ready && gh pr edit --add-reviewer MeliorExi"
+      ]
+     }
+    ]
+   },
+   {
+    "person": "Amory B. (@gettalife)",
+    "summary": "Amory's only activity is the branch amory/week0-team-row. It points at main's own tip 65eee05 with 0 commits beyond main, so no row was added. AMO-01 (W1, round 7) is blocked by JAI-02, FIO-02 and JAK-03. AMO-02 (PCI DSS rows) is a W3 milestone item. It is blocked by AMO-01, and its Step 5 check also needs FIO-04, which 'Needs first' does not list. Its reading work (Steps 2-3: download PCI DSS v4.0.1 and find requirements with page numbers) can start today. Order: (1) commit the W0 row on her existing branch, push it and open the PR. (2) Start AMO-02 Steps 2-3 with cleartext.telnet. (3) Prepare AMO-01 as a draft. (4) After AMO-01 merges, open AMO-02.",
+    "tasks": [
+     {
+      "id": "AMO-00",
+      "status": "not-started",
+      "branch": "amory/week0-team-row",
+      "due": "W0 - Fri Oct 9, 2026 (18 days overdue)",
+      "blocked_by": [],
+      "problems": [
+       "origin/amory/week0-team-row is 65eee059e7da, the same commit as origin/main. It has 0 commits beyond main and no diff.",
+       "docs/TEAM.md on main has no Amory row.",
+       "I exported the branch and ran the checks. ruff gives 'Found 43 errors.' (exit 1, all in old code) and pytest gives 'no tests ran' (exit 5). Both fail only because JAI-01 (pyproject.toml, tests/, legacy/ exclusion) is not merged."
+      ],
+      "fix_steps": [
+       "git config --global user.email must print your users.noreply.github.com address; set it first if not (amory.md 0.2)",
+       "cd ~/projects/maxguard && git fetch origin && git checkout amory/week0-team-row && git log --oneline origin/main..HEAD (if this lists 'docs: add Amory to TEAM.md', that commit was never pushed: run git push and go to the last step)",
+       "Add this as the last line of docs/TEAM.md: | Amory B. | Compliance Mapping Analyst | gettalife | Mapping and reports |",
+       "git add docs/TEAM.md && git commit -m \"docs: add Amory to TEAM.md\" && git push -u origin amory/week0-team-row",
+       "gh pr create --base main --title \"docs: add Amory to TEAM.md\" --body \"Week 0 onboarding.\" --reviewer ahmadalkhoudeir (on a conflict, follow the 0.9 conflict steps)"
+      ]
+     },
+     {
+      "id": "AMO-01",
+      "status": "blocked",
+      "branch": "amory/nist-mapping",
+      "due": "W1 - Fri Oct 16, 2026 (overdue)",
+      "blocked_by": [
+       "JAI-02",
+       "FIO-02",
+       "JAK-03"
+      ],
+      "problems": [
+       "No amory/nist-mapping branch and no commits.",
+       "Earliest round 7 (slack 1). JAI-04, JAI-05, FIO-03, ALI-02 and AMO-02 need it.",
+       "Verified today on the AMO-01 stage: Step 6 gives '30 passed', and Step 7 prints 'Rev. 5 (Release 5.2.0)' and the NIST rows per rule as in the guide. The full suite gives '247 passed'."
+      ],
+      "fix_steps": [
+       "git checkout main && git pull && git checkout -b amory/nist-mapping",
+       "Do amory.md AMO-01 Steps 2-5 (lines 360-815): mappings/schema.md, mappings/nist_800_53_r5.yaml, mappings/pci_dss_4_0_1.yaml, mappings/cisa_cpg_2_0.yaml, mappings/cjis_6_1.yaml, tests/unit/test_mappings.py",
+       "git add mappings tests/unit/test_mappings.py && git commit -m \"feat: NIST SP 800-53 mapping file and mapping checks (AMO-01)\" && git push -u origin HEAD",
+       "gh pr create --draft --base main --title \"feat: NIST SP 800-53 mapping file and mapping checks (AMO-01)\" --body \"Blocked by JAI-02, FIO-02 and JAK-03. Closes #<issue number>\"",
+       "When those are merged: git checkout main && git pull && git checkout amory/nist-mapping && git merge main && pytest tests/unit/test_mappings.py -q (expect 30 passed) and Step 7; git push && gh pr ready && gh pr edit --add-reviewer ahmadalkhoudeir"
+      ]
+     },
+     {
+      "id": "AMO-02",
+      "status": "blocked",
+      "branch": "amory/pci-rows",
+      "due": "W3 - Fri Oct 30, 2026 (README W3 row: 'PCI DSS rows are merged')",
+      "blocked_by": [
+       "AMO-01",
+       "FIO-04 (Step 5 check only)"
+      ],
+      "problems": [
+       "No amory/pci-rows branch and no commits.",
+       "Step 5 runs 'maxguard analyze tests/fixtures/zeek/telnet --no-ai --frameworks \"PCI DSS\"', which needs FIO-04's cli/main.py. On a build with only AMO-01 and its prerequisites, it fails with 'No module named cli.main'. 'Needs first' lists only AMO-01."
+      ],
+      "fix_steps": [
+       "Today: download PCI DSS v4.0.1 from https://www.pcisecuritystandards.org/document_library/ (amory.md Step 2). Keep the PDF outside the repository and never commit it.",
+       "Today: do Step 3 for cleartext.telnet first (Requirements 2, 4 and 8), then the other rules. Write each row in the Contract 2 format (amory.md lines 360-453) with the requirement number, the exact title and 'PCI DSS v4.0.1 PDF, p. <page>', in a text file outside the repo.",
+       "After AMO-01 is merged: git checkout main && git pull && git checkout -b amory/pci-rows. Paste the rows into mappings/pci_dss_4_0_1.yaml, then run pytest tests/unit/test_mappings.py -q",
+       "After FIO-04 is merged: run maxguard analyze tests/fixtures/zeek/telnet --no-ai --frameworks \"PCI DSS\" and check that the Telnet finding lists your rows",
+       "git add mappings/pci_dss_4_0_1.yaml && git commit -m \"feat: PCI DSS v4.0.1 mapping rows (AMO-02)\" && git push -u origin HEAD && gh pr create --base main --title \"feat: PCI DSS v4.0.1 mapping rows (AMO-02)\" --body \"Closes #<issue number>\" --reviewer ahmadalkhoudeir"
+      ]
+     }
+    ]
+   },
+   {
+    "person": "Ahmad Al Khoudeir (@ahmadalkhoudeir) - Week 0 only",
+    "summary": "Week 0 is done. PR #7 (branch ahmad/week0-team-row, commit de55405 'docs: add Ahmad to TEAM.md') was merged on 2026-10-12 as merge commit 012ce36. His row on main matches ahmad.md:212 exactly.",
+    "tasks": [
+     {
+      "id": "AHM-00",
+      "status": "merged",
+      "branch": "ahmad/week0-team-row",
+      "due": "W0 - Fri Oct 9, 2026 (merged Oct 12)",
+      "blocked_by": [],
+      "problems": [
+       "Minor: PR #7 was merged with a merge commit instead of 'Squash and merge' (ahmad.md 0.9 step 6), and the remote branch ahmad/week0-team-row still exists.",
+       "His own commits and his GitHub web merges (for example 65eee05) use a my.ccsu.edu author address, not the noreply address (ahmad.md 0.2)."
+      ],
+      "fix_steps": [
+       "Nothing is required for Week 0.",
+       "Optional: github.com > Settings > Emails > tick 'Keep my email addresses private' so future web merges use the noreply address.",
+       "Optional cleanup: git push origin --delete ahmad/week0-team-row"
+      ]
+     }
+    ]
+   },
+   {
+    "person": "Jaiden Winborne (@JWinborne1) - Week 0 only",
+    "summary": "Week 0 is not done. There is no PR: his row came from two direct web-editor commits to main on Oct 12 (afd51df, 5e24f3f). The row is wrong: it has 3 cells, the GitHub column says JWinborne12, and the role and module are merged into one cell. He needs one small PR, and it should merge before the other row PRs.",
+    "tasks": [
+     {
+      "id": "JAI-00",
+      "status": "branch-broken",
+      "branch": "jaiden/week0-team-row (does not exist)",
+      "due": "W0 - Fri Oct 9, 2026 (18 days overdue)",
+      "blocked_by": [],
+      "problems": [
+       "No PR. afd51df 'Update TEAM.md Add Jaiden' and 5e24f3f 'Update TEAM.md' (2026-10-12, committer GitHub, single parent) were pushed straight to main. The main-protection ruleset comes in JAI-01 Step 10 (jaiden.md:642), and JAI-01 is not merged.",
+       "The row on main is '| Jaiden Winborne | JWinborne12 | Co-lead; Architecture and Release Lead; API backend and storage|'. It has only 3 cells, column 2 holds a GitHub name instead of the role, the name is JWinborne12 instead of JWinborne1, and the module is missing. The expected row (jaiden.md:215) is '| Jaiden Winborne | Co-lead; Architecture and Release Lead | JWinborne1 | Architecture, API, storage, releases |'.",
+       "His branch commits use a laptop-hostname author address (Mac.lan / Mac.home), not the noreply address (jaiden.md 0.2)."
+      ],
+      "fix_steps": [
+       "cd ~/projects/maxguard && git checkout main && git pull && git checkout -b jaiden/week0-team-row",
+       "In docs/TEAM.md, replace the line '| Jaiden Winborne | JWinborne12 | Co-lead; Architecture and Release Lead; API backend and storage|' with '| Jaiden Winborne | Co-lead; Architecture and Release Lead | JWinborne1 | Architecture, API, storage, releases |'",
+       "git add docs/TEAM.md && git commit -m \"docs: add Jaiden to TEAM.md\" && git push -u origin jaiden/week0-team-row",
+       "gh pr create --base main --title \"docs: add Jaiden to TEAM.md\" --body \"Week 0 onboarding; fixes the row committed directly to main on Oct 12.\" --reviewer ahmadalkhoudeir",
+       "Merge this one first. In a scratch repo, this fix and Fiona's header merged cleanly together. Every row PR made from today's main conflicted once this fix was in, and merging the fix after a row PR also conflicted.",
+       "After JAI-01 merges, create the main-protection ruleset (jaiden.md:642) so nobody can push to main directly."
+      ]
+     }
+    ]
+   },
+   {
+    "person": "Karthik Nair (@Karthiknair91) - Week 0 only",
+    "summary": "Week 0 is not done. There is no Karthik row in docs/TEAM.md and no karthik/week0-team-row branch. His only commit (de97008, KAR-01 on karthik/traffic-lab) uses a laptop-hostname author address.",
+    "tasks": [
+     {
+      "id": "KAR-00",
+      "status": "not-started",
+      "branch": "karthik/week0-team-row",
+      "due": "W0 - Fri Oct 9, 2026 (18 days overdue)",
+      "blocked_by": [],
+      "problems": [
+       "No row and no branch.",
+       "His author address is not the noreply address (karthik.md 0.2)."
+      ],
+      "fix_steps": [
+       "Set the noreply address (karthik.md 0.2): git config --global user.email \"<ID>+Karthiknair91@users.noreply.github.com\"",
+       "cd ~/projects/maxguard && git checkout main && git pull && git checkout -b karthik/week0-team-row",
+       "Add this as the last line of docs/TEAM.md: | Karthik Nair | Test and CI Engineer | Karthiknair91 | Testing |",
+       "git add docs/TEAM.md && git commit -m \"docs: add Karthik to TEAM.md\" && git push -u origin karthik/week0-team-row",
+       "gh pr create --base main --title \"docs: add Karthik to TEAM.md\" --body \"Week 0 onboarding.\" --reviewer JWinborne1 (on a conflict, follow the 0.9 conflict steps)"
+      ]
+     }
+    ]
+   }
+  ],
+  "notes": "BOTTOM LINE: Of the five audited teammates (Fiona, Jakub, Jonattan, Ali, Amory), none has pushed W0-W3 work. Ahmad is the only person whose Week 0 PR is merged. AHM-02 needs at least 11 sequential review-and-merge rounds; at one round per working day it lands Tue Nov 10, not Fri Oct 30.\n\nEVIDENCE\n- Refs were fetched 2026-10-27 16:18 UTC (.git/FETCH_HEAD). origin/main is 65eee05 (PR #6, Oct 14).\n- Remote branches: ahmad/tests-scaffold, ahmad/week0-team-row, amory/week0-team-row, claude/happy-newton-h26wx7, jaiden/docker-image, jaiden/event-schema, jaiden/restructure, jaiden/storage, karthik/traffic-lab, maxguard/__init__.py, v2-planning.\n- There is no fiona/, jakub/, jonattan/ or ali/ branch. amory/week0-team-row is 65eee05 (0 commits beyond main).\n- git log --all has 0 commits by Jakub, Jonattan, Ali or Amory. Fiona has 2, from Sep 28 and Oct 1.\n- I checked the 95 file paths in the five people's task file lists. The only one found on any branch is maxguard/pipeline.py (JAI-05's file) on jaiden/docker-image and jaiden/storage.\n- Open PRs, forks and unpushed local work cannot be seen from git. No network calls were made, so \"no open PRs\" comes from the task statement.\n\nTEAM.md\n- git log origin/main -- docs/TEAM.md:\n  - 5e24f3f (JWinborne1, Oct 12, Update TEAM.md)\n  - afd51df (JWinborne1, Oct 12, Update TEAM.md Add Jaiden)\n  - de55405 (docs: add Ahmad to TEAM.md, via PR #7)\n  - b44c06b (Fiona Lau, Sep 28)\n- The file has 3 rows and no header.\n  - Fiona's row is correct.\n  - Ahmad's row is an exact match to his guide.\n  - Jaiden's row has 3 cells and 'JWinborne12' in column 2.\n- Week 0 status:\n  - Done: Ahmad.\n  - Fiona: her row PR was merged earlier, but the header PR her guide asks for is missing.\n  - Not done: Jaiden (direct commits to main, wrong row), Karthik, Jakub, Jonattan, Ali and Amory.\n- Suggested TEAM.md merge order: Jaiden's fix and Fiona's header first (they merged cleanly together in a scratch repo). Then the five rows one at a time; each conflicts after the previous one, and the guide's 0.9 conflict steps handle it.\n\nGUIDE CODE RE-RUN TODAY\n- I built a fresh stage for each of the five's 14 W1-W3 code tasks and re-ran the guide commands: JAK-01, JAK-02, FIO-01, FIO-02, JAK-03, JAK-04, JON-01, AMO-01, ALI-02, FIO-03, FIO-04, JON-02, JON-03, ALI-03.\n- Every output equals the planning output except test timings.\n- ruff printed 'All checks passed!' on every stage, and the unit suite was green on every stage (the last one, ALI-03, gave '453 passed, 1 skipped, 16 deselected').\n- Not run: JON-02 Step 5, which needs a model download.\n\nDEPENDENCY CHECK\nI built each of the 26 W0-W3 code tasks with only its transitive 'depends' plus itself, then ran ruff, the unit tests and its guide commands. All pass, with these exceptions:\n1. ALI-03 gives '1 failed, 268 passed' because it needs FIO-03 (mappings/attack.yaml) for the committed eval set. With FIO-03 added it gives '275 passed, 1 skipped'.\n2. AMO-02 Step 5 needs FIO-04 ('No module named cli.main' with AMO-01 only).\n3. JON-02 Step 5 needs FIO-04; the guide already says so.\n\nI also confirmed one listed dependency is real: JON-03 needs JON-02 ('1 failed, 13 passed' without it).\n\nMERGE ORDER\n'Round' means one review-and-merge cycle. A task can merge in round r once everything it needs merged in earlier rounds. The two hidden prerequisites above are included (ALI-03 after FIO-03, AMO-02 after FIO-04).\n- R1: AHM-00 (already merged, PR #7), AHM-01 (GitHub settings, no PR), JAI-01, KAR-01, ALI-01. Also the TEAM.md PRs one at a time: JAI-00 (row fix), FIO-00 (header), JAK-00, JON-00, ALI-00, AMO-00, KAR-00.\n- R2: JAI-02, JAK-01, JAK-02\n- R3: KAR-02, JON-01\n- R4: FIO-01\n- R5: FIO-02\n- R6: JAK-03\n- R7: JAI-03, JAK-04, AMO-01\n- R8: FIO-03 (before ALI-02), JAI-04, JAI-05, JAI-06, JON-02, ALI-02\n- R9: JON-03, FIO-04, KAR-03, ALI-03\n- R10: JAI-07, KAR-04, AMO-02\n- R11: AHM-02\n\nCRITICAL PATH TO AHM-02 (zero slack)\n- Path: JAI-01 + KAR-01 -> JAK-01 + JAK-02 -> KAR-02 -> FIO-01 -> FIO-02 -> JAK-03 -> JAI-03 -> JON-02 -> JON-03 -> JAI-07 -> AHM-02.\n- 7 of these 13 tasks belong to Fiona, Jakub and Jonattan.\n- JAI-02, JAK-04, AMO-01, JAI-05 and JAI-06 have 1 round of slack: one round late is fine, two rounds late delays AHM-02.\n- JON-03 is on the critical path but has no critical-path label (jonattan.md:1120), and README.md:206 also leaves it out of the critical class.\n\nESTIMATE\n- There are 35 PRs: the 37 W0-W3 tasks minus AHM-00 (already merged) and AHM-01 (no PR).\n- The minimum is 11 sequential rounds. Every zero-slack PR that needs a second review adds a round.\n- At one round per working day (README.md:210 says critical-path PRs are reviewed within one day), with round 1 merging today, the rounds land: R4 Fri Oct 30, R9 Fri Nov 6, R11 (AHM-02) Tue Nov 10.\n- Meeting Fri Oct 30 would need about 3 rounds per day starting today, and round 1 is not ready:\n  - JAI-01's commit (on the branch named maxguard/__init__.py) has a 0-byte ci.yml and test_package.py.\n  - KAR-01 (karthik/traffic-lab) is missing 14 of its 35 files, and 13 of its 14 captures have 0 packets.\n  - JAI-02 and KAR-02 exist on no branch.\n- A realistic Friday target for these five: all W0 PRs merged, ALI-01 merged, every W1-W3 task open as a draft PR, and JAK-01/JAK-02 merged within hours of JAI-01 and KAR-01.\n\nDECISION NEEDED: WHICH CAPTURES TO COMMIT\n- The tested code and the guide outputs assume the planning captures. Their SHA-256 prefixes are in the karthik.md SOURCES table (line 866: telnet deb2874b1e5c2b87), and they match the stage files.\n- Karthik's telnet.pcap is a different recording: 3777 bytes and 41 packets, against 2137 bytes for the planning file.\n- If you choose re-recorded captures, the JAK-01/JAK-02 outputs change, and JAK-04's test_inventory.py first_seen values and the eval set must be updated.\n- If you choose the planning captures, everything matches as verified above.\n\nREVIEWER LOAD for the five's 21 PRs\n- Jaiden: 8 (FIO-00, FIO-01, FIO-02, FIO-04, JON-00 to JON-03)\n- Fiona: 5 (JAK-00 to JAK-04)\n- Ahmad: 4 (AMO-00 to AMO-02, FIO-03)\n- Jonattan: 4 (ALI-00 to ALI-03)\n- Jaiden also authors 7 W0-W3 tasks. Consider a backup reviewer for the zero-slack FIO-01, FIO-02, JON-02 and JON-03.\n\nTOOLS\n- Nothing needed installing. Everything ran with the approved venv (ruff 0.16.10, pytest 9.1.1), git, and the pulled zeek/zeek:9.0.0 and jasonish/suricata:7.0.10 images.\n- xxd is missing, so I used Python instead.\n- The repo and the read-only stage folders were not modified.\n- Work files are in /tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/agentwork/audit-others:\n  - /tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/agentwork/audit-others/runs/summary.json\n  - /tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/agentwork/audit-others/depsonly-runs/summary.json\n  - /tmp/claude-0/-home-user-maxguard/d28fe4b6-2c9f-5cd0-8e7f-d2be65aa4c01/scratchpad/agentwork/audit-others/scripts/"
+ }
+]

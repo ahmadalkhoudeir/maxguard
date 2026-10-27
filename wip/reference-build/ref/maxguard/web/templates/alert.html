@@ -3,7 +3,7 @@
    evidence, controls, techniques, and the status form. Home mode: the human-written
    headline and action, and the severity in words; no IDs and no framework names.
    AI text and anything from traffic is plain, escaped text: never |safe. #}
-{% block title %}{{ alert.title }}{% endblock %}
+{% block title %}{{ home.headline if mode == "home" and home else alert.title }}{% endblock %}
 {% block content %}
 <p class="back"><a href="/">← All alerts</a></p>
 
@@ -21,8 +21,9 @@
   <dt>Severity</dt><dd>{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %} <span class="muted">(set by the rule, never by the AI)</span></dd>
   <dt>Rule</dt><dd class="mono">{{ alert.rule_id }}</dd>
   <dt>Source → destination</dt>
-  <dd class="mono"><a href="/timeline?ip={{ alert.src_ip | urlencode }}&amp;end={{ (alert.last_seen + 1) | int }}">{{ alert.src_ip }}</a>
-    → <a href="/timeline?ip={{ alert.dst_ip | urlencode }}&amp;end={{ (alert.last_seen + 1) | int }}">{{ alert.dst_ip }}</a>:{{ alert.dst_port }} ({{ alert.protocol }})</dd>
+  {% set end = alert.last_seen | timeline_end %}
+  <dd class="mono"><a href="/timeline?ip={{ alert.src_ip | urlencode }}{% if end is not none %}&amp;end={{ end }}{% endif %}">{{ alert.src_ip }}</a>
+    → <a href="/timeline?ip={{ alert.dst_ip | urlencode }}{% if end is not none %}&amp;end={{ end }}{% endif %}">{{ alert.dst_ip }}</a>:{{ alert.dst_port }} ({{ alert.protocol }})</dd>
   <dt>Seen</dt><dd>{{ alert.count }} time{{ "" if alert.count == 1 else "s" }}, first {{ alert.first_seen | utc_time }}, last {{ alert.last_seen | utc_time }}</dd>
   <dt>Detected by</dt><dd>{{ alert.source }}</dd>
   {% for key, value in alert.details | dictsort %}

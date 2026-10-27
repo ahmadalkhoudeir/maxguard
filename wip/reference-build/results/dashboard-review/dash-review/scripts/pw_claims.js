@@ -1,0 +1,30 @@
+"use strict";
+const { chromium } = require("playwright");
+const BASE = process.argv[2];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  const csp = [];
+  page.on("console", (m) => { if (/Content Security Policy|Refused to/i.test(m.text())) csp.push(m.text().slice(0, 140)); });
+  let modePost = null;
+  page.on("response", (r) => { if (new URL(r.url()).pathname === "/mode") modePost = r.status(); });
+  page.on("request", (r) => { if (new URL(r.url()).pathname === "/mode") console.log("POST /mode Origin header:", r.headers()["origin"]); });
+  await page.goto(BASE + "/");
+  await page.selectOption("#severity", "high"); await page.waitForURL(/severity=high/);
+  const id = (await (await fetch(BASE + "/api/alerts")).json())[0].finding_id;
+  await page.goto(BASE + "/alerts/" + id);
+  const chip = page.locator("a.chip").first();
+  const target = (await chip.getAttribute("href")).slice(1);
+  await chip.press("Enter");
+  await sleep(300);
+  console.log("citation chip ->", JSON.stringify(await page.evaluate((t) => ({ hash: location.hash,
+    targetMatches: document.getElementById(t).matches(":target"), focused: document.activeElement.id }), target)));
+  await page.fill("#actor", "Ahmad"); await page.click("#status-form button"); await page.waitForSelector("#status-form .message");
+  await page.goto(BASE + "/upload");
+  await Promise.all([page.waitForNavigation(), page.click('button[value="home"]')]).catch(() => {});
+  await sleep(500);
+  console.log("mode switch POST answered:", modePost, "| body shows:", (await page.textContent("body")).trim().slice(0, 60).replace(/\s+/g, " "));
+  console.log("CSP violations seen in the console:", JSON.stringify(csp));
+  await browser.close();
+})();

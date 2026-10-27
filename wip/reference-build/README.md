@@ -1,5 +1,19 @@
 # Save point: MaxGuard v2.0 reference build (October 8, 2026: every design task built)
 
+## Update: October 27, 2026 (lead work, weeks 3 to 5)
+
+- `ref/` and `docgen/` are current: the dashboard (AHM-02, AHM-03, AHM-06) went through four
+  rounds of browser review and fixes (`results/dashboard-review/fix-round1..4.patch`, with the
+  review scripts next to them). `docs/roadmap/ahmad.md` is regenerated from this `docgen/`.
+- Pull requests opened as drafts: #14 (AHM-02, branch `ahmad/dashboard-queue`) and #15
+  (AHM-03, `ahmad/alert-detail`, stacked). AHM-04's pre-review is on `ahmad/security-review-alpha`.
+- `results/security-review/`: the AHM-04 attack scripts and the lead's extra findings;
+  `results/team-audit/`: every teammate branch compared with the roadmap, and the per-person
+  Week 3 list; `results/workflows/`: the orchestration scripts and their result journals.
+- The reference captures for KAR-01 are still only here: `ref/tests/pcaps/` (Karthik's
+  fix steps copy them from this branch). Keep this branch until KAR-01 is merged.
+
+
 **Not for merging.** This folder saves the planning session's scratch workspace
 so the work can continue in a new session or container. The deliverable is the
 documentation in `docs/` on branch `v2-planning` (pull request #3, head

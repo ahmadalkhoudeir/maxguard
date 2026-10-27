@@ -1,0 +1,41 @@
+{
+ "group": "archives",
+ "rows": [
+  {
+   "row": 1,
+   "threat": "A malicious archive fills the disk (zip bomb) or writes outside its folder",
+   "in_alpha": true,
+   "defense": "maxguard/adapters/zeeklogs.py: _check_size() sums each member's DECLARED uncompressed size and raises ArchiveTooLarge before extracting if the sum exceeds MAX_EXTRACTED_BYTES (4 GiB). _extract() then unpacks zip via zipfile.extractall (stdlib strips absolute paths and '..' parts) and tar via tarfile.extractall(filter='data') (the data filter raises for '..', symlinks, hardlinks and device/special files, and neutralizes absolute paths by stripping the leading slash so they land inside the destination). to_zeek_logs() is the single entry the pipeline and the API use for non-directory inputs. The API upload path (maxguard/api/app.py) does NOT extract itself: save_upload() writes the body under a random token_hex name with a magic-number suffix (client filename is never used as a path), and run_pipeline() delegates unpacking to the adapter via analyze(), mapping ArchiveTooLarge->413 and (zipfile.BadZipFile, tarfile.TarError, EOFError)->400. All four tar data-filter errors (OutsideDestinationError, AbsolutePathError, LinkOutsideDestinationError, SpecialFileError) subclass tarfile.TarError, so the API catches them as a clean 400 rather than a 500.",
+   "defense_detail": "",
+   "code_refs": [
+    "maxguard/adapters/zeeklogs.py:24 (MAX_EXTRACTED_BYTES = 4 GiB)",
+    "maxguard/adapters/zeeklogs.py:91-93 (_check_size pre-check)",
+    "maxguard/adapters/zeeklogs.py:96-104 (_extract: zip extractall; tar extractall filter='data')",
+    "maxguard/adapters/zeeklogs.py:114-119 (to_zeek_logs routes to _extract)",
+    "maxguard/api/app.py:331-350 (save_upload: random name + magic-number suffix)",
+    "maxguard/api/app.py:304-318 (run_pipeline maps ArchiveTooLarge->413, BadZipFile/TarError/EOFError->400)"
+   ],
+   "tests": [
+    "tests/unit/test_zeeklogs_import.py::test_archive_that_unpacks_too_large_is_refused",
+    "tests/unit/test_zeeklogs_import.py::test_zip_and_tar_imports_match",
+    "tests/unit/test_adapters.py::test_zip_of_logs_is_unpacked",
+    "tests/unit/test_api.py::test_upload_is_stored_under_a_generated_name_and_deleted",
+    "tests/unit/test_api.py::test_keep_uploads_keeps_the_file_under_our_name"
+   ],
+   "attacks": "Built my own AHM-04 copy and ran, against adapters/zeeklogs.py _extract/to_zeek_logs and against the real /api/analyses endpoint (TestClient): (A) a hand-built zip whose member declares file_size=10 but whose DEFLATE stream decompresses to 20000 bytes; (B) a zip bomb member declaring 100000 bytes with MAX_EXTRACTED_BYTES monkeypatched down to 10 (so no 4 GiB is ever written); (C) a zip with members named '../../<canary>/evil.log' and absolute '/etc/evil_abs.log'; (D) a tar with '../../<canary>/evil.log'; (E) a tar with absolute '/tmp/tar_evil_abs.log'; (F) a tar with a symlink -> '../../../../etc/passwd'; (G) a tar with a hard link -> '../../../../etc/passwd'; (H) a tar with a character-device TarInfo (CHRTYPE, built in Python, no root); (I) end-to-end to_zeek_logs() with '../../e2e_escape/conn.log'; and the same traversal/symlink/device archives POSTed to /api/analyses. Also tested the tar size pre-check with the limit lowered.",
+   "commands": [
+    "python3 scratchpad/docgen/build_stage.py AHM-04 <repo>  # my own private copy",
+    ".venv/bin/python -m pytest -q tests/unit/test_zeeklogs_import.py tests/unit/test_adapters.py  -> 19 passed",
+    ".venv/bin/python -m pytest -q test_api.py::{test_upload_is_stored_under_a_generated_name_and_deleted,test_keep_uploads_keeps_the_file_under_our_name}  -> passed",
+    "PYTHONPATH=repo .venv/bin/python attacks.py <scratch>   # A-I against the adapter",
+    "MAXGUARD_ALLOWED_HOSTS=testserver,... .venv/bin/python api_attack.py <datadir>   # malicious archives via /api/analyses",
+    "python - (tar oversize: MAX_EXTRACTED_BYTES=10 -> ArchiveTooLarge before extract, dest not created)"
+   ],
+   "observed": "A: zipfile.BadZipFile 'Bad CRC-32 for file conn.log' - extractall caps output at the declared file_size then fails CRC, so a member can never write more than its declared size; the declared-size pre-check is therefore a sound upper bound. B: ArchiveTooLarge raised, destination empty (refused before any write). C: no raise, but files landed at 'ziptrav_canary/evil_rel.log' and 'etc/evil_abs.log' INSIDE dest; the outside canary dir stayed empty and /etc/evil_abs.log was not created (zipfile stripped '..' and the leading '/'). D: tarfile.OutsideDestinationError, canary empty. E: no raise; sanitized to 'tmp/tar_evil_abs.log' inside dest; /tmp/tar_evil_abs.log not created. F: tarfile.LinkOutsideDestinationError, no symlink created. G: tarfile.LinkOutsideDestinationError. H: tarfile.SpecialFileError, no device node. I: tarfile.OutsideDestinationError, e2e_escape not created outside. API /api/analyses: tar traversal/symlink/device each returned 400 ('not a valid archive: ... outside the destination' / 'is a special file'); zip traversal returned 200 with 0 findings (names neutralized, extracted inside the temp workdir, nothing escaped); the api_escape dir outside the data dir was never created; uploads were deleted. Tar oversize: ArchiveTooLarge before extract, dest not created. Python 3.11.15, so tarfile.data_filter is present and filter='data' is honored.",
+   "result": "PASS",
+   "notes": "No disk-fill and no write outside the destination in any test, at both the adapter and the API layers; this is the only archive-extraction surface in the alpha (the only extractall calls are zeeklogs.py:100 and :104; no maxguard/intel/bundle.py exists in AHM-04 - the signed intel-bundle extractor is Spring 2027, a different threat row). One documentation-precision nuance, NOT a security finding: the table says the data filter 'refuses absolute paths', but on POSIX the data filter neutralizes absolute paths (strips the leading slash, extracting inside the destination) rather than raising; it raises for '..', links and device files. The zip side likewise neutralizes '..' and absolute names by stripping rather than raising. The threat the row names - writing outside the folder - is fully prevented either way."
+  }
+ ],
+ "findings": [],
+ "extra": "Row 1 (malicious archive) verified against the alpha build at scratchpad/stages/AHM-04, rebuilt into my own copy at scratchpad/agentwork/sec-archives/repo. Result: PASS, no FAIL/PARTIAL findings. Harness files: scratchpad/agentwork/sec-archives/attacks.py (adapter-level A-I) and scratchpad/agentwork/sec-archives/api_attack.py (API /api/analyses). All referenced tests were run and passed (19 in test_zeeklogs_import.py + test_adapters.py, plus the two API storage tests). Defense code is wholly in maxguard/adapters/zeeklogs.py (owned by FIO-02 per the roadmap; the module header credits FIO-02 with v2.0 fixes) and the API glue in maxguard/api/app.py (JAI-07). Spring-2027-only extractor maxguard/intel/bundle.py is absent from the alpha and belongs to a different threat row (tampered rule/intel update), so it was out of scope here."
+}

@@ -1,0 +1,158 @@
+diff --git a/maxguard/web/static/app.css b/maxguard/web/static/app.css
+index 70a2909..9cab97f 100644
+--- a/maxguard/web/static/app.css
++++ b/maxguard/web/static/app.css
+@@ -93,7 +93,7 @@ select, input[type="text"], input[type="file"] {
+ }
+ 
+ .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 16px; }
+-.status-form, #upload-form { display: grid; gap: 8px; max-width: 420px; }
++.status-form, #upload-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-width: 420px; }
+ 
+ /* Severity badges: the word is always there; the color only helps. */
+ .sev {
+diff --git a/maxguard/web/static/app.js b/maxguard/web/static/app.js
+index dc046e7..caea2dd 100644
+--- a/maxguard/web/static/app.js
++++ b/maxguard/web/static/app.js
+@@ -1,16 +1,18 @@
+ // MaxGuard dashboard script (Ahmad, AHM-02). Everything else is htmx.
+ // 1) Live refresh: the server sends "alerts-changed" on /api/stream; the alert
+ //    table reloads itself on "refresh" (it also polls every 30 s as a fallback).
++//    A browser keeps at most 6 connections open to one site, and each open
++//    stream holds one, so six queue tabs would leave none for loading pages.
++//    Only one tab opens the stream: the tab holding the "maxguard-stream" lock.
++//    It passes each change to the other tabs over a BroadcastChannel. When that
++//    tab closes, another queue tab gets the lock and opens the stream.
+ // 2) Upload: /api/analyses answers JSON; show it as plain text (textContent,
+ //    never innerHTML, because an error message can contain a file name).
+ "use strict";
+ 
+ document.addEventListener("DOMContentLoaded", function () {
+   if (document.getElementById("alerts") && window.EventSource) {
+-    const stream = new EventSource("/api/stream");
+-    stream.addEventListener("alerts-changed", function () {
+-      htmx.trigger("#alerts", "refresh");
+-    });
++    liveRefresh();
+   }
+ 
+   const form = document.getElementById("upload-form");
+@@ -21,6 +23,27 @@ document.addEventListener("DOMContentLoaded", function () {
+   }
+ });
+ 
++function liveRefresh() {
++  const refresh = function () {
++    htmx.trigger("#alerts", "refresh");
++  };
++  if (!navigator.locks || !window.BroadcastChannel) {
++    // Older browsers: one stream per tab.
++    new EventSource("/api/stream").addEventListener("alerts-changed", refresh);
++    return;
++  }
++  const channel = new BroadcastChannel("maxguard-alerts");
++  channel.addEventListener("message", refresh);
++  navigator.locks.request("maxguard-stream", function () {
++    const stream = new EventSource("/api/stream");
++    stream.addEventListener("alerts-changed", function () {
++      refresh();
++      channel.postMessage("alerts-changed");
++    });
++    return new Promise(function () {});  // never settles: keep the lock until the tab closes
++  });
++}
++
+ function uploadMessage(xhr) {
+   let body = {};
+   try {
+diff --git a/maxguard/web/templates/_status.html b/maxguard/web/templates/_status.html
+index a9b6188..599c17e 100644
+--- a/maxguard/web/templates/_status.html
++++ b/maxguard/web/templates/_status.html
+@@ -17,6 +17,6 @@
+   </select>
+   <label for="assignee">Assignee</label>
+   <input id="assignee" name="assignee" type="text" maxlength="100" value="{{ alert.assignee or '' }}">
+-  <button type="submit">Save</button>
++  <button id="status-save" type="submit">Save</button>
+   {% if message %}<p class="message" role="status">{{ message }}</p>{% endif %}
+ </form>
+diff --git a/maxguard/web/templates/alert.html b/maxguard/web/templates/alert.html
+index 64a3fb2..e722efe 100644
+--- a/maxguard/web/templates/alert.html
++++ b/maxguard/web/templates/alert.html
+@@ -3,7 +3,7 @@
+    evidence, controls, techniques, and the status form. Home mode: the human-written
+    headline and action, and the severity in words; no IDs and no framework names.
+    AI text and anything from traffic is plain, escaped text: never |safe. #}
+-{% block title %}{{ alert.title }}{% endblock %}
++{% block title %}{{ home.headline if mode == "home" and home else alert.title }}{% endblock %}
+ {% block content %}
+ <p class="back"><a href="/">← All alerts</a></p>
+ 
+diff --git a/maxguard/web/templates/queue.html b/maxguard/web/templates/queue.html
+index 6a80336..c14736e 100644
+--- a/maxguard/web/templates/queue.html
++++ b/maxguard/web/templates/queue.html
+@@ -50,7 +50,7 @@
+       {% set home = home_text.get(alert.rule_id) %}
+       <tr>
+         <td data-label="Severity">{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %}</td>
+-        <td data-label="Alert"><a href="/alerts/{{ alert.finding_id }}">{% if mode == "home" and home %}{{ home.headline }}{% else %}{{ alert.title }}{% endif %}</a></td>
++        <td data-label="Alert"><a id="alert-{{ alert.finding_id }}" href="/alerts/{{ alert.finding_id }}">{% if mode == "home" and home %}{{ home.headline }}{% else %}{{ alert.title }}{% endif %}</a></td>
+         <td data-label="Source → destination" class="mono">{{ alert.src_ip }} → {{ alert.dst_ip }}:{{ alert.dst_port }}</td>
+         <td data-label="Count">{{ alert.count }}</td>
+         <td data-label="Status">{{ status_labels.get(alert.status, alert.status) }}</td>
+diff --git a/tests/unit/test_web.py b/tests/unit/test_web.py
+index 3f5b599..a41fc54 100644
+--- a/tests/unit/test_web.py
++++ b/tests/unit/test_web.py
+@@ -101,7 +101,9 @@ def test_queue_lists_the_telnet_alert(app, client, telnet_report):
+     save(app, telnet_report)
+     page = client.get("/")
+     assert "Telnet session in cleartext" in page.text
+-    assert f'href="/alerts/{telnet_id(telnet_report)}"' in page.text
++    # the stable id lets htmx keep keyboard focus on the link when the table refreshes
++    finding_id = telnet_id(telnet_report)
++    assert f'<a id="alert-{finding_id}" href="/alerts/{finding_id}">' in page.text
+     assert "172.18.0.3 → 172.18.0.2:23" in page.text
+     # severity as text and color: the word is in the badge with the color class
+     assert '<span class="sev sev-high">High</span>' in page.text
+@@ -111,7 +113,11 @@ def test_queue_has_the_htmx_wiring(client):
+     page = client.get("/")
+     assert 'hx-trigger="refresh, every 30s"' in page.text
+     assert page.text.count('hx-get="/" hx-target="#alerts" hx-select="#alerts"') == 2
+-    assert 'new EventSource("/api/stream")' in client.get("/static/app.js").text
++    script = client.get("/static/app.js").text
++    assert 'new EventSource("/api/stream")' in script
++    # one stream for all queue tabs: six open streams would block the browser
++    assert 'navigator.locks.request("maxguard-stream"' in script
++    assert 'new BroadcastChannel("maxguard-alerts")' in script
+ 
+ 
+ def test_queue_filters(app, client, telnet_report, ftp_report):
+@@ -204,6 +210,7 @@ def test_alert_detail_analyst_mode(app, client, telnet_report):
+     assert "T1040" in page and "credential-access" in page
+     assert "A device logged in with Telnet" in page
+     assert 'id="status-form"' in page
++    assert "<title>Telnet session in cleartext · MaxGuard</title>" in page
+ 
+ 
+ def test_controls_are_grouped_by_framework():
+@@ -235,6 +242,7 @@ def test_alert_detail_home_mode(app, client, telnet_report):
+     page = client.get(f"/alerts/{finding['finding_id']}").text
+     home = routes.load_home_text()["cleartext.telnet"]
+     assert home["headline"] in page
++    assert f"<title>{home['headline']} · MaxGuard</title>" in page  # no jargon in the tab
+     assert home["action"] in page
+     assert "High: fix this week" in page
+     main = page.split('<main id="main"', 1)[1]  # the page body, not the URLs in the nav
+@@ -273,6 +281,7 @@ def test_status_change_is_saved_and_audited(app, client, telnet_report):
+                                 "assignee": "Fiona"})
+     assert answer.status_code == 200
+     assert "Saved." in answer.text
++    assert '<button id="status-save" type="submit">Save</button>' in answer.text
+     assert "mg_actor=Ahmad" in answer.headers["set-cookie"]
+     alert = app.state.state_store.get_alert(finding_id)
+     assert (alert["status"], alert["assignee"]) == ("investigating", "Fiona")

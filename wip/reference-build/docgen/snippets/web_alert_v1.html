@@ -3,7 +3,7 @@
    evidence, controls, techniques, and the status form. Home mode: the human-written
    headline and action, and the severity in words; no IDs and no framework names.
    AI text and anything from traffic is plain, escaped text: never |safe. #}
-{% block title %}{{ alert.title }}{% endblock %}
+{% block title %}{{ home.headline if mode == "home" and home else alert.title }}{% endblock %}
 {% block content %}
 <p class="back"><a href="/">← All alerts</a></p>
 
