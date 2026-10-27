@@ -1,9 +1,11 @@
-"""The dashboard's HTML pages (Ahmad, AHM-02).
+"""The dashboard's HTML pages (Ahmad, AHM-02, AHM-03).
 
 create_app() in maxguard/api/app.py includes this router when it imports.
 
     GET   /                             alert queue (filters: ?status=&severity=)
     GET   /upload                       upload form (posts to /api/analyses)
+    GET   /alerts/{finding_id}          one alert, Analyst or Home mode
+    PATCH /alerts/{finding_id}/status   change status/assignee, returns the form again
     POST  /mode                         Analyst/Home switch (cookie mg_mode)
 
 The pages read the stores only through request.app.state. Jinja2 escapes every
@@ -13,13 +15,17 @@ attacker writes the traffic (docs/ARCHITECTURE.md section 14).
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
+from maxguard.ai import load_home_text
+from maxguard.api.app import notify_change
 from maxguard.models import SEVERITIES
 from maxguard.storage.state import ALERT_STATUSES
 
@@ -29,6 +35,7 @@ TEMPLATES = Jinja2Templates(directory=Path(__file__).resolve().parent / "templat
 MODES = ("analyst", "home")
 YEAR_SECONDS = 365 * 24 * 3600
 QUEUE_LIMIT = 200          # rows on the queue page; the caption says when more match
+MAX_NAME_LENGTH = 100      # the same limit as "actor" in PATCH /api/alerts
 
 # Home mode: the severity in plain words (no jargon), and color is never the only signal.
 SEVERITY_WORDS = {
@@ -57,6 +64,11 @@ SECURITY_HEADERS = {
 
 # ---------- small helpers ----------
 
+def now() -> float:
+    """The clock, in one place (the web layer may read it; the engine never does)."""
+    return time.time()
+
+
 def utc_time(ts: float | None) -> str:
     """Unix seconds -> "2026-10-06 14:03:22 UTC" (the same on every machine).
     Times come from logs, which an attacker can write: one a date cannot hold
@@ -75,6 +87,18 @@ TEMPLATES.env.filters["utc_time"] = utc_time
 def mode_of(request: Request) -> str:
     """"home" or "analyst" (the default) from the mg_mode cookie."""
     return "home" if request.cookies.get("mg_mode") == "home" else "analyst"
+
+
+def actor_of(request: Request) -> str:
+    """The display name stored in the mg_actor cookie ("" when not set yet or not valid)."""
+    name = unquote(request.cookies.get("mg_actor", "")).strip()
+    return name if valid_name(name) else ""
+
+
+def valid_name(name: str) -> bool:
+    """1 to 100 printable characters. A line break or another control character
+    could fake an extra line in the audit trail, so it is refused."""
+    return 0 < len(name) <= MAX_NAME_LENGTH and name.isprintable()
 
 
 def render(request: Request, name: str, context: dict, status_code: int = 200) -> HTMLResponse:
@@ -124,7 +148,7 @@ def queue(request: Request, status: str | None = None, severity: str | None = No
     return render(request, "queue.html", {
         "alerts": alerts[:QUEUE_LIMIT], "more": len(alerts) > QUEUE_LIMIT,
         "status": status or "", "severity": severity or "",
-        "statuses": ALERT_STATUSES,
+        "statuses": ALERT_STATUSES, "home_text": load_home_text(),
     })
 
 
@@ -143,6 +167,76 @@ async def switch_mode(request: Request):
     if mode in MODES:
         response.set_cookie("mg_mode", mode, max_age=YEAR_SECONDS, path="/",
                             samesite="lax", httponly=True)
+    return response
+
+
+# ---------- AHM-03: alert detail ----------
+
+def controls_by_framework(controls: list[dict]) -> list[dict]:
+    """[{"framework", "version", "controls": [...]}, ...] in the order they first appear."""
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for control in controls:
+        groups.setdefault((control["framework"], control["version"]), []).append(control)
+    return [{"framework": framework, "version": version, "controls": items}
+            for (framework, version), items in groups.items()]
+
+
+def ai_status(request: Request, alert: dict) -> dict:
+    """The "ai" part of the report that last updated this alert."""
+    report = request.app.state.state_store.get_analysis(alert["analysis_id"]) or {}
+    return report.get("ai") or {"status": "disabled", "reason": None}
+
+
+def status_context(alert: dict, actor: str, message: str = "") -> dict:
+    return {"alert": alert, "actor": actor, "statuses": ALERT_STATUSES, "message": message}
+
+
+@router.get("/alerts/{finding_id}", response_class=HTMLResponse)
+def alert_detail(request: Request, finding_id: str):
+    alert = request.app.state.state_store.get_alert(finding_id)
+    if alert is None:
+        return error_page(request, 404, "No alert with this ID. It may have been removed.")
+    return render(request, "alert.html", {
+        **status_context(alert, actor_of(request)),
+        "groups": controls_by_framework(alert["controls"]),
+        "ai": ai_status(request, alert),
+        "home": load_home_text().get(alert["rule_id"]),
+    })
+
+
+@router.patch("/alerts/{finding_id}/status", response_class=HTMLResponse)
+async def change_status(request: Request, finding_id: str):
+    """Called by the htmx form on the alert page; returns the form again (a fragment).
+    The first time, the form also sends the person's display name ("actor"), which
+    is stored in the mg_actor cookie so the page does not ask again."""
+    form = await request.form()
+    actor = actor_of(request) or str(form.get("actor", "")).strip()
+    store = request.app.state.state_store
+    alert = store.get_alert(finding_id)
+    if alert is None:
+        return error_page(request, 404, "No alert with this ID.")
+    if not valid_name(actor):
+        return render(request, "_status.html", status_context(
+            alert, "", f"Type your name (1 to {MAX_NAME_LENGTH} characters) first."), 400)
+    status = empty_to_none(str(form.get("status", "")))
+    assignee = text_field(form.get("assignee", ""))[:MAX_NAME_LENGTH]
+    # Save only what this person changed on the form they saw: a form opened before
+    # someone else's change must not quietly undo it (None = leave as is).
+    if "shown_status" in form and status == form["shown_status"]:
+        status = None
+    if "shown_assignee" in form and assignee == text_field(form["shown_assignee"]):
+        assignee = None
+    try:
+        alert = store.update_alert(finding_id, actor=actor, at=now(),
+                                   status=status, assignee=assignee)
+    except ValueError as err:  # unknown status
+        return render(request, "_status.html", status_context(alert, actor, str(err)), 400)
+    notify_change(request.app)  # open queues refresh themselves
+    response = render(request, "_status.html", status_context(alert, actor, "Saved."))
+    # Percent-encoded ("Jos%C3%A9"): a cookie value may only hold plain ASCII
+    # (RFC 6265 section 4.1.1), and names such as "José" or "Łukasz" are not.
+    response.set_cookie("mg_actor", quote(actor, safe=""), max_age=YEAR_SECONDS, path="/",
+                        samesite="lax", httponly=True)
     return response
 
 

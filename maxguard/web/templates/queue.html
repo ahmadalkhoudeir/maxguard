@@ -48,9 +48,10 @@
     </thead>
     <tbody>
       {% for alert in alerts %}
+      {% set home = home_text.get(alert.rule_id) %}
       <tr>
         <td data-label="Severity">{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %}</td>
-        <td data-label="Alert"><a id="alert-{{ alert.finding_id }}" href="/alerts/{{ alert.finding_id }}">{{ alert.title }}</a></td>
+        <td data-label="Alert"><a id="alert-{{ alert.finding_id }}" href="/alerts/{{ alert.finding_id }}">{% if mode == "home" and home %}{{ home.headline }}{% else %}{{ alert.title }}{% endif %}</a></td>
         <td data-label="Source → destination" class="mono">{{ alert.src_ip }} → {{ alert.dst_ip }}:{{ alert.dst_port }}</td>
         <td data-label="Count">{{ alert.count }}</td>
         <td data-label="Status">{{ status_labels.get(alert.status, alert.status) }}</td>

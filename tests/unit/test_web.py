@@ -1,4 +1,4 @@
-"""Tests for the dashboard pages (Ahmad, AHM-02).
+"""Tests for the dashboard pages (Ahmad, AHM-02, AHM-03).
 
 Reports come from maxguard.pipeline.analyze on the Zeek log fixtures (no Zeek,
 no AI) and are saved through the stores, exactly as the upload endpoint does.
@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from maxguard.api.app import STATIC_DIR, create_app
 from maxguard.pipeline import analyze
+from maxguard.web import routes
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "zeek"
 HTMX_SHA256 = "d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717"
@@ -172,7 +173,7 @@ def test_hostile_values_are_escaped(app, client, telnet_report):
     save(app, report)
     app.state.state_store.update_alert(finding["finding_id"], actor="test",
                                        at=RECEIVED_AT, assignee=HOSTILE)
-    for path in ("/",):  # the alert page comes in AHM-03
+    for path in ("/", f"/alerts/{finding['finding_id']}"):
         answer = client.get(path)
         assert answer.status_code == 200
         page = answer.text
@@ -184,7 +185,7 @@ def test_hostile_values_are_escaped(app, client, telnet_report):
 def test_no_page_loads_anything_from_outside(app, client, telnet_report, mode):
     save(app, with_ai_sentences(telnet_report))
     client.cookies.set("mg_mode", mode)
-    pages = ["/", "/upload"]
+    pages = ["/", "/upload", f"/alerts/{telnet_id(telnet_report)}"]
     for path in pages:
         for url in re.findall(r'(?:src|href|action|hx-[a-z]+)="([^"]*)"', client.get(path).text):
             assert not url.startswith(("http:", "https:", "//")), (path, url)
@@ -219,3 +220,188 @@ def test_upload_page_posts_to_the_api(client):
     assert 'hx-post="/api/analyses"' in page
     assert 'hx-encoding="multipart/form-data"' in page
     assert 'href="/"' in page
+
+
+# ---------- AHM-03: alert detail ----------
+
+def test_alert_detail_analyst_mode(app, client, telnet_report):
+    report = with_ai_sentences(telnet_report)
+    save(app, report)
+    page = client.get(f"/alerts/{telnet_id(report)}").text
+    finding = report["findings"][0]
+    assert finding["evidence"][0]["record_id"] in page
+    assert "NIST SP 800-53" in page
+    assert "Rev. 5 (Release 5.2.0)" in page  # the version next to the framework
+    assert "T1040" in page and "credential-access" in page
+    assert "A device logged in with Telnet" in page
+    assert 'id="status-form"' in page
+    assert "<title>Telnet session in cleartext · MaxGuard</title>" in page
+
+
+def test_controls_are_grouped_by_framework():
+    controls = [
+        {"framework": "PCI DSS", "version": "4.0.1", "control_id": "4.2.1"},
+        {"framework": "NIST SP 800-53", "version": "Rev. 5 (Release 5.2.0)", "control_id": "SC-8"},
+        {"framework": "PCI DSS", "version": "4.0.1", "control_id": "8.3.2"},
+    ]
+    groups = routes.controls_by_framework(controls)
+    assert [(g["framework"], len(g["controls"])) for g in groups] == [
+        ("PCI DSS", 2), ("NIST SP 800-53", 1)]
+
+
+def test_citation_links_point_to_evidence_rows(app, client, telnet_report):
+    report = with_ai_sentences(telnet_report)
+    save(app, report)
+    page = client.get(f"/alerts/{telnet_id(report)}").text
+    cited = re.findall(r'href="#ev-([0-9a-f]+)"', page)
+    assert cited  # at least one citation chip
+    for record_id in cited:
+        assert f'id="ev-{record_id}"' in page
+
+
+def test_alert_detail_home_mode(app, client, telnet_report):
+    report = with_ai_sentences(telnet_report)
+    save(app, report)
+    finding = report["findings"][0]
+    client.cookies.set("mg_mode", "home")
+    page = client.get(f"/alerts/{finding['finding_id']}").text
+    home = routes.load_home_text()["cleartext.telnet"]
+    assert home["headline"] in page
+    assert f"<title>{home['headline']} · MaxGuard</title>" in page  # no jargon in the tab
+    assert home["action"] in page
+    assert "High: fix this week" in page
+    main = page.split('<main id="main"', 1)[1]  # the page body, not the URLs in the nav
+    for jargon in (finding["evidence"][0]["record_id"], "cleartext.telnet", "NIST",
+                   "PCI DSS", "CISA", "CJIS", "T1040", "ATT&amp;CK"):
+        assert jargon not in main.replace(f"/alerts/{finding['finding_id']}", "")
+
+
+def test_unknown_alert_is_a_404_page(client):
+    page = client.get("/alerts/0000000000000000")
+    assert page.status_code == 404
+    assert "No alert with this ID" in page.text
+
+
+def test_ai_unavailable_banner_shows_the_reason(app, client, telnet_report):
+    report = copy.deepcopy(telnet_report)
+    reason = "model 'qwen3:4b' not found: run ollama pull qwen3:4b"
+    report["ai"] = {"status": "unavailable", "model": "qwen3:4b", "explained": 0,
+                    "dropped_sentences": 0, "reason": reason}
+    save(app, report)
+    page = client.get(f"/alerts/{telnet_id(report)}").text
+    assert 'class="banner" role="alert"' in page
+    assert "model &#39;qwen3:4b&#39; not found: run ollama pull qwen3:4b" in page
+
+
+def test_no_banner_when_the_ai_worked(app, client, telnet_report):
+    save(app, with_ai_sentences(telnet_report))
+    assert 'class="banner"' not in client.get(f"/alerts/{telnet_id(telnet_report)}").text
+
+
+def test_status_change_is_saved_and_audited(app, client, telnet_report):
+    save(app, telnet_report)
+    finding_id = telnet_id(telnet_report)
+    answer = client.patch(f"/alerts/{finding_id}/status",
+                          data={"actor": "Ahmad", "status": "investigating",
+                                "assignee": "Fiona"})
+    assert answer.status_code == 200
+    assert "Saved." in answer.text
+    assert '<button id="status-save" type="submit">Save</button>' in answer.text
+    assert '<input type="hidden" name="shown_status" value="investigating">' in answer.text
+    assert 'autocomplete="off"' in answer.text  # Back must not restore stale choices
+    assert "mg_actor=Ahmad" in answer.headers["set-cookie"]
+    alert = app.state.state_store.get_alert(finding_id)
+    assert (alert["status"], alert["assignee"]) == ("investigating", "Fiona")
+    audit = app.state.state_store.list_audit()
+    assert audit[0]["actor"] == "Ahmad"
+    assert audit[0]["target"] == finding_id
+    assert audit[0]["details"]["status"] == {"from": "new", "to": "investigating"}
+    # a form opened before that change (it still shows "new") changes only the assignee
+    stale = client.patch(f"/alerts/{finding_id}/status",
+                         data={"status": "new", "shown_status": "new",
+                               "assignee": "Ali", "shown_assignee": ""})
+    assert stale.status_code == 200
+    alert = app.state.state_store.get_alert(finding_id)
+    assert (alert["status"], alert["assignee"]) == ("investigating", "Ali")
+    assert app.state.state_store.list_audit()[0]["details"] == {
+        "assignee": {"from": "Fiona", "to": "Ali"}}
+    assert '<input type="hidden" name="shown_assignee" value="Ali">' in stale.text
+    # and the other way round: a form that still shows "Fiona" changes only the status
+    client.patch(f"/alerts/{finding_id}/status",
+                 data={"status": "resolved", "shown_status": "investigating",
+                       "assignee": "Fiona", "shown_assignee": "Fiona"})
+    alert = app.state.state_store.get_alert(finding_id)
+    assert (alert["status"], alert["assignee"]) == ("resolved", "Ali")
+    # a browser drops line breaks from the text box but not from the hidden field
+    app.state.state_store.update_alert(finding_id, actor="api", at=RECEIVED_AT, assignee="Ali\nB")
+    client.patch(f"/alerts/{finding_id}/status",
+                 data={"status": "new", "shown_status": "resolved",
+                       "assignee": "AliB", "shown_assignee": "Ali\nB"})
+    assert app.state.state_store.get_alert(finding_id)["assignee"] == "Ali\nB"
+    # a file sent under the field's name is not a name: it counts as empty
+    client.patch(f"/alerts/{finding_id}/status", data={"status": "new", "shown_status": "new"},
+                 files={"assignee": ("x.txt", b"Mallory", "text/plain")})
+    assert app.state.state_store.get_alert(finding_id)["assignee"] == ""
+
+
+def test_status_change_uses_the_name_cookie(app, client, telnet_report):
+    save(app, telnet_report)
+    client.cookies.set("mg_actor", "Jaiden")
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"status": "resolved", "assignee": ""})
+    assert answer.status_code == 200
+    assert app.state.state_store.list_audit()[0]["actor"] == "Jaiden"
+
+
+def test_status_change_needs_a_name(app, client, telnet_report):
+    save(app, telnet_report)
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"status": "resolved"})
+    assert answer.status_code == 400
+    assert "Type your name" in answer.text
+    assert 'pattern=".*\\S.*"' in answer.text  # the browser refuses a name of only spaces
+    assert app.state.state_store.list_audit() == []
+
+
+def test_unknown_status_is_refused(app, client, telnet_report):
+    save(app, telnet_report)
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"actor": "Ahmad", "status": "deleted"})
+    assert answer.status_code == 400
+
+
+def test_status_change_refreshes_open_queues(app, client, telnet_report):
+    save(app, telnet_report)
+    before = app.state.changes  # /api/stream sends alerts-changed when this goes up
+    client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                 data={"actor": "Ahmad", "status": "investigating"})
+    assert app.state.changes == before + 1
+
+
+@pytest.mark.parametrize("name", ["José", "Łukasz", "علي", "Ann Lee"])
+def test_any_name_works_and_is_remembered(app, client, telnet_report, name):
+    save(app, telnet_report)
+    path = f"/alerts/{telnet_id(telnet_report)}/status"
+    first = client.patch(path, data={"actor": name, "status": "investigating"})
+    assert first.status_code == 200
+    second = client.patch(path, data={"status": "resolved"})  # the name now comes from the cookie
+    assert second.status_code == 200
+    assert [row["actor"] for row in app.state.state_store.list_audit()] == [name, name]
+
+
+@pytest.mark.parametrize("name", ["Ann\nAdmin approved", "Ann\x00", " ", "x" * 101])
+def test_bad_names_are_refused(app, client, telnet_report, name):
+    save(app, telnet_report)
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"actor": name, "status": "resolved"})
+    assert answer.status_code == 400
+    assert app.state.state_store.list_audit() == []
+
+
+def test_cross_site_status_change_is_refused(app, client, telnet_report):
+    save(app, telnet_report)
+    answer = client.patch(f"/alerts/{telnet_id(telnet_report)}/status",
+                          data={"actor": "x", "status": "resolved"},
+                          headers={"Origin": "http://evil.example"})
+    assert answer.status_code == 403
+    assert app.state.state_store.get_alert(telnet_id(telnet_report))["status"] == "new"
