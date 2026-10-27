@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{# Upload page (Ahmad, AHM-02). The form posts to the JSON API; app.js shows the
+   answer as plain text. The request waits for the whole analysis, AI included. #}
+{% block title %}Upload{% endblock %}
+{% block content %}
+<h1>Upload a capture</h1>
+<p>Choose a <code>.pcap</code> or <code>.pcapng</code> capture, or a <code>.zip</code> or
+  <code>.tar.gz</code> of Zeek logs. It is analyzed on this computer and then deleted.</p>
+
+<form id="upload-form" class="card" method="post" action="/api/analyses"
+      enctype="multipart/form-data"
+      hx-post="/api/analyses" hx-encoding="multipart/form-data" hx-swap="none"
+      hx-indicator="#upload-busy" hx-disabled-elt="find button">
+  <label for="file">Capture or log archive</label>
+  <input id="file" name="file" type="file" required
+         accept=".pcap,.pcapng,.cap,.zip,.tar.gz,.tgz">
+  <button type="submit">Analyze</button>
+  <p id="upload-busy" class="htmx-indicator" role="status">Analyzing… this can take a few minutes.</p>
+</form>
+
+<p id="upload-result" role="status" aria-live="polite"></p>
+<p><a href="/">Go to the alert queue</a></p>
+{% endblock %}

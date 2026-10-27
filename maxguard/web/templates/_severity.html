@@ -1,0 +1,3 @@
+{# Severity as text AND color (Ahmad, AHM-02): never color alone. In Home mode the
+   words say what to do ("High: fix this week"). Expects "severity" in the context. #}
+<span class="sev sev-{{ severity }}">{% if mode == "home" %}{{ severity_words[severity] }}{% else %}{{ severity | capitalize }}{% endif %}</span>
