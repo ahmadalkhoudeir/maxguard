@@ -469,13 +469,7 @@ d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717  maxguard/web/s
 
 On macOS use `shasum -a 256` instead of `sha256sum`. htmx already has a row in `docs/DEPENDENCIES.md`.
 
-**Step 3.** Create `maxguard/web/__init__.py` (one line):
-
-```python
-
-```
-
-and `maxguard/web/routes.py`:
+**Step 3.** Create an **empty** file `maxguard/web/__init__.py` (it makes the folder part of the Python package), then `maxguard/web/routes.py`:
 
 ```python
 """The dashboard's HTML pages (Ahmad, AHM-02).
@@ -508,6 +502,7 @@ TEMPLATES = Jinja2Templates(directory=Path(__file__).resolve().parent / "templat
 
 MODES = ("analyst", "home")
 YEAR_SECONDS = 365 * 24 * 3600
+QUEUE_LIMIT = 200          # rows on the queue page; the caption says when more match
 
 # Home mode: the severity in plain words (no jargon), and color is never the only signal.
 SEVERITY_WORDS = {
@@ -537,10 +532,15 @@ SECURITY_HEADERS = {
 # ---------- small helpers ----------
 
 def utc_time(ts: float | None) -> str:
-    """Unix seconds -> "2026-10-06 14:03:22 UTC" (the same on every machine)."""
+    """Unix seconds -> "2026-10-06 14:03:22 UTC" (the same on every machine).
+    Times come from logs, which an attacker can write: one a date cannot hold
+    (after the year 9999, inf, NaN) is shown as it is instead of breaking the page."""
     if ts is None:
         return ""
-    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    try:
+        return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    except (TypeError, ValueError, OverflowError, OSError):
+        return f"{ts!r} (not a valid time)"
 
 
 TEMPLATES.env.filters["utc_time"] = utc_time
@@ -569,6 +569,15 @@ def empty_to_none(value: str | None) -> str | None:
     return value or None
 
 
+def text_field(value) -> str:
+    """A form value as a text box holds it: browsers drop line breaks from text inputs
+    (but not from hidden ones), so an assignee stored with one compares equal.
+    A part that is not text (a file sent under the field's name) counts as empty."""
+    if not isinstance(value, str):
+        return ""
+    return value.replace("\r", "").replace("\n", "").strip()
+
+
 def safe_next(path: str) -> str:
     """Only a path on this site: "//evil.example" or "https://..." would be an open redirect."""
     if path.startswith("/") and not path.startswith("//") and "\\" not in path:
@@ -582,11 +591,13 @@ def safe_next(path: str) -> str:
 def queue(request: Request, status: str | None = None, severity: str | None = None):
     status, severity = empty_to_none(status), empty_to_none(severity)
     try:
-        alerts = request.app.state.state_store.list_alerts(status=status, severity=severity)
+        alerts = request.app.state.state_store.list_alerts(
+            status=status, severity=severity, limit=QUEUE_LIMIT + 1)
     except ValueError as err:  # unknown status or severity in the URL
         return error_page(request, 400, str(err))
     return render(request, "queue.html", {
-        "alerts": alerts, "status": status or "", "severity": severity or "",
+        "alerts": alerts[:QUEUE_LIMIT], "more": len(alerts) > QUEUE_LIMIT,
+        "status": status or "", "severity": severity or "",
         "statuses": ALERT_STATUSES,
     })
 
@@ -615,9 +626,9 @@ def favicon() -> Response:
     return Response(status_code=204)
 ```
 
-`create_app()` includes this router as soon as the module exists. What to notice: `render()` adds three headers to every page. The **Content-Security-Policy** tells the browser to load and run nothing that does not come from this computer, a second wall in case some text ever slipped past escaping. **Referrer-Policy** is `same-origin`, not `no-referrer`: with `no-referrer`, Chrome sends `Origin: null` on form posts, and the API's cross-site check refuses those (found in a real browser, not by a unit test). The Analyst/Home switch is a small `POST` form, so it works with the keyboard and without JavaScript, and `safe_next()` keeps its redirect on this site.
+`create_app()` includes this router as soon as the module exists. What to notice: `render()` adds three headers to every page. The **Content-Security-Policy** tells the browser to load and run nothing that does not come from this computer, a second wall in case some text ever slipped past escaping. **Referrer-Policy** is `same-origin`, not `no-referrer`: with `no-referrer`, Chrome sends `Origin: null` on form posts, and the API's cross-site check refuses those (found in a real browser, not by a unit test). The Analyst/Home switch is a small `POST` form, so it works with the keyboard and without JavaScript, and `safe_next()` keeps its redirect on this site. `utc_time()` never raises: times come from logs, and an uploaded log with a time no date can hold (such as `1e12`, the year 33658) used to break the queue for everyone (found by the review). The queue shows the `QUEUE_LIMIT` most severe alerts and says so when more match, and how to see them (a status and a severity), instead of silently hiding the rest.
 
-**Step 4.** Create the templates in `maxguard/web/templates/`. The layout, `base.html` (the `htmx-config` tag keeps htmx inside the CSP: no inline styles, no `eval`, no scripts from responses, only this site):
+**Step 4.** Create the templates in `maxguard/web/templates/`. The layout, `base.html` (the `htmx-config` tag keeps htmx inside the CSP: no inline styles, no `eval`, no scripts from responses, only this site; `historyCacheSize: 0` keeps no copies of pages in the browser's storage, and **Back** or **Forward** is a full page load, so the filters, the table, the address and the script always match; the privacy note sits in an `<aside>` landmark, so a screen reader can jump to it):
 
 ```html
 <!doctype html>
@@ -628,8 +639,10 @@ def favicon() -> Response:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {# htmx settings: no inline <style> (our CSP blocks it), never run scripts or eval
-     from a response, only talk to this site, and show 400 answers (form errors). #}
-  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "400", "swap": true, "error": false}, {"code": "[45]..", "swap": false, "error": true}]}'>
+     from a response, only talk to this site, keep no copies of pages in the browser's
+     storage (Back and Forward load the page again, as a full page load: the filters,
+     the table, the address and app.js always match), and show 400 answers (form errors). #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true, "historyCacheSize": 0, "refreshOnHistoryMiss": true, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "400", "swap": true, "error": false}, {"code": "[45]..", "swap": false, "error": true}]}'>
   <title>{% block title %}MaxGuard{% endblock %} · MaxGuard</title>
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx-2.0.11.min.js" defer></script>
@@ -652,7 +665,7 @@ def favicon() -> Response:
               aria-pressed="{{ 'true' if mode == 'home' else 'false' }}">Home</button>
     </form>
   </header>
-  <p class="privacy">Your data never leaves this computer.</p>
+  <aside aria-label="Privacy"><p class="privacy">Your data never leaves this computer.</p></aside>
   <main id="main" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
@@ -714,10 +727,11 @@ The queue, `queue.html`:
 </form>
 
 <div id="alerts" hx-get="/?status={{ status | urlencode }}&amp;severity={{ severity | urlencode }}"
-     hx-trigger="refresh, every 30s" hx-select="#alerts" hx-swap="outerHTML" aria-live="polite">
+     hx-trigger="refresh, every 30s" hx-select="#alerts" hx-swap="outerHTML" hx-sync="this:replace"
+     aria-live="polite">
   {% if alerts %}
   <table class="stack">
-    <caption>{{ alerts | length }} alert{{ "" if alerts | length == 1 else "s" }}, most severe first</caption>
+    <caption>{% if more %}The {{ alerts | length }} most severe alerts, most severe first. More alerts match and are not shown{% if not (status and severity) %}: choose a status and a severity to see them{% endif %}.{% else %}{{ alerts | length }} alert{{ "" if alerts | length == 1 else "s" }}, most severe first{% endif %}</caption>
     <thead>
       <tr>
         <th scope="col">Severity</th>
@@ -733,7 +747,7 @@ The queue, `queue.html`:
       {% for alert in alerts %}
       <tr>
         <td data-label="Severity">{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %}</td>
-        <td data-label="Alert"><a href="/alerts/{{ alert.finding_id }}">{{ alert.title }}</a></td>
+        <td data-label="Alert"><a id="alert-{{ alert.finding_id }}" href="/alerts/{{ alert.finding_id }}">{{ alert.title }}</a></td>
         <td data-label="Source → destination" class="mono">{{ alert.src_ip }} → {{ alert.dst_ip }}:{{ alert.dst_port }}</td>
         <td data-label="Count">{{ alert.count }}</td>
         <td data-label="Status">{{ status_labels.get(alert.status, alert.status) }}</td>
@@ -779,7 +793,7 @@ and the upload page, `upload.html`:
 {% endblock %}
 ```
 
-No template uses `|safe`: titles, addresses and names come from network traffic, which an attacker writes. The queue links each alert to its detail page, which arrives in AHM-03.
+No template uses `|safe`: titles, addresses and names come from network traffic, which an attacker writes. The queue links each alert to its detail page, which arrives in AHM-03. Each link has a fixed `id` (`alert-` and the finding ID): when the table refreshes, htmx gives keyboard focus back to the element with the same `id`, so someone using the keyboard is not sent back to the top of the page. `hx-sync="this:replace"` lets a newer refresh replace one still running, and the script remembers a refresh that arrives while the new table is settling and sends it again, so a second quick change does not wait for the 30-second poll.
 
 **Step 5.** Create `maxguard/web/static/app.css` (it already holds the styles for the pages of AHM-03 and AHM-06):
 
@@ -879,7 +893,14 @@ select, input[type="text"], input[type="file"] {
 }
 
 .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 16px; }
-.status-form, #upload-form { display: grid; gap: 8px; max-width: 420px; }
+.status-form, #upload-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-width: 420px; }
+/* Long text with no spaces (a URL in an AI error, a name) wraps instead of widening the page.
+   Not "anywhere" on every table cell: the table layout then squeezes a column down to one
+   character and breaks short words ("Mediu/m"). A cell breaks between words; only the mono
+   addresses and the free-text Assignee may break inside one. Phones: see the media rule. */
+.banner, .status-form { overflow-wrap: anywhere; }
+.stack td { overflow-wrap: break-word; }
+.stack td.mono, .stack td[data-label="Assignee"] { overflow-wrap: anywhere; }
 
 /* Severity badges: the word is always there; the color only helps. */
 .sev {
@@ -889,7 +910,6 @@ select, input[type="text"], input[type="file"] {
   color: #ffffff;
   font-weight: 700;
   font-size: 0.85rem;
-  white-space: nowrap;
 }
 .sev-critical { background: var(--critical); }
 .sev-high { background: var(--high); }
@@ -943,6 +963,7 @@ tr:target { background: #fff3c4; }  /* the evidence row a citation link points t
   .stack thead { position: absolute; left: -9999px; }
   .stack tr { display: block; border-bottom: 2px solid var(--line); padding: 4px 0; }
   .stack td { display: grid; grid-template-columns: 9rem 1fr; gap: 8px; border: 0; padding: 4px 8px; }
+  .stack td { overflow-wrap: anywhere; }  /* a block now, not a column: nothing to squeeze */
   .stack td::before {
     content: attr(data-label);
     font: 600 0.9rem system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -961,25 +982,158 @@ and `maxguard/web/static/app.js`, the only script besides htmx:
 // MaxGuard dashboard script (Ahmad, AHM-02). Everything else is htmx.
 // 1) Live refresh: the server sends "alerts-changed" on /api/stream; the alert
 //    table reloads itself on "refresh" (it also polls every 30 s as a fallback).
+//    A browser keeps at most 6 connections open to one site, and each open
+//    stream holds one, so six queue tabs would leave none for loading pages.
+//    Only one tab opens the stream: the tab holding the "maxguard-stream" lock.
+//    It passes each change to the other tabs over a BroadcastChannel. When that
+//    tab closes, another queue tab gets the lock and opens the stream.
 // 2) Upload: /api/analyses answers JSON; show it as plain text (textContent,
 //    never innerHTML, because an error message can contain a file name).
+// 3) The filters change the address without loading a page (hx-push-url), so the
+//    Analyst/Home switch sends the address as it is now.
+// 4) The status form is replaced only when the server answers; when it does not,
+//    say "Not saved" instead of leaving an earlier "Saved." on the screen.
 "use strict";
 
 document.addEventListener("DOMContentLoaded", function () {
   if (document.getElementById("alerts") && window.EventSource) {
-    const stream = new EventSource("/api/stream");
-    stream.addEventListener("alerts-changed", function () {
-      htmx.trigger("#alerts", "refresh");
-    });
+    liveRefresh();
   }
 
   const form = document.getElementById("upload-form");
   if (form) {
     form.addEventListener("htmx:afterRequest", function (event) {
       document.getElementById("upload-result").textContent = uploadMessage(event.detail.xhr);
+      // The button was disabled during the upload, which drops focus to the page.
+      // Give it back, unless the person has moved on to something else meanwhile.
+      if (!document.activeElement || document.activeElement === document.body) {
+        form.querySelector("button").focus();
+      }
     });
   }
+
+  const modeSwitch = document.querySelector(".mode-switch");
+  if (modeSwitch) {
+    modeSwitch.addEventListener("submit", function () {
+      modeSwitch.elements.next.value = location.pathname + location.search;
+    });
+  }
+
+  // A filter answer goes into the table on the page now: a refresh that answered
+  // first has already replaced the table the filter request was aimed at.
+  const filters = document.getElementById("filters");
+  if (filters) {
+    filters.addEventListener("htmx:beforeOnLoad", function (event) {
+      event.detail.target = document.getElementById("alerts");
+    });
+  }
+  // Only a queue page may replace the table. An error page has no #alerts in it, and
+  // swapping it in removes the table, its polling and the filters' target for good.
+  document.body.addEventListener("htmx:beforeSwap", function (event) {
+    const target = event.detail.target;
+    if (target && target.id === "alerts" && event.detail.xhr.status !== 200) {
+      event.detail.shouldSwap = false;
+    }
+  });
+
+  document.body.addEventListener("htmx:sendError", statusNotSaved);
+  document.body.addEventListener("htmx:responseError", statusNotSaved);
 });
+
+function liveRefresh() {
+  let again = false;
+  const refresh = function () {
+    const alerts = document.getElementById("alerts");
+    if (!alerts) {
+      return;  // no table on this page any more: nothing to refresh
+    }
+    // htmx ignores a refresh asked for while the table is loading or settling:
+    // remember it and ask again once the new table has settled.
+    if (alerts.classList.contains("htmx-request") || alerts.classList.contains("htmx-settling")) {
+      again = true;
+      return;
+    }
+    htmx.trigger(alerts, "refresh");
+  };
+  document.addEventListener("htmx:afterSettle", function (event) {
+    if (again && event.target.id === "alerts") {
+      again = false;
+      refresh();
+    }
+  });
+  if (!navigator.locks || !window.BroadcastChannel) {
+    // Older browsers, and plain-http addresses other than localhost: one stream per tab.
+    new EventSource("/api/stream").addEventListener("alerts-changed", refresh);
+    return;
+  }
+  const channel = new BroadcastChannel("maxguard-alerts");
+  channel.addEventListener("message", refresh);
+  let waiting = null;  // this tab's place in line for the lock (an AbortController)
+  const openStream = function () {
+    const stream = new EventSource("/api/stream");
+    stream.addEventListener("alerts-changed", function () {
+      refresh();
+      channel.postMessage("alerts-changed");
+    });
+    stream.addEventListener("error", function () {
+      // An error answer (a proxy's 502) makes EventSource give up for good, and this
+      // tab keeps the lock, so it must try again itself.
+      if (stream.readyState === EventSource.CLOSED) {
+        setTimeout(openStream, 5000);
+      }
+    });
+  };
+  const hold = function () {
+    waiting = null;
+    openStream();
+    return new Promise(function () {});  // never settles: keep the lock until the tab closes
+  };
+  const join = function () {
+    navigator.locks.request("maxguard-stream", { ifAvailable: true }, function (lock) {
+      if (lock) {
+        return hold();
+      }
+      // Another tab has the stream, and its first event (sent on connect) went to that
+      // tab only. Catch up once: this page may be an old copy shown by the Back button.
+      refresh();
+      waiting = new AbortController();
+      navigator.locks.request("maxguard-stream", { signal: waiting.signal }, hold)
+        .catch(function () {});  // aborted on pagehide, below
+      return null;
+    });
+  };
+  join();
+  // A page in the back/forward cache cannot run. If it stayed in line it could get
+  // the lock there, and then no tab would open the stream.
+  window.addEventListener("pagehide", function (event) {
+    if (event.persisted && waiting) {
+      waiting.abort();
+    }
+  });
+  window.addEventListener("pageshow", function (event) {
+    if (event.persisted && waiting) {
+      join();
+    }
+  });
+}
+
+function statusNotSaved(event) {
+  const form = event.detail.elt;
+  if (!form || form.id !== "status-form") {
+    return;
+  }
+  let message = form.querySelector(".message");
+  if (!message) {
+    message = document.createElement("p");
+    message.className = "message";
+    message.setAttribute("role", "status");
+    form.appendChild(message);
+  }
+  const xhr = event.detail.xhr;
+  message.textContent = xhr && xhr.status
+    ? "Not saved: the MaxGuard server answered with error " + xhr.status + "."
+    : "No answer from the MaxGuard server: the change may not be saved. Reload the page to check.";
+}
 
 function uploadMessage(xhr) {
   let body = {};
@@ -1000,7 +1154,7 @@ function uploadMessage(xhr) {
 }
 ```
 
-The live refresh: the server sends `alerts-changed` on `/api/stream`, and the table reloads itself; `hx-trigger="refresh, every 30s"` is the fallback. The upload answer is written with `textContent`, never `innerHTML`, because an error message can contain a file name.
+The live refresh: the server sends `alerts-changed` on `/api/stream`, and the table reloads itself; `hx-trigger="refresh, every 30s"` is the fallback. Only one tab keeps the stream open: a browser opens at most six connections to one site and an open stream holds one for good, so six queue tabs would leave none for loading a page. The tab that gets the `maxguard-stream` lock (the browser's Web Locks API) opens the stream and passes each change to the other tabs over a `BroadcastChannel`; when that tab closes, another queue tab takes the lock. A tab that does not get the lock refreshes once when it loads: the server sends one event on connect, which only the holder saw, and a page the **Back** button shows is an old copy. A page parked in the back/forward cache leaves the line for the lock, or it could be granted the lock while it cannot run; and if a reverse proxy answers the stream with an error, `EventSource` gives up for good, so the holder opens a new stream after 5 seconds (all three found by the review). The upload answer is written with `textContent`, never `innerHTML`, because an error message can contain a file name; afterwards focus goes back to **Analyze** (htmx disables the button during the upload, which drops focus) unless the person has moved on. A filter's answer always lands in the table on the page now, even when a refresh that started earlier answered first and replaced the old one. The Analyst/Home switch sends the address as it is now, so a filter chosen on the page survives the switch. The script already handles AHM-03's status form: when the server answers with an error the form says *Not saved*, and when no answer comes at all it says the change may not be saved (a lost answer does not tell whether the server saved it), instead of keeping an earlier *Saved.* In the CSS, the forms' one grid column is `minmax(0, 1fr)`: without it, the file input's natural width (about 34 characters) pushes the upload page sideways on a phone; and `overflow-wrap: anywhere` on the banner, the status form, and the address and assignee cells wraps text with no spaces (the URL in an AI error, a long name), which otherwise widens the page too. The other table cells only break between words: with `anywhere` the table squeezed a column until *Medium* broke in the middle (found by the review).
 
 **Step 6.** Create the tests `tests/unit/test_web.py`:
 
@@ -1086,7 +1240,8 @@ def test_htmx_file_is_the_reviewed_one():
 def test_pages_return_200_with_the_layout(client, path):
     page = client.get(path)
     assert page.status_code == 200
-    assert "Your data never leaves this computer." in page.text
+    assert ('<aside aria-label="Privacy"><p class="privacy">'
+            'Your data never leaves this computer.</p></aside>') in page.text
     assert '<script src="/static/htmx-2.0.11.min.js"' in page.text
     assert 'href="/static/app.css"' in page.text
     csp = page.headers["content-security-policy"]
@@ -1094,6 +1249,8 @@ def test_pages_return_200_with_the_layout(client, path):
     assert "unsafe" not in csp  # no inline scripts, no eval: a second wall behind escaping
     # not "no-referrer": Chrome then sends "Origin: null" on form posts, which the API refuses
     assert page.headers["referrer-policy"] == "same-origin"
+    # htmx keeps no copies of pages in the browser: Back loads the page again
+    assert '"historyCacheSize": 0, "refreshOnHistoryMiss": true' in page.text
 
 
 def test_static_files_are_served(client):
@@ -1105,7 +1262,9 @@ def test_queue_lists_the_telnet_alert(app, client, telnet_report):
     save(app, telnet_report)
     page = client.get("/")
     assert "Telnet session in cleartext" in page.text
-    assert f'href="/alerts/{telnet_id(telnet_report)}"' in page.text
+    # the stable id lets htmx keep keyboard focus on the link when the table refreshes
+    finding_id = telnet_id(telnet_report)
+    assert f'<a id="alert-{finding_id}" href="/alerts/{finding_id}">' in page.text
     assert "172.18.0.3 → 172.18.0.2:23" in page.text
     # severity as text and color: the word is in the badge with the color class
     assert '<span class="sev sev-high">High</span>' in page.text
@@ -1114,11 +1273,29 @@ def test_queue_lists_the_telnet_alert(app, client, telnet_report):
 def test_queue_has_the_htmx_wiring(client):
     page = client.get("/")
     assert 'hx-trigger="refresh, every 30s"' in page.text
+    assert 'hx-sync="this:replace"' in page.text  # a newer refresh replaces a running one
     assert page.text.count('hx-get="/" hx-target="#alerts" hx-select="#alerts"') == 2
-    assert 'new EventSource("/api/stream")' in client.get("/static/app.js").text
+    script = client.get("/static/app.js").text
+    assert 'new EventSource("/api/stream")' in script
+    # one stream for all queue tabs: six open streams would block the browser
+    assert 'navigator.locks.request("maxguard-stream"' in script
+    assert 'new BroadcastChannel("maxguard-alerts")' in script
+    assert 'channel.postMessage("alerts-changed")' in script  # the holder passes changes on
+    assert "return new Promise(function () {});" in script  # and keeps the lock while open
+    assert "ifAvailable: true" in script  # a tab without the lock refreshes once to catch up
+    assert "event.persisted" in script  # a page in the back/forward cache leaves the line
+    css = client.get("/static/app.css").text
+    assert "grid-template-columns: minmax(0, 1fr)" in css  # the file input fits a phone
+    assert ".banner, .status-form { overflow-wrap: anywhere; }" in css
+    # a table column must not be squeezed until "Medium" breaks in the middle
+    assert ".stack td { overflow-wrap: break-word; }" in css
+    assert '.stack td.mono, .stack td[data-label="Assignee"] { overflow-wrap: anywhere; }' in css
+    assert "event.detail.shouldSwap = false;" in script  # an error page never replaces the table
+    assert "location.pathname + location.search" in script  # the mode switch keeps filters
+    assert "No answer from the MaxGuard server: the change may not be saved." in script
 
 
-def test_queue_filters(app, client, telnet_report, ftp_report):
+def test_queue_filters(app, client, telnet_report, ftp_report, monkeypatch):
     save(app, telnet_report)
     save(app, ftp_report, received_at=RECEIVED_AT + 1)
     app.state.state_store.update_alert(telnet_id(telnet_report), actor="test",
@@ -1130,6 +1307,14 @@ def test_queue_filters(app, client, telnet_report, ftp_report):
     assert "Telnet session in cleartext" not in new
     low = client.get("/", params={"severity": "low"}).text
     assert "No alerts match these filters" in low
+    # more alerts than the queue shows: it says so instead of hiding the rest
+    monkeypatch.setattr("maxguard.web.routes.QUEUE_LIMIT", 1)
+    first = client.get("/").text
+    assert "The 1 most severe alerts, most severe first. More alerts match" in first
+    assert first.count('<a id="alert-') == 1
+    monkeypatch.setattr("maxguard.web.routes.QUEUE_LIMIT", 2)  # exactly as many as match
+    both = client.get("/").text
+    assert "2 alerts, most severe first" in both and "More alerts match" not in both
 
 
 def test_unknown_filter_value_is_a_400_page(client):
@@ -1143,12 +1328,15 @@ def test_hostile_values_are_escaped(app, client, telnet_report):
     finding = report["findings"][0]
     finding["title"] = HOSTILE
     finding["details"] = {"user": HOSTILE}
+    finding["last_seen"] = 1e12  # the year 33658: a date cannot hold it
     finding["explanation_sentences"][0]["text"] = HOSTILE
     save(app, report)
     app.state.state_store.update_alert(finding["finding_id"], actor="test",
                                        at=RECEIVED_AT, assignee=HOSTILE)
     for path in ("/",):  # the alert page comes in AHM-03
-        page = client.get(path).text
+        answer = client.get(path)
+        assert answer.status_code == 200
+        page = answer.text
         assert HOSTILE not in page
         assert "&lt;script&gt;" in page
 
@@ -1204,7 +1392,7 @@ Expected output:
 
 ```text
 ..................                                                                           [100%]
-18 passed in 1.19s
+18 passed in 1.48s
 ```
 
 **Step 7.** Start the server and check the headers every page sends:
@@ -1323,6 +1511,7 @@ TEMPLATES = Jinja2Templates(directory=Path(__file__).resolve().parent / "templat
 
 MODES = ("analyst", "home")
 YEAR_SECONDS = 365 * 24 * 3600
+QUEUE_LIMIT = 200          # rows on the queue page; the caption says when more match
 MAX_NAME_LENGTH = 100      # the same limit as "actor" in PATCH /api/alerts
 
 # Home mode: the severity in plain words (no jargon), and color is never the only signal.
@@ -1358,10 +1547,15 @@ def now() -> float:
 
 
 def utc_time(ts: float | None) -> str:
-    """Unix seconds -> "2026-10-06 14:03:22 UTC" (the same on every machine)."""
+    """Unix seconds -> "2026-10-06 14:03:22 UTC" (the same on every machine).
+    Times come from logs, which an attacker can write: one a date cannot hold
+    (after the year 9999, inf, NaN) is shown as it is instead of breaking the page."""
     if ts is None:
         return ""
-    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    try:
+        return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    except (TypeError, ValueError, OverflowError, OSError):
+        return f"{ts!r} (not a valid time)"
 
 
 TEMPLATES.env.filters["utc_time"] = utc_time
@@ -1402,6 +1596,15 @@ def empty_to_none(value: str | None) -> str | None:
     return value or None
 
 
+def text_field(value) -> str:
+    """A form value as a text box holds it: browsers drop line breaks from text inputs
+    (but not from hidden ones), so an assignee stored with one compares equal.
+    A part that is not text (a file sent under the field's name) counts as empty."""
+    if not isinstance(value, str):
+        return ""
+    return value.replace("\r", "").replace("\n", "").strip()
+
+
 def safe_next(path: str) -> str:
     """Only a path on this site: "//evil.example" or "https://..." would be an open redirect."""
     if path.startswith("/") and not path.startswith("//") and "\\" not in path:
@@ -1415,11 +1618,13 @@ def safe_next(path: str) -> str:
 def queue(request: Request, status: str | None = None, severity: str | None = None):
     status, severity = empty_to_none(status), empty_to_none(severity)
     try:
-        alerts = request.app.state.state_store.list_alerts(status=status, severity=severity)
+        alerts = request.app.state.state_store.list_alerts(
+            status=status, severity=severity, limit=QUEUE_LIMIT + 1)
     except ValueError as err:  # unknown status or severity in the URL
         return error_page(request, 400, str(err))
     return render(request, "queue.html", {
-        "alerts": alerts, "status": status or "", "severity": severity or "",
+        "alerts": alerts[:QUEUE_LIMIT], "more": len(alerts) > QUEUE_LIMIT,
+        "status": status or "", "severity": severity or "",
         "statuses": ALERT_STATUSES, "home_text": load_home_text(),
     })
 
@@ -1490,11 +1695,17 @@ async def change_status(request: Request, finding_id: str):
     if not valid_name(actor):
         return render(request, "_status.html", status_context(
             alert, "", f"Type your name (1 to {MAX_NAME_LENGTH} characters) first."), 400)
+    status = empty_to_none(str(form.get("status", "")))
+    assignee = text_field(form.get("assignee", ""))[:MAX_NAME_LENGTH]
+    # Save only what this person changed on the form they saw: a form opened before
+    # someone else's change must not quietly undo it (None = leave as is).
+    if "shown_status" in form and status == form["shown_status"]:
+        status = None
+    if "shown_assignee" in form and assignee == text_field(form["shown_assignee"]):
+        assignee = None
     try:
-        alert = store.update_alert(
-            finding_id, actor=actor, at=now(),
-            status=empty_to_none(str(form.get("status", ""))),
-            assignee=str(form.get("assignee", "")).strip()[:MAX_NAME_LENGTH])
+        alert = store.update_alert(finding_id, actor=actor, at=now(),
+                                   status=status, assignee=assignee)
     except ValueError as err:  # unknown status
         return render(request, "_status.html", status_context(alert, actor, str(err)), 400)
     notify_change(request.app)  # open queues refresh themselves
@@ -1512,7 +1723,7 @@ def favicon() -> Response:
     return Response(status_code=204)
 ```
 
-`update_alert()` needs `at=now()`: the stores never read the clock, the web layer does, in one place (`now()`), so tests can replace it. After a change, `notify_change()` makes every open queue refresh itself. The person's name is checked **before** anything is saved (`valid_name()`: 1 to 100 printable characters) and kept in the `mg_actor` cookie percent-encoded: a cookie can only hold Latin-1 text, so a name such as *Łukasz* or *علي* used to crash the page *after* the change was saved (found by the security review).
+`update_alert()` needs `at=now()`: the stores never read the clock, the web layer does, in one place (`now()`), so tests can replace it. After a change, `notify_change()` makes every open queue refresh itself. The person's name is checked **before** anything is saved (`valid_name()`: 1 to 100 printable characters) and kept in the `mg_actor` cookie percent-encoded: a cookie can only hold Latin-1 text, so a name such as *Łukasz* or *علي* used to crash the page *after* the change was saved (found by the security review). The form also sends what it showed (`shown_status`, `shown_assignee`), and the server saves only the fields the person changed: otherwise a form opened before a teammate's change would quietly undo it, and the audit trail would show a change nobody made (found in a browser test with two analysts). `text_field()` compares the assignee the way a text box holds it: browsers drop line breaks from a text box but not from a hidden field.
 
 **Step 3.** Create `maxguard/web/templates/alert.html`:
 
@@ -1522,7 +1733,7 @@ def favicon() -> Response:
    evidence, controls, techniques, and the status form. Home mode: the human-written
    headline and action, and the severity in words; no IDs and no framework names.
    AI text and anything from traffic is plain, escaped text: never |safe. #}
-{% block title %}{{ alert.title }}{% endblock %}
+{% block title %}{{ home.headline if mode == "home" and home else alert.title }}{% endblock %}
 {% block content %}
 <p class="back"><a href="/">← All alerts</a></p>
 
@@ -1629,19 +1840,23 @@ def favicon() -> Response:
 {% endblock %}
 ```
 
-and the status form fragment `_status.html`, which the `PATCH` answer replaces in place:
+and the status form fragment `_status.html`, which the `PATCH` answer replaces in place (the **Save** button has an `id`, so htmx puts keyboard focus back on it after the swap; `autocomplete="off"` stops the browser putting an old choice back into the form after **Back**, which would look like a change nobody made; and the name field refuses a name made only of spaces before anything is sent):
 
 ```html
 {# The status and assignee form (Ahmad, AHM-03). PATCH /alerts/{id}/status returns
    this fragment again, and htmx swaps it in place. The display name is asked for
    once and then kept in the mg_actor cookie (for the audit trail, not security). #}
-<form id="status-form" class="card status-form"
+<form id="status-form" class="card status-form" autocomplete="off"
       hx-patch="/alerts/{{ alert.finding_id }}/status" hx-target="this" hx-swap="outerHTML">
+  {# What this form showed: the server saves only the fields the person changed. #}
+  <input type="hidden" name="shown_status" value="{{ alert.status }}">
+  <input type="hidden" name="shown_assignee" value="{{ alert.assignee or '' }}">
   {% if actor %}
   <p class="muted">Changes are recorded in the audit trail as <strong>{{ actor }}</strong>.</p>
   {% else %}
   <label for="actor">Your name (asked once, for the audit trail)</label>
-  <input id="actor" name="actor" type="text" maxlength="100" required autocomplete="name">
+  <input id="actor" name="actor" type="text" maxlength="100" required autocomplete="name"
+         pattern=".*\S.*" title="Your name, not only spaces">
   {% endif %}
   <label for="alert-status">Status</label>
   <select id="alert-status" name="status">
@@ -1651,12 +1866,12 @@ and the status form fragment `_status.html`, which the `PATCH` answer replaces i
   </select>
   <label for="assignee">Assignee</label>
   <input id="assignee" name="assignee" type="text" maxlength="100" value="{{ alert.assignee or '' }}">
-  <button type="submit">Save</button>
+  <button id="status-save" type="submit">Save</button>
   {% if message %}<p class="message" role="status">{{ message }}</p>{% endif %}
 </form>
 ```
 
-Each evidence row has `id="ev-<record_id>"`, and every AI sentence is followed by links to the rows it cites: that is how an analyst checks the AI instead of trusting it (CLAUDE.md rule 3). Above the sentences the page repeats the rule's title and severity and says the severity comes from the rule. In Home mode the page shows the headline and action from `load_home_text()`, the severity in words ("High: fix this week") and the device's address, and no rule, record, framework or technique IDs. The status form appears in Analyst mode only: its words, such as "False positive", are jargon.
+Each evidence row has `id="ev-<record_id>"`, and every AI sentence is followed by links to the rows it cites: that is how an analyst checks the AI instead of trusting it (CLAUDE.md rule 3). Above the sentences the page repeats the rule's title and severity and says the severity comes from the rule. In Home mode the page shows the headline and action from `load_home_text()`, the severity in words ("High: fix this week") and the device's address, and no rule, record, framework or technique IDs; even the page title, which the browser tab shows and a screen reader reads first, is the headline. The status form appears in Analyst mode only: its words, such as "False positive", are jargon.
 
 **Step 4.** In Home mode the queue shows the Home headline instead of the rule title. Update `maxguard/web/templates/queue.html`:
 
@@ -1693,10 +1908,11 @@ Each evidence row has `id="ev-<record_id>"`, and every AI sentence is followed b
 </form>
 
 <div id="alerts" hx-get="/?status={{ status | urlencode }}&amp;severity={{ severity | urlencode }}"
-     hx-trigger="refresh, every 30s" hx-select="#alerts" hx-swap="outerHTML" aria-live="polite">
+     hx-trigger="refresh, every 30s" hx-select="#alerts" hx-swap="outerHTML" hx-sync="this:replace"
+     aria-live="polite">
   {% if alerts %}
   <table class="stack">
-    <caption>{{ alerts | length }} alert{{ "" if alerts | length == 1 else "s" }}, most severe first</caption>
+    <caption>{% if more %}The {{ alerts | length }} most severe alerts, most severe first. More alerts match and are not shown{% if not (status and severity) %}: choose a status and a severity to see them{% endif %}.{% else %}{{ alerts | length }} alert{{ "" if alerts | length == 1 else "s" }}, most severe first{% endif %}</caption>
     <thead>
       <tr>
         <th scope="col">Severity</th>
@@ -1713,7 +1929,7 @@ Each evidence row has `id="ev-<record_id>"`, and every AI sentence is followed b
       {% set home = home_text.get(alert.rule_id) %}
       <tr>
         <td data-label="Severity">{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %}</td>
-        <td data-label="Alert"><a href="/alerts/{{ alert.finding_id }}">{% if mode == "home" and home %}{{ home.headline }}{% else %}{{ alert.title }}{% endif %}</a></td>
+        <td data-label="Alert"><a id="alert-{{ alert.finding_id }}" href="/alerts/{{ alert.finding_id }}">{% if mode == "home" and home %}{{ home.headline }}{% else %}{{ alert.title }}{% endif %}</a></td>
         <td data-label="Source → destination" class="mono">{{ alert.src_ip }} → {{ alert.dst_ip }}:{{ alert.dst_port }}</td>
         <td data-label="Count">{{ alert.count }}</td>
         <td data-label="Status">{{ status_labels.get(alert.status, alert.status) }}</td>
@@ -1816,7 +2032,8 @@ def test_htmx_file_is_the_reviewed_one():
 def test_pages_return_200_with_the_layout(client, path):
     page = client.get(path)
     assert page.status_code == 200
-    assert "Your data never leaves this computer." in page.text
+    assert ('<aside aria-label="Privacy"><p class="privacy">'
+            'Your data never leaves this computer.</p></aside>') in page.text
     assert '<script src="/static/htmx-2.0.11.min.js"' in page.text
     assert 'href="/static/app.css"' in page.text
     csp = page.headers["content-security-policy"]
@@ -1824,6 +2041,8 @@ def test_pages_return_200_with_the_layout(client, path):
     assert "unsafe" not in csp  # no inline scripts, no eval: a second wall behind escaping
     # not "no-referrer": Chrome then sends "Origin: null" on form posts, which the API refuses
     assert page.headers["referrer-policy"] == "same-origin"
+    # htmx keeps no copies of pages in the browser: Back loads the page again
+    assert '"historyCacheSize": 0, "refreshOnHistoryMiss": true' in page.text
 
 
 def test_static_files_are_served(client):
@@ -1835,7 +2054,9 @@ def test_queue_lists_the_telnet_alert(app, client, telnet_report):
     save(app, telnet_report)
     page = client.get("/")
     assert "Telnet session in cleartext" in page.text
-    assert f'href="/alerts/{telnet_id(telnet_report)}"' in page.text
+    # the stable id lets htmx keep keyboard focus on the link when the table refreshes
+    finding_id = telnet_id(telnet_report)
+    assert f'<a id="alert-{finding_id}" href="/alerts/{finding_id}">' in page.text
     assert "172.18.0.3 → 172.18.0.2:23" in page.text
     # severity as text and color: the word is in the badge with the color class
     assert '<span class="sev sev-high">High</span>' in page.text
@@ -1844,11 +2065,29 @@ def test_queue_lists_the_telnet_alert(app, client, telnet_report):
 def test_queue_has_the_htmx_wiring(client):
     page = client.get("/")
     assert 'hx-trigger="refresh, every 30s"' in page.text
+    assert 'hx-sync="this:replace"' in page.text  # a newer refresh replaces a running one
     assert page.text.count('hx-get="/" hx-target="#alerts" hx-select="#alerts"') == 2
-    assert 'new EventSource("/api/stream")' in client.get("/static/app.js").text
+    script = client.get("/static/app.js").text
+    assert 'new EventSource("/api/stream")' in script
+    # one stream for all queue tabs: six open streams would block the browser
+    assert 'navigator.locks.request("maxguard-stream"' in script
+    assert 'new BroadcastChannel("maxguard-alerts")' in script
+    assert 'channel.postMessage("alerts-changed")' in script  # the holder passes changes on
+    assert "return new Promise(function () {});" in script  # and keeps the lock while open
+    assert "ifAvailable: true" in script  # a tab without the lock refreshes once to catch up
+    assert "event.persisted" in script  # a page in the back/forward cache leaves the line
+    css = client.get("/static/app.css").text
+    assert "grid-template-columns: minmax(0, 1fr)" in css  # the file input fits a phone
+    assert ".banner, .status-form { overflow-wrap: anywhere; }" in css
+    # a table column must not be squeezed until "Medium" breaks in the middle
+    assert ".stack td { overflow-wrap: break-word; }" in css
+    assert '.stack td.mono, .stack td[data-label="Assignee"] { overflow-wrap: anywhere; }' in css
+    assert "event.detail.shouldSwap = false;" in script  # an error page never replaces the table
+    assert "location.pathname + location.search" in script  # the mode switch keeps filters
+    assert "No answer from the MaxGuard server: the change may not be saved." in script
 
 
-def test_queue_filters(app, client, telnet_report, ftp_report):
+def test_queue_filters(app, client, telnet_report, ftp_report, monkeypatch):
     save(app, telnet_report)
     save(app, ftp_report, received_at=RECEIVED_AT + 1)
     app.state.state_store.update_alert(telnet_id(telnet_report), actor="test",
@@ -1860,6 +2099,14 @@ def test_queue_filters(app, client, telnet_report, ftp_report):
     assert "Telnet session in cleartext" not in new
     low = client.get("/", params={"severity": "low"}).text
     assert "No alerts match these filters" in low
+    # more alerts than the queue shows: it says so instead of hiding the rest
+    monkeypatch.setattr("maxguard.web.routes.QUEUE_LIMIT", 1)
+    first = client.get("/").text
+    assert "The 1 most severe alerts, most severe first. More alerts match" in first
+    assert first.count('<a id="alert-') == 1
+    monkeypatch.setattr("maxguard.web.routes.QUEUE_LIMIT", 2)  # exactly as many as match
+    both = client.get("/").text
+    assert "2 alerts, most severe first" in both and "More alerts match" not in both
 
 
 def test_unknown_filter_value_is_a_400_page(client):
@@ -1873,12 +2120,15 @@ def test_hostile_values_are_escaped(app, client, telnet_report):
     finding = report["findings"][0]
     finding["title"] = HOSTILE
     finding["details"] = {"user": HOSTILE}
+    finding["last_seen"] = 1e12  # the year 33658: a date cannot hold it
     finding["explanation_sentences"][0]["text"] = HOSTILE
     save(app, report)
     app.state.state_store.update_alert(finding["finding_id"], actor="test",
                                        at=RECEIVED_AT, assignee=HOSTILE)
     for path in ("/", f"/alerts/{finding['finding_id']}"):
-        page = client.get(path).text
+        answer = client.get(path)
+        assert answer.status_code == 200
+        page = answer.text
         assert HOSTILE not in page
         assert "&lt;script&gt;" in page
 
@@ -1937,6 +2187,7 @@ def test_alert_detail_analyst_mode(app, client, telnet_report):
     assert "T1040" in page and "credential-access" in page
     assert "A device logged in with Telnet" in page
     assert 'id="status-form"' in page
+    assert "<title>Telnet session in cleartext · MaxGuard</title>" in page
 
 
 def test_controls_are_grouped_by_framework():
@@ -1968,6 +2219,7 @@ def test_alert_detail_home_mode(app, client, telnet_report):
     page = client.get(f"/alerts/{finding['finding_id']}").text
     home = routes.load_home_text()["cleartext.telnet"]
     assert home["headline"] in page
+    assert f"<title>{home['headline']} · MaxGuard</title>" in page  # no jargon in the tab
     assert home["action"] in page
     assert "High: fix this week" in page
     main = page.split('<main id="main"', 1)[1]  # the page body, not the URLs in the nav
@@ -2006,6 +2258,9 @@ def test_status_change_is_saved_and_audited(app, client, telnet_report):
                                 "assignee": "Fiona"})
     assert answer.status_code == 200
     assert "Saved." in answer.text
+    assert '<button id="status-save" type="submit">Save</button>' in answer.text
+    assert '<input type="hidden" name="shown_status" value="investigating">' in answer.text
+    assert 'autocomplete="off"' in answer.text  # Back must not restore stale choices
     assert "mg_actor=Ahmad" in answer.headers["set-cookie"]
     alert = app.state.state_store.get_alert(finding_id)
     assert (alert["status"], alert["assignee"]) == ("investigating", "Fiona")
@@ -2013,6 +2268,32 @@ def test_status_change_is_saved_and_audited(app, client, telnet_report):
     assert audit[0]["actor"] == "Ahmad"
     assert audit[0]["target"] == finding_id
     assert audit[0]["details"]["status"] == {"from": "new", "to": "investigating"}
+    # a form opened before that change (it still shows "new") changes only the assignee
+    stale = client.patch(f"/alerts/{finding_id}/status",
+                         data={"status": "new", "shown_status": "new",
+                               "assignee": "Ali", "shown_assignee": ""})
+    assert stale.status_code == 200
+    alert = app.state.state_store.get_alert(finding_id)
+    assert (alert["status"], alert["assignee"]) == ("investigating", "Ali")
+    assert app.state.state_store.list_audit()[0]["details"] == {
+        "assignee": {"from": "Fiona", "to": "Ali"}}
+    assert '<input type="hidden" name="shown_assignee" value="Ali">' in stale.text
+    # and the other way round: a form that still shows "Fiona" changes only the status
+    client.patch(f"/alerts/{finding_id}/status",
+                 data={"status": "resolved", "shown_status": "investigating",
+                       "assignee": "Fiona", "shown_assignee": "Fiona"})
+    alert = app.state.state_store.get_alert(finding_id)
+    assert (alert["status"], alert["assignee"]) == ("resolved", "Ali")
+    # a browser drops line breaks from the text box but not from the hidden field
+    app.state.state_store.update_alert(finding_id, actor="api", at=RECEIVED_AT, assignee="Ali\nB")
+    client.patch(f"/alerts/{finding_id}/status",
+                 data={"status": "new", "shown_status": "resolved",
+                       "assignee": "AliB", "shown_assignee": "Ali\nB"})
+    assert app.state.state_store.get_alert(finding_id)["assignee"] == "Ali\nB"
+    # a file sent under the field's name is not a name: it counts as empty
+    client.patch(f"/alerts/{finding_id}/status", data={"status": "new", "shown_status": "new"},
+                 files={"assignee": ("x.txt", b"Mallory", "text/plain")})
+    assert app.state.state_store.get_alert(finding_id)["assignee"] == ""
 
 
 def test_status_change_uses_the_name_cookie(app, client, telnet_report):
@@ -2030,6 +2311,7 @@ def test_status_change_needs_a_name(app, client, telnet_report):
                           data={"status": "resolved"})
     assert answer.status_code == 400
     assert "Type your name" in answer.text
+    assert 'pattern=".*\\S.*"' in answer.text  # the browser refuses a name of only spaces
     assert app.state.state_store.list_audit() == []
 
 
@@ -2087,7 +2369,7 @@ Expected output:
 
 ```text
 .......................................                                                      [100%]
-39 passed in 2.64s
+39 passed in 2.87s
 ```
 
 **Step 6.** Open an alert in both modes and change its status with the keyboard only. Then ask someone who is not technical to read the Home view of the Telnet alert and say what they would do.
@@ -2453,6 +2735,7 @@ TEMPLATES = Jinja2Templates(directory=Path(__file__).resolve().parent / "templat
 
 MODES = ("analyst", "home")
 YEAR_SECONDS = 365 * 24 * 3600
+QUEUE_LIMIT = 200          # rows on the queue page; the caption says when more match
 MAX_NAME_LENGTH = 100      # the same limit as "actor" in PATCH /api/alerts
 TIMELINE_HOURS = {1: "Last hour", 6: "Last 6 hours", 24: "Last 24 hours", 72: "Last 3 days",
                   168: "Last 7 days"}  # the window selector: up to the 7 days events are kept
@@ -2491,10 +2774,15 @@ def now() -> float:
 
 
 def utc_time(ts: float | None) -> str:
-    """Unix seconds -> "2026-10-06 14:03:22 UTC" (the same on every machine)."""
+    """Unix seconds -> "2026-10-06 14:03:22 UTC" (the same on every machine).
+    Times come from logs, which an attacker can write: one a date cannot hold
+    (after the year 9999, inf, NaN) is shown as it is instead of breaking the page."""
     if ts is None:
         return ""
-    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    try:
+        return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    except (TypeError, ValueError, OverflowError, OSError):
+        return f"{ts!r} (not a valid time)"
 
 
 TEMPLATES.env.filters["utc_time"] = utc_time
@@ -2535,6 +2823,15 @@ def empty_to_none(value: str | None) -> str | None:
     return value or None
 
 
+def text_field(value) -> str:
+    """A form value as a text box holds it: browsers drop line breaks from text inputs
+    (but not from hidden ones), so an assignee stored with one compares equal.
+    A part that is not text (a file sent under the field's name) counts as empty."""
+    if not isinstance(value, str):
+        return ""
+    return value.replace("\r", "").replace("\n", "").strip()
+
+
 def safe_next(path: str) -> str:
     """Only a path on this site: "//evil.example" or "https://..." would be an open redirect."""
     if path.startswith("/") and not path.startswith("//") and "\\" not in path:
@@ -2548,11 +2845,13 @@ def safe_next(path: str) -> str:
 def queue(request: Request, status: str | None = None, severity: str | None = None):
     status, severity = empty_to_none(status), empty_to_none(severity)
     try:
-        alerts = request.app.state.state_store.list_alerts(status=status, severity=severity)
+        alerts = request.app.state.state_store.list_alerts(
+            status=status, severity=severity, limit=QUEUE_LIMIT + 1)
     except ValueError as err:  # unknown status or severity in the URL
         return error_page(request, 400, str(err))
     return render(request, "queue.html", {
-        "alerts": alerts, "status": status or "", "severity": severity or "",
+        "alerts": alerts[:QUEUE_LIMIT], "more": len(alerts) > QUEUE_LIMIT,
+        "status": status or "", "severity": severity or "",
         "statuses": ALERT_STATUSES, "home_text": load_home_text(),
     })
 
@@ -2623,11 +2922,17 @@ async def change_status(request: Request, finding_id: str):
     if not valid_name(actor):
         return render(request, "_status.html", status_context(
             alert, "", f"Type your name (1 to {MAX_NAME_LENGTH} characters) first."), 400)
+    status = empty_to_none(str(form.get("status", "")))
+    assignee = text_field(form.get("assignee", ""))[:MAX_NAME_LENGTH]
+    # Save only what this person changed on the form they saw: a form opened before
+    # someone else's change must not quietly undo it (None = leave as is).
+    if "shown_status" in form and status == form["shown_status"]:
+        status = None
+    if "shown_assignee" in form and assignee == text_field(form["shown_assignee"]):
+        assignee = None
     try:
-        alert = store.update_alert(
-            finding_id, actor=actor, at=now(),
-            status=empty_to_none(str(form.get("status", ""))),
-            assignee=str(form.get("assignee", "")).strip()[:MAX_NAME_LENGTH])
+        alert = store.update_alert(finding_id, actor=actor, at=now(),
+                                   status=status, assignee=assignee)
     except ValueError as err:  # unknown status
         return render(request, "_status.html", status_context(alert, actor, str(err)), 400)
     notify_change(request.app)  # open queues refresh themselves
@@ -2681,6 +2986,19 @@ def alert_for_event(event: dict, links: dict[str, list[dict]]) -> dict | None:
 # The last second Python's datetime can show (9999-12-31 23:59:59 UTC). A larger
 # end=, or "nan" or "inf", gets FastAPI's 422 instead of crashing the page.
 LAST_TIME = 253402300799
+
+
+def timeline_end(ts: float) -> int | None:
+    """end= for an alert page's timeline links: one second after last_seen, or None
+    when last_seen is not a time the timeline accepts (inf or 1e12 from a hostile log)."""
+    try:
+        end = int(ts) + 1
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return end if 0 <= end <= LAST_TIME else None
+
+
+TEMPLATES.env.filters["timeline_end"] = timeline_end
 
 
 @router.get("/timeline", response_class=HTMLResponse)
@@ -2739,7 +3057,7 @@ def favicon() -> Response:
     return Response(status_code=204)
 ```
 
-Two traps this code avoids. First, Zeek uids are not unique across captures: `zeek -D`, used for uploads so results repeat, gives the first connection of *every* capture the same uid, so linking an event to an alert by uid alone linked the Telnet connection to "Expired certificate". An event links to an alert only when its record ID, uid or Community ID is in the alert's evidence **and** it is between the alert's two hosts on the alert's port. Second, a finding often cites a record that is not a timeline event (a `maxguard_cleartext.log` line, for example); the connection's `conn.log` event shares its uid, which is why the uid is matched too. The window is 1, 6, 24, 72 or 168 hours; the optional `end` (Unix seconds) moves it back, so the alert page can link to the time of an old capture. The devices page is a full join: a phone seen only in DHCP still gets a row.
+Two traps this code avoids. First, Zeek uids are not unique across captures: `zeek -D`, used for uploads so results repeat, gives the first connection of *every* capture the same uid, so linking an event to an alert by uid alone linked the Telnet connection to "Expired certificate". An event links to an alert only when its record ID, uid or Community ID is in the alert's evidence **and** it is between the alert's two hosts on the alert's port. Second, a finding often cites a record that is not a timeline event (a `maxguard_cleartext.log` line, for example); the connection's `conn.log` event shares its uid, which is why the uid is matched too. The window is 1, 6, 24, 72 or 168 hours; the optional `end` (Unix seconds) moves it back, so the alert page can link to the time of an old capture. The alert page passes `last_seen` through the `timeline_end` filter: a time the timeline would refuse (a hostile log can say the year 33658, or infinity) gives a link with no `end=` instead of an error page. The devices page is a full join: a phone seen only in DHCP still gets a row.
 
 **Step 4.** Create `maxguard/web/templates/timeline.html` and `assets.html`:
 
@@ -2872,8 +3190,10 @@ Two traps this code avoids. First, Zeek uids are not unique across captures: `ze
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {# htmx settings: no inline <style> (our CSP blocks it), never run scripts or eval
-     from a response, only talk to this site, and show 400 answers (form errors). #}
-  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "400", "swap": true, "error": false}, {"code": "[45]..", "swap": false, "error": true}]}'>
+     from a response, only talk to this site, keep no copies of pages in the browser's
+     storage (Back and Forward load the page again, as a full page load: the filters,
+     the table, the address and app.js always match), and show 400 answers (form errors). #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true, "historyCacheSize": 0, "refreshOnHistoryMiss": true, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "400", "swap": true, "error": false}, {"code": "[45]..", "swap": false, "error": true}]}'>
   <title>{% block title %}MaxGuard{% endblock %} · MaxGuard</title>
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx-2.0.11.min.js" defer></script>
@@ -2898,7 +3218,7 @@ Two traps this code avoids. First, Zeek uids are not unique across captures: `ze
               aria-pressed="{{ 'true' if mode == 'home' else 'false' }}">Home</button>
     </form>
   </header>
-  <p class="privacy">Your data never leaves this computer.</p>
+  <aside aria-label="Privacy"><p class="privacy">Your data never leaves this computer.</p></aside>
   <main id="main" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
@@ -2912,7 +3232,7 @@ Two traps this code avoids. First, Zeek uids are not unique across captures: `ze
    evidence, controls, techniques, and the status form. Home mode: the human-written
    headline and action, and the severity in words; no IDs and no framework names.
    AI text and anything from traffic is plain, escaped text: never |safe. #}
-{% block title %}{{ alert.title }}{% endblock %}
+{% block title %}{{ home.headline if mode == "home" and home else alert.title }}{% endblock %}
 {% block content %}
 <p class="back"><a href="/">← All alerts</a></p>
 
@@ -2930,8 +3250,9 @@ Two traps this code avoids. First, Zeek uids are not unique across captures: `ze
   <dt>Severity</dt><dd>{% with severity = alert.severity %}{% include "_severity.html" %}{% endwith %} <span class="muted">(set by the rule, never by the AI)</span></dd>
   <dt>Rule</dt><dd class="mono">{{ alert.rule_id }}</dd>
   <dt>Source → destination</dt>
-  <dd class="mono"><a href="/timeline?ip={{ alert.src_ip | urlencode }}&amp;end={{ (alert.last_seen + 1) | int }}">{{ alert.src_ip }}</a>
-    → <a href="/timeline?ip={{ alert.dst_ip | urlencode }}&amp;end={{ (alert.last_seen + 1) | int }}">{{ alert.dst_ip }}</a>:{{ alert.dst_port }} ({{ alert.protocol }})</dd>
+  {% set end = alert.last_seen | timeline_end %}
+  <dd class="mono"><a href="/timeline?ip={{ alert.src_ip | urlencode }}{% if end is not none %}&amp;end={{ end }}{% endif %}">{{ alert.src_ip }}</a>
+    → <a href="/timeline?ip={{ alert.dst_ip | urlencode }}{% if end is not none %}&amp;end={{ end }}{% endif %}">{{ alert.dst_ip }}</a>:{{ alert.dst_port }} ({{ alert.protocol }})</dd>
   <dt>Seen</dt><dd>{{ alert.count }} time{{ "" if alert.count == 1 else "s" }}, first {{ alert.first_seen | utc_time }}, last {{ alert.last_seen | utc_time }}</dd>
   <dt>Detected by</dt><dd>{{ alert.source }}</dd>
   {% for key, value in alert.details | dictsort %}
@@ -3106,7 +3427,8 @@ def test_htmx_file_is_the_reviewed_one():
 def test_pages_return_200_with_the_layout(client, path):
     page = client.get(path)
     assert page.status_code == 200
-    assert "Your data never leaves this computer." in page.text
+    assert ('<aside aria-label="Privacy"><p class="privacy">'
+            'Your data never leaves this computer.</p></aside>') in page.text
     assert '<script src="/static/htmx-2.0.11.min.js"' in page.text
     assert 'href="/static/app.css"' in page.text
     csp = page.headers["content-security-policy"]
@@ -3114,6 +3436,8 @@ def test_pages_return_200_with_the_layout(client, path):
     assert "unsafe" not in csp  # no inline scripts, no eval: a second wall behind escaping
     # not "no-referrer": Chrome then sends "Origin: null" on form posts, which the API refuses
     assert page.headers["referrer-policy"] == "same-origin"
+    # htmx keeps no copies of pages in the browser: Back loads the page again
+    assert '"historyCacheSize": 0, "refreshOnHistoryMiss": true' in page.text
 
 
 def test_static_files_are_served(client):
@@ -3125,7 +3449,9 @@ def test_queue_lists_the_telnet_alert(app, client, telnet_report):
     save(app, telnet_report)
     page = client.get("/")
     assert "Telnet session in cleartext" in page.text
-    assert f'href="/alerts/{telnet_id(telnet_report)}"' in page.text
+    # the stable id lets htmx keep keyboard focus on the link when the table refreshes
+    finding_id = telnet_id(telnet_report)
+    assert f'<a id="alert-{finding_id}" href="/alerts/{finding_id}">' in page.text
     assert "172.18.0.3 → 172.18.0.2:23" in page.text
     # severity as text and color: the word is in the badge with the color class
     assert '<span class="sev sev-high">High</span>' in page.text
@@ -3134,11 +3460,29 @@ def test_queue_lists_the_telnet_alert(app, client, telnet_report):
 def test_queue_has_the_htmx_wiring(client):
     page = client.get("/")
     assert 'hx-trigger="refresh, every 30s"' in page.text
+    assert 'hx-sync="this:replace"' in page.text  # a newer refresh replaces a running one
     assert page.text.count('hx-get="/" hx-target="#alerts" hx-select="#alerts"') == 2
-    assert 'new EventSource("/api/stream")' in client.get("/static/app.js").text
+    script = client.get("/static/app.js").text
+    assert 'new EventSource("/api/stream")' in script
+    # one stream for all queue tabs: six open streams would block the browser
+    assert 'navigator.locks.request("maxguard-stream"' in script
+    assert 'new BroadcastChannel("maxguard-alerts")' in script
+    assert 'channel.postMessage("alerts-changed")' in script  # the holder passes changes on
+    assert "return new Promise(function () {});" in script  # and keeps the lock while open
+    assert "ifAvailable: true" in script  # a tab without the lock refreshes once to catch up
+    assert "event.persisted" in script  # a page in the back/forward cache leaves the line
+    css = client.get("/static/app.css").text
+    assert "grid-template-columns: minmax(0, 1fr)" in css  # the file input fits a phone
+    assert ".banner, .status-form { overflow-wrap: anywhere; }" in css
+    # a table column must not be squeezed until "Medium" breaks in the middle
+    assert ".stack td { overflow-wrap: break-word; }" in css
+    assert '.stack td.mono, .stack td[data-label="Assignee"] { overflow-wrap: anywhere; }' in css
+    assert "event.detail.shouldSwap = false;" in script  # an error page never replaces the table
+    assert "location.pathname + location.search" in script  # the mode switch keeps filters
+    assert "No answer from the MaxGuard server: the change may not be saved." in script
 
 
-def test_queue_filters(app, client, telnet_report, ftp_report):
+def test_queue_filters(app, client, telnet_report, ftp_report, monkeypatch):
     save(app, telnet_report)
     save(app, ftp_report, received_at=RECEIVED_AT + 1)
     app.state.state_store.update_alert(telnet_id(telnet_report), actor="test",
@@ -3150,6 +3494,14 @@ def test_queue_filters(app, client, telnet_report, ftp_report):
     assert "Telnet session in cleartext" not in new
     low = client.get("/", params={"severity": "low"}).text
     assert "No alerts match these filters" in low
+    # more alerts than the queue shows: it says so instead of hiding the rest
+    monkeypatch.setattr("maxguard.web.routes.QUEUE_LIMIT", 1)
+    first = client.get("/").text
+    assert "The 1 most severe alerts, most severe first. More alerts match" in first
+    assert first.count('<a id="alert-') == 1
+    monkeypatch.setattr("maxguard.web.routes.QUEUE_LIMIT", 2)  # exactly as many as match
+    both = client.get("/").text
+    assert "2 alerts, most severe first" in both and "More alerts match" not in both
 
 
 def test_unknown_filter_value_is_a_400_page(client):
@@ -3163,12 +3515,15 @@ def test_hostile_values_are_escaped(app, client, telnet_report):
     finding = report["findings"][0]
     finding["title"] = HOSTILE
     finding["details"] = {"user": HOSTILE}
+    finding["last_seen"] = 1e12  # the year 33658: a date cannot hold it
     finding["explanation_sentences"][0]["text"] = HOSTILE
     save(app, report)
     app.state.state_store.update_alert(finding["finding_id"], actor="test",
                                        at=RECEIVED_AT, assignee=HOSTILE)
     for path in ("/", f"/alerts/{finding['finding_id']}", "/timeline?ip=172.18.0.3"):
-        page = client.get(path).text
+        answer = client.get(path)
+        assert answer.status_code == 200
+        page = answer.text
         assert HOSTILE not in page
         assert "&lt;script&gt;" in page
 
@@ -3228,6 +3583,7 @@ def test_alert_detail_analyst_mode(app, client, telnet_report):
     assert "T1040" in page and "credential-access" in page
     assert "A device logged in with Telnet" in page
     assert 'id="status-form"' in page
+    assert "<title>Telnet session in cleartext · MaxGuard</title>" in page
 
 
 def test_controls_are_grouped_by_framework():
@@ -3259,6 +3615,7 @@ def test_alert_detail_home_mode(app, client, telnet_report):
     page = client.get(f"/alerts/{finding['finding_id']}").text
     home = routes.load_home_text()["cleartext.telnet"]
     assert home["headline"] in page
+    assert f"<title>{home['headline']} · MaxGuard</title>" in page  # no jargon in the tab
     assert home["action"] in page
     assert "High: fix this week" in page
     main = page.split('<main id="main"', 1)[1]  # the page body, not the URLs in the nav
@@ -3297,6 +3654,9 @@ def test_status_change_is_saved_and_audited(app, client, telnet_report):
                                 "assignee": "Fiona"})
     assert answer.status_code == 200
     assert "Saved." in answer.text
+    assert '<button id="status-save" type="submit">Save</button>' in answer.text
+    assert '<input type="hidden" name="shown_status" value="investigating">' in answer.text
+    assert 'autocomplete="off"' in answer.text  # Back must not restore stale choices
     assert "mg_actor=Ahmad" in answer.headers["set-cookie"]
     alert = app.state.state_store.get_alert(finding_id)
     assert (alert["status"], alert["assignee"]) == ("investigating", "Fiona")
@@ -3304,6 +3664,32 @@ def test_status_change_is_saved_and_audited(app, client, telnet_report):
     assert audit[0]["actor"] == "Ahmad"
     assert audit[0]["target"] == finding_id
     assert audit[0]["details"]["status"] == {"from": "new", "to": "investigating"}
+    # a form opened before that change (it still shows "new") changes only the assignee
+    stale = client.patch(f"/alerts/{finding_id}/status",
+                         data={"status": "new", "shown_status": "new",
+                               "assignee": "Ali", "shown_assignee": ""})
+    assert stale.status_code == 200
+    alert = app.state.state_store.get_alert(finding_id)
+    assert (alert["status"], alert["assignee"]) == ("investigating", "Ali")
+    assert app.state.state_store.list_audit()[0]["details"] == {
+        "assignee": {"from": "Fiona", "to": "Ali"}}
+    assert '<input type="hidden" name="shown_assignee" value="Ali">' in stale.text
+    # and the other way round: a form that still shows "Fiona" changes only the status
+    client.patch(f"/alerts/{finding_id}/status",
+                 data={"status": "resolved", "shown_status": "investigating",
+                       "assignee": "Fiona", "shown_assignee": "Fiona"})
+    alert = app.state.state_store.get_alert(finding_id)
+    assert (alert["status"], alert["assignee"]) == ("resolved", "Ali")
+    # a browser drops line breaks from the text box but not from the hidden field
+    app.state.state_store.update_alert(finding_id, actor="api", at=RECEIVED_AT, assignee="Ali\nB")
+    client.patch(f"/alerts/{finding_id}/status",
+                 data={"status": "new", "shown_status": "resolved",
+                       "assignee": "AliB", "shown_assignee": "Ali\nB"})
+    assert app.state.state_store.get_alert(finding_id)["assignee"] == "Ali\nB"
+    # a file sent under the field's name is not a name: it counts as empty
+    client.patch(f"/alerts/{finding_id}/status", data={"status": "new", "shown_status": "new"},
+                 files={"assignee": ("x.txt", b"Mallory", "text/plain")})
+    assert app.state.state_store.get_alert(finding_id)["assignee"] == ""
 
 
 def test_status_change_uses_the_name_cookie(app, client, telnet_report):
@@ -3321,6 +3707,7 @@ def test_status_change_needs_a_name(app, client, telnet_report):
                           data={"status": "resolved"})
     assert answer.status_code == 400
     assert "Type your name" in answer.text
+    assert 'pattern=".*\\S.*"' in answer.text  # the browser refuses a name of only spaces
     assert app.state.state_store.list_audit() == []
 
 
@@ -3461,6 +3848,21 @@ def test_join_devices_is_a_full_join_sorted_by_ip():
                          "finding_count": 0, "mac": "02:00:00:00:00:09",
                          "host_name": "printer", "dns_names": ["printer.lab.invalid"]}
     assert joined[1] == {**assets[0], "mac": "", "host_name": "", "dns_names": []}
+
+
+@pytest.mark.parametrize("last_seen", [1e12, float("inf"), float("-inf")])
+def test_impossible_times_do_not_break_the_pages(app, client, telnet_report, last_seen):
+    report = copy.deepcopy(telnet_report)
+    finding = report["findings"][0]
+    finding["last_seen"] = finding["evidence"][0]["ts"] = last_seen  # a log can say anything
+    save(app, report)
+    for mode in ("analyst", "home"):
+        client.cookies.set("mg_mode", mode)
+        for path in ("/", f"/alerts/{finding['finding_id']}", "/timeline?ip=172.18.0.3"):
+            assert client.get(path).status_code == 200, (mode, path)
+    client.cookies.set("mg_mode", "analyst")
+    page = client.get(f"/alerts/{finding['finding_id']}").text
+    assert 'href="/timeline?ip=172.18.0.3"' in page  # no end= the timeline would refuse
 ```
 
 Run the dashboard and pipeline tests:
@@ -3472,8 +3874,8 @@ pytest tests/unit/test_web.py tests/unit/test_pipeline.py -q
 Expected output:
 
 ```text
-.............................................................                                [100%]
-61 passed in 3.65s
+................................................................                             [100%]
+64 passed in 4.93s
 ```
 
 **Step 7.** Check both pages at 375 px and with the keyboard only.

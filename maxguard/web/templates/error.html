@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{# Error page (Ahmad, AHM-03): 404 for an unknown alert, 400 for a bad filter or address. #}
+{% block title %}Error{% endblock %}
+{% block content %}
+<h1>Sorry</h1>
+<p class="error">{{ message }}</p>
+<p><a href="/">Back to the alert queue</a></p>
+{% endblock %}
