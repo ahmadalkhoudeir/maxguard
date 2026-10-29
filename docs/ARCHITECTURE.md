@@ -1064,7 +1064,7 @@ controlled. The main threats and the defenses:
 
 | Threat | Defense | Where |
 |---|---|---|
-| A malicious archive fills the disk (zip bomb) or writes outside its folder | Sizes are checked before extracting (4 GiB limit); zip members lose absolute paths and `..` parts; tar files are extracted with Python's `data` filter, which refuses absolute paths, `..`, links, and device files | `adapters/zeeklogs.py` |
+| A malicious archive fills the disk (zip bomb) or writes outside its folder | Sizes are checked before extracting (4 GiB limit); zip members lose absolute paths and `..` parts; tar files are extracted with Python's `data` filter, which strips a leading `/` and refuses paths that leave the folder, links that point outside it or to an absolute path, and device files. The number of files is not limited yet (open item in `docs/security-review-alpha.md`) | `adapters/zeeklogs.py` |
 | A huge or fake upload, or a stranger on the LAN | Upload size limit, checked before and while reading; the file type is decided by its magic number; stored under a generated name; ingest is off by default and checks its token before reading the body | API |
 | Text in traffic attacks the dashboard (XSS) | Jinja2 autoescaping everywhere; AI text and anything from traffic is never marked `\|safe` (tested with `<script>` in a title, a detail, an AI sentence and an assignee); every dashboard page sends a Content-Security-Policy that allows only this site's own scripts and styles; the HTML export escapes every value and carries a Content-Security-Policy that allows no scripts | web, `report.py` |
 | Text in traffic attacks a spreadsheet (CSV formula injection) | A CSV cell that starts with `=`, `+`, `-`, `@`, a tab, or a line break gets a leading `'`, as OWASP recommends | `report.py` |
@@ -1081,6 +1081,7 @@ controlled. The main threats and the defenses:
 | A release workflow is abused | Least privilege per job (`contents: read` at the top; only the image job may push packages, only the release job may write the release); every action pinned to a full commit SHA; `persist-credentials: false`; the tag name reaches shell commands only through environment variables | `.github/workflows/release.yml` |
 | A dependency is compromised or changes license | Pinned minimum versions, one vendored front-end file checked by SHA-256, every license in `docs/DEPENDENCIES.md` | repository |
 | Privacy of the people on the network | Uploads deleted after analysis; events meant to be kept 7 days (the call to `prune()` is still open, section 9); nothing leaves the machine | storage, section 12 |
+| A value in a log that no date can hold (a time after the year 9999, `NaN`) stops a page, an export, or storage | The dashboard shows such a time as it is instead of failing (`utc_time()`). Still open: the CSV export and the hourly event folders fail on it, and the normalizer should refuse records with an impossible `ts` (`docs/security-review-alpha.md`) | web, `report.py`, `storage/events.py`, `events/normalize.py` |
 
 The MaxGuard engine container runs as a non-root user (uid 10001). The Ollama
 container keeps its image's default user but sits only on the internal network.
